@@ -1,6 +1,6 @@
-# Agent Context DB (Turso + Hybrid Retrieval)
+# contextfs -- dynamic context builder
 
-Centralized context storage for coding agents with:
+Centralized context and memory storage for coding agents with:
 
 - vector embeddings on Turso/LibSQL
 - hybrid retrieval (vector + keyword + optional recency/importance)

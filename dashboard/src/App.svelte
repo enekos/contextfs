@@ -1,8 +1,9 @@
 <script lang="ts">
   // @ts-nocheck
+  import "./App.css";
   const API_BASE = import.meta.env.VITE_DASHBOARD_API_BASE || "http://localhost:8787";
 
-  type Tab = "overview" | "skills" | "memories" | "context";
+  type Tab = "overview" | "skills" | "memories" | "context" | "search";
 
   let loading = false;
   let searching = false;
@@ -47,6 +48,44 @@
         c.abstract?.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : contextNodes;
+
+  // ── Search Lab ──────────────────────────────────────────────────────────────
+
+  let labQuery = "";
+  let labType: "all" | "skills" | "memories" | "context" = "all";
+  let labTopK = 10;
+  let labSearching = false;
+  let labResults: any[] = [];
+  let labError = "";
+  let labSearched = false;
+
+  async function runLabSearch() {
+    if (!labQuery.trim()) return;
+    labSearching = true; labError = ""; labSearched = false;
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/search?q=${encodeURIComponent(labQuery)}&type=${labType}&topK=${labTopK}`
+      );
+      if (!res.ok) throw new Error(`Search API ${res.status}`);
+      const data = await res.json();
+      // Flatten all results into a single ranked list
+      const flat: any[] = [];
+      (data.skills ?? []).forEach((r: any) => flat.push({ ...r, _type: "skill" }));
+      (data.memories ?? []).forEach((r: any) => flat.push({ ...r, _type: "memory" }));
+      (data.contextNodes ?? []).forEach((r: any) => flat.push({ ...r, _type: "context" }));
+      flat.sort((a, b) => (b._hybrid_score ?? 0) - (a._hybrid_score ?? 0));
+      labResults = flat;
+      labSearched = true;
+    } catch (e: any) {
+      labError = e.message;
+    } finally {
+      labSearching = false;
+    }
+  }
+
+  function labKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") runLabSearch();
+  }
 
   // Form states
   let newSkill = { name: "", description: "" };
@@ -232,6 +271,9 @@
       </button>
       <button class:active={activeTab === "context"} on:click={() => { activeTab = "context"; clearSearch(); }}>
         Context <span class="count">{contextNodes.length}</span>
+      </button>
+      <button class:active={activeTab === "search"} on:click={() => { activeTab = "search"; clearSearch(); }}>
+        Search Lab
       </button>
     </nav>
 
@@ -568,218 +610,128 @@
           </table>
         {/if}
       </section>
+    <!-- SEARCH LAB -->
+    {:else if activeTab === "search"}
+      <section class="lab-section">
+        <div class="lab-header">
+          <h2 class="lab-title">Search Lab</h2>
+          <p class="lab-desc">Test semantic search exactly as an agent would — same query path, same scoring.</p>
+        </div>
+
+        <div class="lab-controls">
+          <input
+            class="lab-input"
+            type="text"
+            placeholder="Enter a search query…"
+            bind:value={labQuery}
+            on:keydown={labKeydown}
+            disabled={labSearching}
+          />
+          <select class="lab-select" bind:value={labType}>
+            <option value="all">All types</option>
+            <option value="skills">Skills</option>
+            <option value="memories">Memories</option>
+            <option value="context">Context</option>
+          </select>
+          <label class="lab-topk-label">
+            Top <input class="lab-topk" type="number" min="1" max="50" bind:value={labTopK} />
+          </label>
+          <button class="btn-primary lab-run" on:click={runLabSearch} disabled={labSearching || !labQuery.trim()}>
+            {labSearching ? "Searching…" : "Search"}
+          </button>
+        </div>
+
+        {#if labError}
+          <p class="lab-error">{labError}</p>
+        {/if}
+
+        {#if labSearched}
+          <div class="lab-meta">
+            {labResults.length} result{labResults.length !== 1 ? "s" : ""}
+            {#if labType !== "all"}· type: <strong>{labType}</strong>{/if}
+            · topK: <strong>{labTopK}</strong>
+            · query: <em>"{labQuery}"</em>
+          </div>
+
+          {#if labResults.length === 0}
+            <p class="empty">No results found.</p>
+          {:else}
+            <div class="lab-results">
+              {#each labResults as row, i}
+                <div class="lab-card">
+                  <div class="lab-card-rank">#{i + 1}</div>
+
+                  <div class="lab-card-body">
+                    <div class="lab-card-top">
+                      <span class="lab-type-badge lab-type-{row._type}">{row._type}</span>
+                      {#if row._type === "skill"}
+                        <strong class="lab-card-title">{row.name}</strong>
+                      {:else if row._type === "memory"}
+                        <span class="lab-type-cat" style="background:{categoryColors[row.category] || '#64748b'}">{row.category}</span>
+                        <span class="lab-imp-badge {impColor(row.importance)}">{row.importance}</span>
+                      {:else}
+                        <code class="lab-uri">{row.uri}</code>
+                      {/if}
+                      <span class="lab-date">{fmtDate(row.updated_at || row.created_at)}</span>
+                    </div>
+
+                    <div class="lab-card-content">
+                      {#if row._type === "skill"}
+                        {row.description}
+                      {:else if row._type === "memory"}
+                        {row.content}
+                        {#if row.owner}<span class="lab-owner">— {row.owner}</span>{/if}
+                      {:else}
+                        <strong>{row.name}</strong>
+                        {#if row.abstract}<span class="lab-abstract"> — {row.abstract}</span>{/if}
+                      {/if}
+                    </div>
+
+                    <!-- Score breakdown -->
+                    <div class="lab-scores">
+                      <div class="lab-score-main">
+                        <span class="lab-score-label">hybrid</span>
+                        <div class="lab-bar-wrap">
+                          <div class="lab-bar" style="width:{((row._hybrid_score ?? 0) * 100).toFixed(1)}%;background:{scoreColor(row._hybrid_score ?? 0)}"></div>
+                        </div>
+                        <span class="lab-score-val" style="color:{scoreColor(row._hybrid_score ?? 0)}">
+                          {((row._hybrid_score ?? 0) * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                      <div class="lab-score-subs">
+                        {#each [
+                          { key: "_vector_score", label: "vector" },
+                          { key: "_keyword_score", label: "keyword" },
+                          { key: "_recency_score", label: "recency" },
+                          { key: "_importance_score", label: "importance" },
+                        ] as s}
+                          {#if row[s.key] !== undefined && row[s.key] !== null}
+                            <div class="lab-score-sub">
+                              <span class="lab-score-sub-label">{s.label}</span>
+                              <div class="lab-bar-wrap lab-bar-wrap-sm">
+                                <div class="lab-bar lab-bar-sm" style="width:{(row[s.key] * 100).toFixed(1)}%"></div>
+                              </div>
+                              <span class="lab-score-sub-val">{(row[s.key] * 100).toFixed(1)}%</span>
+                            </div>
+                          {/if}
+                        {/each}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {:else if !labSearching}
+          <div class="lab-empty-state">
+            <div class="lab-empty-icon">⌕</div>
+            <p>Enter a query above and press <kbd>Enter</kbd> or click <strong>Search</strong>.</p>
+            <p class="lab-empty-hint">Results are ranked using the same hybrid scorer agents use — vector similarity + keyword overlap + recency + importance.</p>
+          </div>
+        {/if}
+      </section>
+
     {/if}
   </div>
 </main>
 
-<style>
-  :global(*) { box-sizing: border-box; margin: 0; padding: 0; }
-  :global(body) {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 14px;
-    background: #0f172a;
-    color: #e2e8f0;
-    min-height: 100vh;
-  }
-
-  main { display: flex; flex-direction: column; min-height: 100vh; }
-
-  /* Header */
-  header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 12px 20px;
-    background: #1e293b;
-    border-bottom: 1px solid #334155;
-    position: sticky; top: 0; z-index: 10;
-  }
-
-  .header-brand { display: flex; align-items: center; gap: 6px; }
-  .logo { font-size: 20px; color: #6366f1; }
-  .brand-name { font-weight: 700; font-size: 15px; color: #f1f5f9; }
-  .brand-version { font-size: 10px; color: #64748b; background: #334155; padding: 1px 5px; border-radius: 4px; }
-
-  .tabs { display: flex; gap: 2px; flex: 1; }
-  .tabs button {
-    background: none; border: none; color: #94a3b8; padding: 6px 14px;
-    border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;
-    display: flex; align-items: center; gap: 6px;
-    transition: background 0.15s, color 0.15s;
-  }
-  .tabs button:hover { background: #334155; color: #e2e8f0; }
-  .tabs button.active { background: #312e81; color: #a5b4fc; }
-  .count {
-    background: #334155; color: #94a3b8; font-size: 11px;
-    padding: 1px 6px; border-radius: 10px;
-  }
-
-  .header-actions { display: flex; align-items: center; gap: 8px; }
-
-  .search-wrap {
-    display: flex; align-items: center; gap: 4px;
-    background: #0f172a; border: 1px solid #334155; border-radius: 8px;
-    padding: 2px 8px; width: 320px;
-  }
-  .search-wrap select {
-    background: none; border: none; color: #64748b; font-size: 12px;
-    outline: none; cursor: pointer; padding-right: 4px;
-  }
-  .search-wrap input {
-    background: none; border: none; color: #e2e8f0; font-size: 13px;
-    outline: none; flex: 1; padding: 4px 0;
-  }
-  .search-wrap input::placeholder { color: #475569; }
-  .spin { color: #6366f1; animation: spin 1s linear infinite; font-size: 16px; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .clear-btn { background: none; border: none; color: #475569; cursor: pointer; font-size: 14px; }
-  .search-badge {
-    font-size: 10px; background: #312e81; color: #a5b4fc;
-    padding: 2px 8px; border-radius: 10px; font-weight: 600;
-  }
-
-  .btn-refresh {
-    background: #1e293b; border: 1px solid #334155; color: #94a3b8;
-    padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 16px;
-  }
-  .btn-refresh:hover { background: #334155; }
-
-  /* Banners */
-  .error-bar {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 20px; background: #450a0a; color: #fca5a5;
-    border-bottom: 1px solid #7f1d1d;
-  }
-  .error-bar button { margin-left: auto; background: none; border: none; color: #fca5a5; cursor: pointer; }
-
-  .write-result {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 20px; border-bottom: 1px solid #334155;
-    background: #0f2a1c; color: #86efac;
-  }
-  .write-result.skipped { background: #1c1a0f; color: #fde68a; }
-  .write-result.updated { background: #0f1a2a; color: #93c5fd; }
-  .write-result button { margin-left: auto; background: none; border: none; color: inherit; cursor: pointer; }
-  .write-result code { font-size: 12px; opacity: 0.8; }
-
-  /* Content */
-  .content { flex: 1; padding: 20px; max-width: 1400px; margin: 0 auto; width: 100%; }
-
-  /* Overview */
-  .overview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
-  .stat-card {
-    background: #1e293b; border: 1px solid #334155; border-radius: 12px;
-    padding: 20px 24px; display: flex; gap: 16px; align-items: center;
-    cursor: pointer; transition: border-color 0.15s, background 0.15s;
-  }
-  .stat-card:hover { border-color: #6366f1; background: #1e2a4a; }
-  .stat-icon { font-size: 28px; color: #6366f1; }
-  .stat-num { font-size: 32px; font-weight: 700; color: #f1f5f9; line-height: 1; }
-  .stat-label { font-size: 13px; color: #94a3b8; margin-top: 2px; }
-
-  .recent-section { margin-bottom: 20px; }
-  .recent-section h3 { font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
-  .recent-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
-  .recent-list li {
-    display: flex; align-items: baseline; gap: 10px;
-    padding: 8px 12px; background: #1e293b; border-radius: 8px; border: 1px solid #334155;
-  }
-  .cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .recent-content { flex: 1; color: #cbd5e1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .recent-date { color: #475569; font-size: 12px; flex-shrink: 0; }
-
-  /* Add panel */
-  .add-panel { margin-bottom: 16px; }
-  .toggle-add {
-    background: #1e293b; border: 1px solid #334155; color: #94a3b8;
-    padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
-    transition: background 0.15s;
-  }
-  .toggle-add:hover { background: #334155; color: #e2e8f0; }
-
-  .add-form {
-    display: flex; flex-direction: column; gap: 10px;
-    background: #1e293b; border: 1px solid #334155; border-radius: 10px;
-    padding: 16px; margin-top: 10px;
-  }
-  .add-form input, .add-form textarea, .add-form select {
-    background: #0f172a; border: 1px solid #334155; color: #e2e8f0;
-    border-radius: 6px; padding: 8px 10px; font-size: 13px; outline: none; width: 100%;
-    font-family: inherit; resize: vertical;
-  }
-  .add-form input:focus, .add-form textarea:focus { border-color: #6366f1; }
-  .form-row { display: flex; gap: 12px; }
-  .form-row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #64748b; flex: 1; }
-  .form-row label select { margin-top: 2px; }
-  .form-footer { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
-  .router-toggle { display: flex; align-items: center; gap: 6px; color: #64748b; font-size: 12px; cursor: pointer; margin-right: auto; }
-  .btn-primary {
-    background: #4f46e5; color: #fff; border: none;
-    padding: 8px 18px; border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 500;
-  }
-  .btn-primary:hover { background: #4338ca; }
-  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-  /* Tables */
-  .table-section { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; }
-  thead th {
-    text-align: left; font-size: 11px; font-weight: 600;
-    color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;
-    padding: 8px 12px; border-bottom: 1px solid #334155;
-  }
-  tbody tr { border-bottom: 1px solid #1e293b; transition: background 0.1s; }
-  tbody tr:hover { background: #1e293b; }
-  tbody td { padding: 10px 12px; vertical-align: top; }
-
-  .name-cell { display: flex; flex-direction: column; gap: 3px; }
-  .name-cell strong { color: #f1f5f9; font-size: 14px; }
-  .desc { color: #94a3b8; font-size: 12px; line-height: 1.4; }
-
-  .content-cell { display: flex; flex-direction: column; gap: 3px; color: #cbd5e1; }
-
-  .copy-btn {
-    background: none; border: none; color: #475569; cursor: pointer; font-size: 11px;
-    padding: 0; width: fit-content;
-  }
-  .copy-btn:hover { color: #94a3b8; }
-
-  .cat-badge {
-    display: inline-block; padding: 2px 7px; border-radius: 4px;
-    font-size: 11px; font-weight: 600; color: #fff;
-  }
-  .owner-text { font-size: 11px; color: #475569; margin-top: 3px; }
-
-  .imp-badge {
-    display: inline-block; width: 28px; height: 28px; border-radius: 50%;
-    text-align: center; line-height: 28px; font-size: 12px; font-weight: 700;
-  }
-  .imp-high { background: #14532d; color: #86efac; }
-  .imp-med { background: #1c1917; color: #fde68a; border: 1px solid #78350f; }
-  .imp-low { background: #1e293b; color: #64748b; }
-
-  .score-badge { font-weight: 700; font-size: 15px; }
-  .score-detail { font-size: 10px; color: #475569; margin-top: 2px; white-space: nowrap; }
-
-  .date-cell { color: #475569; font-size: 12px; white-space: nowrap; }
-
-  .uri-cell { display: flex; flex-direction: column; gap: 2px; }
-  .uri-text {
-    background: none; border: none; color: #818cf8; cursor: pointer; font-size: 12px;
-    font-family: monospace; text-align: left; padding: 0;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px;
-  }
-  .uri-text:hover { text-decoration: underline; }
-  .node-name { font-size: 13px; color: #e2e8f0; font-weight: 500; }
-  .parent-uri { font-size: 11px; color: #475569; font-family: monospace; }
-
-  .abstract-cell { color: #94a3b8; font-size: 13px; line-height: 1.5; }
-
-  .btn-del {
-    background: none; border: none; color: #475569; cursor: pointer;
-    font-size: 14px; padding: 4px 8px; border-radius: 6px;
-  }
-  .btn-del:hover { background: #450a0a; color: #fca5a5; }
-
-  .empty { color: #475569; font-size: 14px; padding: 40px 0; text-align: center; }
-</style>
