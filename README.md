@@ -19,15 +19,15 @@ Centralized context and memory storage for coding agents with:
 
 ## Requirements
 
-- Node.js 18+
+- Bun 1+
 - Turso database URL and auth token
 - Gemini API key (unless you intentionally use zero-vector fallback for local testing)
 
 ## Quickstart
 
 ```bash
-npm install
-npm --prefix dashboard install
+bun install
+bun --cwd dashboard install
 cp .env.example .env
 ```
 
@@ -45,13 +45,13 @@ ALLOW_ZERO_EMBEDDINGS=false
 Initialize schema (destructive reset):
 
 ```bash
-npm run setup
+bun run setup
 ```
 
 Build:
 
 ```bash
-npm run build
+bun run build
 ```
 
 ## Embedding Configuration
@@ -66,7 +66,7 @@ The runtime validates model/dimension consistency and vector size to prevent dri
 
 ## CLI Usage
 
-Use TypeScript source directly:
+Run TypeScript source directly:
 
 ```bash
 bun src/cli.ts --help
@@ -75,7 +75,7 @@ bun src/cli.ts --help
 Or after build:
 
 ```bash
-node dist/cli.js --help
+bun dist/cli.js --help
 ```
 
 Examples:
@@ -99,7 +99,7 @@ bun src/cli.ts node search "auth architecture" --topK 5
 Run:
 
 ```bash
-node dist/mcp.js
+bun dist/mcp.js
 ```
 
 Claude Desktop config example:
@@ -108,7 +108,7 @@ Claude Desktop config example:
 {
   "mcpServers": {
     "turso-context-db": {
-      "command": "node",
+      "command": "bun",
       "args": ["/absolute/path/to/contextfs/dist/mcp.js"],
       "env": {
         "TURSO_URL": "libsql://...",
@@ -133,7 +133,7 @@ cp eval/dataset.example.json eval/dataset.json
 3. Run benchmark:
 
 ```bash
-npm run eval:retrieval -- --dataset eval/dataset.json --topK 5 --verbose true
+bun run eval:retrieval -- --dataset eval/dataset.json --topK 5 --verbose true
 ```
 
 Outputs include:
@@ -148,26 +148,26 @@ Outputs include:
 Start API:
 
 ```bash
-npm run dashboard:api
+bun run dashboard:api
 ```
 
 Start Svelte UI:
 
 ```bash
-npm run dashboard:dev
+bun run dashboard:dev
 ```
 
 Open [http://localhost:4173](http://localhost:4173).
 
 ## Package Scripts
 
-- `npm run clean`: remove build output
-- `npm run build`: compile TypeScript
-- `npm run typecheck`: type-check without emit
-- `npm run test`: run unit tests
-- `npm run test:watch`: run tests in watch mode
-- `npm run setup`: reset and initialize Turso schema (destructive)
-- `npm run eval:retrieval -- --dataset ...`: run retrieval benchmark
+- `bun run clean`: remove build output
+- `bun run build`: compile TypeScript
+- `bun run typecheck`: type-check without emit
+- `bun run test`: run unit tests
+- `bun run test:watch`: run tests in watch mode
+- `bun run setup`: reset and initialize Turso schema (destructive)
+- `bun run eval:retrieval -- --dataset ...`: run retrieval benchmark
 
 ## Contributing
 

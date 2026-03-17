@@ -17,7 +17,7 @@
     "context-mcp": "dist/mcp.js"
   },
   "engines": {
-    "node": ">=18"
+    "bun": ">=1"
   },
   "exports": {
     ".": {
@@ -29,15 +29,15 @@
     "clean": "rm -rf dist",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "setup": "ts-node src/setup.ts",
-    "eval:retrieval": "ts-node src/evaluate.ts",
-    "dashboard:api": "ts-node src/dashboardApi.ts",
-    "dashboard:dev": "npm --prefix dashboard run dev",
-    "dashboard:build": "npm --prefix dashboard run build",
+    "setup": "bun src/setup.ts",
+    "eval:retrieval": "bun src/evaluate.ts",
+    "dashboard:api": "bun src/dashboardApi.ts",
+    "dashboard:dev": "bun --cwd dashboard run dev",
+    "dashboard:build": "bun --cwd dashboard run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "oxlint src",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "bun run clean && bun run build"
   },
   "keywords": [
     "agents",
@@ -59,7 +59,6 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "oxlint": "^1.56.0",
-    "ts-node": "^10.9.2",
     "typescript": "^5.0.0",
     "vitest": "^2.0.0"
   }

@@ -7,8 +7,8 @@ Thanks for your interest in improving this project.
 1. Install dependencies:
 
 ```bash
-npm install
-npm --prefix dashboard install
+bun install
+bun --cwd dashboard install
 ```
 
 2. Create a local environment file:
@@ -20,16 +20,16 @@ cp .env.example .env
 3. Build and typecheck:
 
 ```bash
-npm run build
-npm run typecheck
+bun run build
+bun run typecheck
 ```
 
 ## Useful Commands
 
-- `npm run setup` - reset and initialize database schema (destructive).
-- `npm run dashboard:api` - run API for dashboard.
-- `npm run dashboard:dev` - run Svelte dashboard.
-- `npm run eval:retrieval -- --dataset eval/dataset.json --topK 5 --verbose true` - run retrieval benchmark.
+- `bun run setup` - reset and initialize database schema (destructive).
+- `bun run dashboard:api` - run API for dashboard.
+- `bun run dashboard:dev` - run Svelte dashboard.
+- `bun run eval:retrieval -- --dataset eval/dataset.json --topK 5 --verbose true` - run retrieval benchmark.
 
 ## Contribution Guidelines
 
