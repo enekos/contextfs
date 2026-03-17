@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { createContextManager } from "./client";
+import { AgentContextNode, SkippedWrite, UpdatedWrite } from "./types";
+import * as fs from "fs";
+import * as readline from "readline";
 
 const cm = createContextManager();
 const program = new Command();
@@ -274,6 +277,124 @@ nodeCmd
       const node = subtree.find((r: any) => r.uri === uri);
       console.log(node ? JSON.stringify(node, null, 2) : "Not found.");
     } catch (e) { console.error("Error:", e); process.exit(1); }
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ingest (file or free text → LLM parse → review → persist)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function prompt(rl: readline.Interface, question: string): Promise<string> {
+  return new Promise((resolve) => rl.question(question, resolve));
+}
+
+program
+  .command("ingest [file]")
+  .description("Parse an MD file or free text via LLM into context nodes, review, then persist")
+  .option("--text <text>", "Free text to ingest (alternative to file argument)")
+  .option("--base-uri <uri>", "Base URI namespace for generated nodes", "contextfs://ingested")
+  .option("-y, --yes", "Skip interactive review and persist all proposed nodes")
+  .option("--no-router", "Skip LLM dedup router when persisting nodes")
+  .action(async (file, opts) => {
+    try {
+      // ── 1. Read input ──────────────────────────────────────────────────────
+      let text: string;
+      if (file) {
+        try {
+          text = fs.readFileSync(file, "utf-8");
+        } catch (err: any) {
+          console.error(err.code === "ENOENT" ? `File not found: ${file}` : `Cannot read file: ${err.message}`);
+          process.exit(1);
+        }
+        console.log(`\nRead ${text!.length} characters from ${file}`);
+      } else if (opts.text) {
+        text = opts.text;
+      } else {
+        console.error("Provide a file path or --text <text>");
+        process.exit(1);
+        return; // unreachable, but narrows `text` for TypeScript
+      }
+
+      // ── 2. LLM parse ──────────────────────────────────────────────────────
+      console.log("\nParsing into context nodes via LLM...");
+      const proposed = await cm.parseIngestText(text!, opts.baseUri);
+      console.log(`\nProposed ${proposed.length} context node(s):\n`);
+
+      for (const [i, n] of proposed.entries()) {
+        console.log(`─── Node ${i + 1}/${proposed.length} ──────────────────────────────────`);
+        console.log(`  URI:      ${n.uri}`);
+        console.log(`  Name:     ${n.name}`);
+        console.log(`  Parent:   ${n.parent_uri ?? "(root)"}`);
+        console.log(`  Abstract: ${n.abstract}`);
+        if (n.overview) console.log(`  Overview: ${n.overview.length > 120 ? n.overview.slice(0, 120) + "…" : n.overview}`);
+        if (n.content)  console.log(`  Content:  ${n.content.length > 80 ? n.content.slice(0, 80) + "…" : n.content}`);
+        console.log();
+      }
+
+      // ── 3. Review step ────────────────────────────────────────────────────
+      let approved: typeof proposed;
+
+      if (opts.yes) {
+        approved = proposed;
+        console.log("--yes flag set: accepting all nodes.");
+      } else {
+        approved = [];
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        console.log("Review each proposed node. Keys: [y] accept  [n] skip  [a] accept all  [q] quit\n");
+
+        for (const [i, n] of proposed.entries()) {
+          const answer = await prompt(
+            rl,
+            `[${i + 1}/${proposed.length}] "${n.name}" (${n.uri}) — accept? [y/n/a/q] `
+          );
+
+          const key = answer.trim().toLowerCase();
+          if (key === "a") {
+            approved.push(...proposed.slice(i));
+            break;
+          } else if (key === "y" || key === "") {
+            approved.push(n);
+          } else if (key === "q") {
+            console.log("Aborted.");
+            rl.close();
+            process.exit(0);
+          }
+          // 'n' → skip
+        }
+
+        rl.close();
+      }
+
+      if (approved.length === 0) {
+        console.log("\nNo nodes approved. Nothing persisted.");
+        process.exit(0);
+      }
+
+      // ── 4. Persist (parallel) ─────────────────────────────────────────────
+      const useRouter = opts.router as boolean;
+      console.log(`\nPersisting ${approved.length} node(s) (router: ${useRouter})...\n`);
+
+      const results = await Promise.all(
+        approved.map((n) =>
+          cm.addContextNode(n.uri, n.name, n.abstract, n.overview, n.content, n.parent_uri, {}, useRouter)
+            .then((result) => ({ n, result }))
+        )
+      );
+
+      for (const { n, result } of results) {
+        if ("skipped" in result) {
+          console.log(`  SKIP   ${n.uri} — ${(result as SkippedWrite).reason}`);
+        } else if ("updated" in result) {
+          console.log(`  UPDATE ${(result as UpdatedWrite).id}`);
+        } else {
+          console.log(`  CREATE ${(result as AgentContextNode).uri}`);
+        }
+      }
+
+      console.log("\nDone.");
+    } catch (e) {
+      console.error("Error:", e);
+      process.exit(1);
+    }
   });
 
 program.parse(process.argv);

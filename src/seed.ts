@@ -1,4 +1,5 @@
 import { createContextManager } from "./client";
+import { AgentContextNode } from "./types";
 
 const contextManager = createContextManager();
 
@@ -58,7 +59,7 @@ async function seed() {
     "contextfs://duo",
     "Duo Project",
     "A multi-tenant, AI-augmented database layer for business data."
-  );
+  ) as AgentContextNode;
 
   // High-level architecture
   const backend = await contextManager.addContextNode(
@@ -68,7 +69,7 @@ async function seed() {
     undefined,
     undefined,
     duoRoot.uri
-  );
+  ) as AgentContextNode;
   const frontend = await contextManager.addContextNode(
     "contextfs://duo/frontend",
     "Frontend (Vue 3 SPA)",
@@ -76,7 +77,7 @@ async function seed() {
     undefined,
     undefined,
     duoRoot.uri
-  );
+  ) as AgentContextNode;
   const services = await contextManager.addContextNode(
     "contextfs://duo/services",
     "External Services",
@@ -84,7 +85,7 @@ async function seed() {
     undefined,
     undefined,
     duoRoot.uri
-  );
+  ) as AgentContextNode;
 
   // Deep diving into Backend
   await contextManager.addContextNode(

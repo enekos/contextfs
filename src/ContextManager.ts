@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { TursoVectorDB } from "./TursoVectorDB";
 import { Embedder } from "./embedder";
 import {
+  AgentContextNode,
   ContextSearchOptions,
   MemoryCategory,
   MemoryOwner,
@@ -18,6 +19,9 @@ import {
   HybridWeights,
 } from "./scorer";
 import { decideMemoryAction, decideContextAction, RouterCandidate } from "./llmRouter";
+import { parseTextIntoContextNodes, ProposedContextNode } from "./ingestor";
+
+export type { ProposedContextNode };
 
 export class ContextManager {
   private db: TursoVectorDB;
@@ -204,7 +208,7 @@ export class ContextManager {
     parentUri: string | null = null,
     metadata: Record<string, any> = {},
     useRouter = true
-  ): Promise<any | SkippedWrite | UpdatedWrite> {
+  ): Promise<AgentContextNode | SkippedWrite | UpdatedWrite> {
     const embedding = await Embedder.getEmbedding(`${name}: ${abstract}`);
 
     if (useRouter) {
@@ -298,6 +302,21 @@ export class ContextManager {
 
   async getContextPath(nodeUri: string) {
     return this.db.getContextPath(nodeUri);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ingest
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Parse free text or markdown into proposed context nodes via LLM.
+   * Does NOT write to the database — call addContextNode() for each approved node.
+   *
+   * @param text     Raw text or markdown content
+   * @param baseUri  Optional URI namespace prefix (default: "contextfs://ingested")
+   */
+  async parseIngestText(text: string, baseUri?: string): Promise<ProposedContextNode[]> {
+    return parseTextIntoContextNodes(text, baseUri);
   }
 
   // ---------------------------------------------------------------------------

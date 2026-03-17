@@ -8,6 +8,7 @@
 import { GoogleGenAI } from "@google/genai";
 import * as dotenv from "dotenv";
 import * as path from "path";
+import { extractJsonObject } from "./jsonUtils";
 
 dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
@@ -29,18 +30,6 @@ export interface RouterCandidate {
 }
 
 const SIMILARITY_GATE = 0.75; // only invoke LLM if best candidate score >= this
-
-/** Extract JSON object from LLM text that may contain markdown fences */
-function extractJson(text: string): Record<string, any> | null {
-  const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
-  const match = stripped.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[0]);
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Decide what to do with a new memory entry.
@@ -85,7 +74,7 @@ Respond with ONLY a JSON object (no markdown fences):
       contents: prompt,
     });
     const text = response.text?.trim() || "";
-    const decision = extractJson(text);
+    const decision = extractJsonObject(text);
     if (!decision) return { action: "create" };
 
     if (
@@ -155,7 +144,7 @@ Respond with ONLY a JSON object:
       contents: prompt,
     });
     const text = response.text?.trim() || "";
-    const decision = extractJson(text);
+    const decision = extractJsonObject(text);
     if (!decision) return { action: "create" };
 
     if (
