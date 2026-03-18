@@ -1,4 +1,3 @@
-import * as dotenv from "dotenv";
 import { ContextManager } from "./ContextManager";
 import { config } from "./config";
 

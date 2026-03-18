@@ -1,8 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import * as dotenv from "dotenv";
 import { assertEmbeddingDimension, config } from "./config";
-
-dotenv.config({ path: require("path").resolve(__dirname, "..", ".env") });
 
 const ai = config.geminiApiKey
   ? new GoogleGenAI({ apiKey: config.geminiApiKey })

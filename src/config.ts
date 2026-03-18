@@ -1,6 +1,10 @@
+import * as dotenv from "dotenv";
+import * as path from "path";
 import { parsePositiveInt, parseBoolean } from "./configParsing";
 
-const DEFAULT_EMBEDDING_MODEL = "gemini-embedding-004";
+dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
+
+const DEFAULT_EMBEDDING_MODEL = "gemini-embedding-001";
 const DEFAULT_EMBEDDING_DIMENSION = 768;
 
 const KNOWN_MODEL_DIMENSIONS: Record<string, number> = {
@@ -29,7 +33,7 @@ export const config = {
 
   get geminiApiKey() { return process.env.GEMINI_API_KEY; },
 
-  get llmModel() { return process.env.LLM_MODEL || "gemini-3.1-flash-lite-preview"; },
+  get llmModel() { return process.env.LLM_MODEL || "gemini-2.0-flash-lite"; },
 
   get dashboardApiPort() { return parsePositiveInt(process.env.DASHBOARD_API_PORT) || 8787; },
 

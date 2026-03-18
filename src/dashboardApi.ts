@@ -1,11 +1,7 @@
-import * as dotenv from "dotenv";
-import * as path from "path";
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import { URL } from "url";
 import { createContextManager } from "./client";
 import { config } from "./config";
-
-dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
 const cm = createContextManager();
 const port = config.dashboardApiPort;

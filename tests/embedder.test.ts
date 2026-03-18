@@ -28,6 +28,8 @@ describe("Embedder", () => {
     vi.resetModules();
     vi.clearAllMocks();
     process.env = { ...originalEnv };
+    delete process.env.EMBEDDING_MODEL;
+    delete process.env.EMBEDDING_DIM;
   });
 
   afterEach(() => {
@@ -58,6 +60,7 @@ describe("Embedder", () => {
 
   it("calls Gemini API and returns embedding when API key is set", async () => {
     process.env.GEMINI_API_KEY = "fake-key";
+    process.env.EMBEDDING_MODEL = "gemini-embedding-001";
     process.env.EMBEDDING_DIM = "768";
     const fakeEmbedding = Array(768).fill(0.1);
     

@@ -6,12 +6,8 @@
  * Inspired by SimpleMem's online synthesis and A-Mem's agent-based management.
  */
 import { GoogleGenAI } from "@google/genai";
-import * as dotenv from "dotenv";
-import * as path from "path";
 import { extractJsonObject } from "./jsonUtils";
 import { config } from "./config";
-
-dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
 const LLM_MODEL = config.llmModel;
 

@@ -1,8 +1,5 @@
-import * as dotenv from "dotenv";
 import { TursoVectorDB } from "./TursoVectorDB";
 import { config } from "./config";
-
-dotenv.config({ path: require("path").resolve(__dirname, "..", ".env") });
 
 const url = config.tursoUrl;
 const authToken = config.tursoAuthToken;

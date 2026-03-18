@@ -4,12 +4,8 @@
  * suitable for storage in the contextfs hierarchy.
  */
 import { GoogleGenAI } from "@google/genai";
-import * as dotenv from "dotenv";
-import * as path from "path";
 import { extractJsonArray } from "./jsonUtils";
 import { config } from "./config";
-
-dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
 const LLM_MODEL = config.llmModel;
 
