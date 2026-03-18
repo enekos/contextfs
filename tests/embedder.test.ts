@@ -51,7 +51,7 @@ describe("Embedder", () => {
     const { Embedder: FreshEmbedder } = await import("../src/embedder");
 
     const result = await FreshEmbedder.getEmbedding("test text");
-    expect(result.length).toBe(768); // fallback dimension from getEmbeddingConfig if not overriden
+    expect(result.length).toBe(3072); // default dimension for gemini-embedding-001
     expect(result.every((v) => v === 0)).toBe(true);
   });
 
@@ -69,8 +69,8 @@ describe("Embedder", () => {
   it("calls Gemini API and returns embedding when API key is set", async () => {
     process.env.GEMINI_API_KEY = "fake-key";
     process.env.EMBEDDING_MODEL = "gemini-embedding-001";
-    process.env.EMBEDDING_DIM = "768";
-    const fakeEmbedding = Array(768).fill(0.1);
+    process.env.EMBEDDING_DIM = "3072";
+    const fakeEmbedding = Array(3072).fill(0.1);
     
     mockEmbedContent.mockResolvedValue({
       embeddings: [{ values: fakeEmbedding }],
@@ -100,12 +100,12 @@ describe("Embedder", () => {
   
   it("retries on 429 status and succeeds", async () => {
     process.env.GEMINI_API_KEY = "fake-key";
-    process.env.EMBEDDING_DIM = "768";
-    
+    process.env.EMBEDDING_DIM = "3072";
+
     // Fail first time with 429
     mockEmbedContent.mockRejectedValueOnce({ status: 429 });
-    
-    const fakeEmbedding = Array(768).fill(0.1);
+
+    const fakeEmbedding = Array(3072).fill(0.1);
     // Succeed second time
     mockEmbedContent.mockResolvedValueOnce({
       embeddings: [{ values: fakeEmbedding }],

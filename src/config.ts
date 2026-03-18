@@ -5,10 +5,10 @@ import { parsePositiveInt, parseBoolean } from "./configParsing";
 dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
 const DEFAULT_EMBEDDING_MODEL = "gemini-embedding-001";
-const DEFAULT_EMBEDDING_DIMENSION = 768;
+const DEFAULT_EMBEDDING_DIMENSION = 3072;
 
 const KNOWN_MODEL_DIMENSIONS: Record<string, number> = {
-  "gemini-embedding-001": 768,
+  "gemini-embedding-001": 3072,
   "text-embedding-004": 768,
 };
 

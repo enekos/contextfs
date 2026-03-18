@@ -6,7 +6,7 @@ A dynamic context and memory storage system for coding agents. Provides hybrid v
 
 - **Runtime:** Bun 1+, TypeScript (ES2022, CommonJS)
 - **Database:** Turso/LibSQL with vector index support
-- **Embeddings:** Google Gemini (`gemini-embedding-001`, 768 dims)
+- **Embeddings:** Google Gemini (`gemini-embedding-001`, 3072 dims)
 - **Frontend:** Svelte 5 + Vite
 - **Testing:** Vitest
 - **Linting:** oxlint
@@ -66,6 +66,7 @@ bun run eval:retrieval -- --dataset eval/dataset.json --topK 5 --fail-below-mrr 
 | `src/scorer.ts` | Hybrid re-ranking logic |
 | `src/llmRouter.ts` | LLM-powered deduplication (CREATE / UPDATE / SKIP) |
 | `src/ingestor.ts` | Free-form text → structured context nodes |
+| `src/vibeEngine.ts` | LLM-driven free-text query planning and mutation planning |
 | `src/cli.ts` | CLI entry point |
 | `src/dashboardApi.ts` | REST API for dashboard |
 | `src/evaluate.ts` | Evaluation harness entry point |
@@ -83,7 +84,7 @@ TURSO_URL=
 TURSO_AUTH_TOKEN=
 GEMINI_API_KEY=
 EMBEDDING_MODEL=gemini-embedding-001
-EMBEDDING_DIM=768
+EMBEDDING_DIM=3072
 ```
 
 Optional:
@@ -116,5 +117,19 @@ For broader documentation or code architecture, you can store and read nodes:
 context-cli node store "contextfs://my-project/backend/auth" "Auth Module" "Uses JWT with RSA signatures." -P my-project
 context-cli node ls "contextfs://my-project/backend" -P my-project
 ```
+
+### 4. Free-text Query (vibe-query)
+When you need to explore the knowledge base with a natural language question:
+```bash
+context-cli vibe-query "how does the authentication system work?" -P my-project -k 5
+```
+The LLM plans and executes multi-store searches automatically.
+
+### 5. Free-text Mutation (vibe-mutation)
+When you want to add or update entries from a natural language description:
+```bash
+context-cli vibe-mutation "remember that we switched from REST to gRPC for internal service calls" -P my-project
+```
+The LLM plans mutations, shows a diff, and waits for interactive approval. Use `-y` to auto-approve.
 
 Agents should proactively search memories when beginning a task and store important discoveries or user preferences as they work.

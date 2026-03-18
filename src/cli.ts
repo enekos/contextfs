@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { createContextManager } from "./client";
 import { AgentContextNode, SkippedWrite, UpdatedWrite } from "./types";
+import { executeVibeQuery, planVibeMutation, executeMutationOp, VibeMutationOp } from "./vibeEngine";
 import * as fs from "fs";
 import * as readline from "readline";
 
@@ -411,6 +412,143 @@ program
       console.error("Error:", e);
       process.exit(1);
     }
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Vibe Query & Mutation (LLM-driven free-text interface)
+// ─────────────────────────────────────────────────────────────────────────────
+
+program
+  .command("vibe-query <prompt>")
+  .description("Search across all stores using free-text (LLM plans and executes searches)")
+  .option("-P, --project <project>", "Project namespace")
+  .option("-k, --topK <n>", "Results per search query", "5")
+  .action(async (userPrompt, opts) => {
+    try {
+      console.log("\nPlanning search queries...\n");
+      const result = await executeVibeQuery(cm, userPrompt, opts.project, parseInt(opts.topK));
+
+      console.log(`Strategy: ${result.reasoning}\n`);
+
+      for (const group of result.results) {
+        console.log(`━━━ ${group.store.toUpperCase()} ━━━  query: "${group.query}"`);
+        if (group.items.length === 0) {
+          console.log("  (no results)\n");
+          continue;
+        }
+        for (const item of group.items) {
+          const id = item.id || item.uri;
+          const score = item._hybrid_score !== undefined
+            ? ` (score: ${item._hybrid_score.toFixed(3)})`
+            : "";
+          switch (group.store) {
+            case "memory":
+              console.log(`  [${id}]${score}`);
+              console.log(`    ${item.content}`);
+              console.log(`    category=${item.category}  owner=${item.owner}  importance=${item.importance}`);
+              break;
+            case "skill":
+              console.log(`  [${id}]${score}`);
+              console.log(`    ${item.name}: ${item.description}`);
+              break;
+            case "node":
+              console.log(`  [${item.uri}]${score}`);
+              console.log(`    ${item.name}: ${item.abstract}`);
+              break;
+          }
+        }
+        console.log();
+      }
+    } catch (e) { console.error("Error:", e); process.exit(1); }
+  });
+
+program
+  .command("vibe-mutation <prompt>")
+  .description("Plan and apply mutations from free-text (LLM plans changes, you approve)")
+  .option("-P, --project <project>", "Project namespace")
+  .option("-k, --topK <n>", "Context search depth", "10")
+  .option("-y, --yes", "Skip interactive review and apply all operations")
+  .action(async (userPrompt, opts) => {
+    try {
+      console.log("\nAnalyzing existing data and planning mutations...\n");
+      const plan = await planVibeMutation(cm, userPrompt, opts.project, parseInt(opts.topK));
+
+      if (plan.operations.length === 0) {
+        console.log("No mutations planned. The LLM determined no changes are needed.");
+        process.exit(0);
+      }
+
+      console.log(`Reasoning: ${plan.reasoning}\n`);
+      console.log(`Proposed ${plan.operations.length} mutation(s):\n`);
+
+      // Display diff-style preview
+      for (const [i, op] of plan.operations.entries()) {
+        const prefix = op.op.startsWith("create") ? "\x1b[32m+" : op.op.startsWith("delete") ? "\x1b[31m-" : "\x1b[33m~";
+        const reset = "\x1b[0m";
+        console.log(`${prefix}── Operation ${i + 1}/${plan.operations.length} ──${reset}`);
+        console.log(`  ${prefix}${op.op}${reset}  ${op.target ? `target: ${op.target}` : ""}`);
+        console.log(`  ${op.description}`);
+
+        if (op.op.startsWith("create") || op.op.startsWith("update")) {
+          for (const [key, value] of Object.entries(op.data)) {
+            const val = typeof value === "string" && value.length > 120 ? value.slice(0, 120) + "..." : value;
+            const symbol = op.op.startsWith("create") ? "+" : "~";
+            console.log(`  ${prefix}${symbol} ${key}: ${val}${reset}`);
+          }
+        }
+        console.log();
+      }
+
+      // Interactive approval
+      let approved: VibeMutationOp[];
+
+      if (opts.yes) {
+        approved = plan.operations;
+        console.log("--yes flag set: applying all operations.\n");
+      } else {
+        approved = [];
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        console.log("Review each operation. Keys: [y] accept  [n] skip  [a] accept all  [q] quit\n");
+
+        for (const [i, op] of plan.operations.entries()) {
+          const answer = await prompt(rl,
+            `[${i + 1}/${plan.operations.length}] ${op.op} — "${op.description}" — accept? [y/n/a/q] `
+          );
+
+          const key = answer.trim().toLowerCase();
+          if (key === "a") {
+            approved.push(...plan.operations.slice(i));
+            break;
+          } else if (key === "y" || key === "") {
+            approved.push(op);
+          } else if (key === "q") {
+            console.log("Aborted.");
+            rl.close();
+            process.exit(0);
+          }
+          // 'n' → skip
+        }
+        rl.close();
+      }
+
+      if (approved.length === 0) {
+        console.log("\nNo operations approved. Nothing changed.");
+        process.exit(0);
+      }
+
+      // Execute approved operations
+      console.log(`\nExecuting ${approved.length} operation(s)...\n`);
+      for (const op of approved) {
+        try {
+          const result = await executeMutationOp(cm, op, opts.project);
+          console.log(`  \x1b[32m✓\x1b[0m ${result}`);
+        } catch (err) {
+          console.error(`  \x1b[31m✗\x1b[0m ${op.op} failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
+      console.log("\nDone.");
+    } catch (e) { console.error("Error:", e); process.exit(1); }
   });
 
 program.parse(process.argv);

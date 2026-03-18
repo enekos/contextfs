@@ -191,7 +191,7 @@ export class TursoVectorDB {
     const ts = this.now();
     await this.client.execute({
       sql: `INSERT INTO ${MEMORIES_TABLE} (id, project, content, category, owner, importance, embedding, metadata, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, vector(?), ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, vector(?), ?, ?, ?)`,
       args: [
         memory.id,
         memory.project || null,
