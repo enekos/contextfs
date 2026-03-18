@@ -1,177 +1,211 @@
-/**
- * Tests for llmRouter JSON parsing and gating logic.
- * The LLM call itself is not tested here (requires API key + network).
- * We test the pure logic: JSON extraction, SIMILARITY_GATE filtering,
- * and graceful fallback to "create" when no candidates qualify.
- */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Inline the extractJson helper (mirrors the one in llmRouter.ts) so we can
-// unit-test it without importing the whole module (which boots dotenv / AI).
-// ─────────────────────────────────────────────────────────────────────────────
-function extractJson(text: string): Record<string, any> | null {
-  const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
-  const match = stripped.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[0]);
-  } catch {
-    return null;
-  }
-}
-
-describe("extractJson", () => {
-  it("parses plain JSON", () => {
-    expect(extractJson('{"action":"create"}')).toEqual({ action: "create" });
-  });
-
-  it("strips markdown code fences (```json ... ```)", () => {
-    const text = "```json\n{\"action\":\"create\"}\n```";
-    expect(extractJson(text)).toEqual({ action: "create" });
-  });
-
-  it("strips bare code fences (``` ... ```)", () => {
-    const text = "```\n{\"action\":\"skip\",\"reason\":\"already captured\"}\n```";
-    expect(extractJson(text)).toEqual({ action: "skip", reason: "already captured" });
-  });
-
-  it("extracts JSON embedded in prose", () => {
-    const text = "Sure! Here is my answer: {\"action\":\"update\",\"targetId\":\"abc\",\"mergedContent\":\"merged\"} done.";
-    expect(extractJson(text)).toEqual({ action: "update", targetId: "abc", mergedContent: "merged" });
-  });
-
-  it("returns null for text with no JSON object", () => {
-    expect(extractJson("No JSON here at all.")).toBeNull();
-  });
-
-  it("returns null for malformed JSON", () => {
-    expect(extractJson("{action: create}")).toBeNull(); // unquoted keys → invalid JSON
-  });
-
-  it("handles nested JSON objects", () => {
-    const text = '{"action":"update","targetId":"id1","mergedContent":"text with {braces} inside"}';
-    const result = extractJson(text);
-    expect(result?.action).toBe("update");
-    expect(result?.targetId).toBe("id1");
-  });
-
-  it("handles multi-line JSON from LLM", () => {
-    const text = `
-\`\`\`json
-{
-  "action": "skip",
-  "reason": "identical information already stored"
-}
-\`\`\`
-    `;
-    const result = extractJson(text);
-    expect(result).toEqual({ action: "skip", reason: "identical information already stored" });
-  });
+// Mock `dotenv`
+vi.mock("dotenv", () => {
+  return {
+    config: vi.fn(),
+  };
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Gate logic — the router only calls the LLM when at least one candidate
-// has a score >= SIMILARITY_GATE (0.75). We test the filtering behavior.
-// ─────────────────────────────────────────────────────────────────────────────
-describe("router candidate gating", () => {
-  const SIMILARITY_GATE = 0.75;
-
-  function topCandidatesAboveGate(
-    candidates: Array<{ id: string; content: string; score: number }>
-  ) {
-    return candidates.filter((c) => c.score >= SIMILARITY_GATE).slice(0, 4);
-  }
-
-  it("returns empty when all candidates are below gate", () => {
-    const cands = [
-      { id: "a", content: "something", score: 0.5 },
-      { id: "b", content: "else", score: 0.6 },
-    ];
-    expect(topCandidatesAboveGate(cands)).toHaveLength(0);
-  });
-
-  it("keeps only candidates above gate", () => {
-    const cands = [
-      { id: "a", content: "high", score: 0.9 },
-      { id: "b", content: "low", score: 0.4 },
-      { id: "c", content: "just over", score: 0.75 },
-    ];
-    const result = topCandidatesAboveGate(cands);
-    expect(result).toHaveLength(2);
-    expect(result.map((r) => r.id)).toContain("a");
-    expect(result.map((r) => r.id)).toContain("c");
-  });
-
-  it("caps at 4 candidates regardless of how many qualify", () => {
-    const cands = Array.from({ length: 10 }, (_, i) => ({
-      id: `id${i}`,
-      content: "content",
-      score: 0.8 + i * 0.01,
-    }));
-    expect(topCandidatesAboveGate(cands)).toHaveLength(4);
-  });
-
-  it("accepts exactly 0.75 as meeting the gate", () => {
-    const cands = [{ id: "a", content: "text", score: 0.75 }];
-    expect(topCandidatesAboveGate(cands)).toHaveLength(1);
-  });
+// Mock `@google/genai`
+const mockGenerateContent = vi.fn();
+vi.mock("@google/genai", () => {
+  return {
+    GoogleGenAI: vi.fn().mockImplementation(() => {
+      return {
+        models: {
+          generateContent: mockGenerateContent,
+        },
+      };
+    }),
+  };
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Decision shape validation — mirrors the guards in decideMemoryAction
-// ─────────────────────────────────────────────────────────────────────────────
-describe("router decision validation", () => {
-  type RouterAction =
-    | { action: "create" }
-    | { action: "update"; targetId: string; mergedContent: string }
-    | { action: "skip"; reason: string };
+// Mock `console.warn`
+const mockWarn = vi.fn();
+vi.stubGlobal("console", { ...console, warn: mockWarn });
 
-  function validateDecision(decision: Record<string, any>): RouterAction {
-    if (
-      decision.action === "update" &&
-      typeof decision.targetId === "string" &&
-      typeof decision.mergedContent === "string"
-    ) {
-      return { action: "update", targetId: decision.targetId, mergedContent: decision.mergedContent };
-    }
-    if (decision.action === "skip" && typeof decision.reason === "string") {
-      return { action: "skip", reason: decision.reason };
-    }
-    return { action: "create" };
-  }
+describe("llmRouter", () => {
+  const originalEnv = process.env;
 
-  it("accepts valid create", () => {
-    expect(validateDecision({ action: "create" })).toEqual({ action: "create" });
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    process.env = { ...originalEnv };
   });
 
-  it("accepts valid update", () => {
-    const d = { action: "update", targetId: "mem_abc", mergedContent: "merged text" };
-    expect(validateDecision(d)).toEqual({ action: "update", targetId: "mem_abc", mergedContent: "merged text" });
+  afterEach(() => {
+    process.env = originalEnv;
   });
 
-  it("accepts valid skip", () => {
-    const d = { action: "skip", reason: "already captured" };
-    expect(validateDecision(d)).toEqual({ action: "skip", reason: "already captured" });
+  describe("decideMemoryAction", () => {
+    it("returns 'create' if AI is not initialized", async () => {
+      delete process.env.GEMINI_API_KEY;
+      const { decideMemoryAction } = await import("../src/llmRouter");
+      
+      const result = await decideMemoryAction("new content", [{ id: "1", content: "old", score: 0.9 }]);
+      expect(result).toEqual({ action: "create" });
+    });
+
+    it("returns 'create' if no candidates meet SIMILARITY_GATE", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      const { decideMemoryAction } = await import("../src/llmRouter");
+      
+      const result = await decideMemoryAction("new content", [{ id: "1", content: "old", score: 0.5 }]);
+      expect(result).toEqual({ action: "create" });
+      expect(mockGenerateContent).not.toHaveBeenCalled();
+    });
+
+    it("returns parsed action on success", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      mockGenerateContent.mockResolvedValue({
+        text: '{"action":"update","targetId":"123","mergedContent":"new and old"}',
+      });
+      const { decideMemoryAction } = await import("../src/llmRouter");
+      
+      const result = await decideMemoryAction("new content", [{ id: "123", content: "old", score: 0.8 }]);
+      expect(result).toEqual({ action: "update", targetId: "123", mergedContent: "new and old" });
+      expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns 'create' on invalid JSON", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      mockGenerateContent.mockResolvedValue({ text: "not json at all" });
+      const { decideMemoryAction } = await import("../src/llmRouter");
+      
+      const result = await decideMemoryAction("new content", [{ id: "1", content: "old", score: 0.8 }]);
+      expect(result).toEqual({ action: "create" });
+    });
+
+    it("returns 'create' on missing fields for update", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      mockGenerateContent.mockResolvedValue({
+        text: '{"action":"update","targetId":"1"}', // missing mergedContent
+      });
+      const { decideMemoryAction } = await import("../src/llmRouter");
+      
+      const result = await decideMemoryAction("new content", [{ id: "1", content: "old", score: 0.8 }]);
+      expect(result).toEqual({ action: "create" });
+    });
+
+    it("returns 'skip' on valid skip JSON", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      mockGenerateContent.mockResolvedValue({
+        text: '{"action":"skip","reason":"already there"}',
+      });
+      const { decideMemoryAction } = await import("../src/llmRouter");
+      
+      const result = await decideMemoryAction("new content", [{ id: "1", content: "old", score: 0.8 }]);
+      expect(result).toEqual({ action: "skip", reason: "already there" });
+    });
+
+    it("returns 'create' on API failure without throwing", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      mockGenerateContent.mockRejectedValue(new Error("API Down"));
+      const { decideMemoryAction } = await import("../src/llmRouter");
+      
+      const result = await decideMemoryAction("new content", [{ id: "1", content: "old", score: 0.8 }]);
+      expect(result).toEqual({ action: "create" });
+      expect(mockWarn).toHaveBeenCalledWith("[llmRouter] decideMemoryAction failed, defaulting to create:", expect.any(Error));
+    });
+    
+    it("retries on 429 status and succeeds", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      
+      mockGenerateContent.mockRejectedValueOnce({ status: 429 });
+      mockGenerateContent.mockResolvedValueOnce({
+        text: '{"action":"skip","reason":"retry worked"}',
+      });
+      
+      const { decideMemoryAction } = await import("../src/llmRouter");
+      
+      const result = await decideMemoryAction("new content", [{ id: "1", content: "old", score: 0.8 }]);
+      
+      expect(mockGenerateContent).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ action: "skip", reason: "retry worked" });
+    });
+
+    it("returns 'create' when decision action is 'create'", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      mockGenerateContent.mockResolvedValue({
+        text: '{"action":"create"}',
+      });
+      const { decideMemoryAction } = await import("../src/llmRouter");
+      
+      const result = await decideMemoryAction("new content", [{ id: "1", content: "old", score: 0.8 }]);
+      expect(result).toEqual({ action: "create" });
+    });
+    
+    it("returns 'create' on unknown action types", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      mockGenerateContent.mockResolvedValue({
+        text: '{"action":"unknown_action"}',
+      });
+      const { decideMemoryAction } = await import("../src/llmRouter");
+      
+      const result = await decideMemoryAction("new content", [{ id: "1", content: "old", score: 0.8 }]);
+      expect(result).toEqual({ action: "create" });
+    });
   });
 
-  it("falls back to create when update is missing targetId", () => {
-    expect(validateDecision({ action: "update", mergedContent: "text" })).toEqual({ action: "create" });
-  });
+  describe("decideContextAction", () => {
+    it("returns 'create' if AI is not initialized", async () => {
+      delete process.env.GEMINI_API_KEY;
+      const { decideContextAction } = await import("../src/llmRouter");
+      
+      const result = await decideContextAction("uri1", "name", "abstract", [{ id: "1", content: "old", score: 0.9 }]);
+      expect(result).toEqual({ action: "create" });
+    });
 
-  it("falls back to create when update is missing mergedContent", () => {
-    expect(validateDecision({ action: "update", targetId: "id1" })).toEqual({ action: "create" });
-  });
+    it("returns 'create' if no candidates meet SIMILARITY_GATE", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      const { decideContextAction } = await import("../src/llmRouter");
+      
+      const result = await decideContextAction("uri1", "name", "abstract", [{ id: "1", content: "old", score: 0.5 }]);
+      expect(result).toEqual({ action: "create" });
+      expect(mockGenerateContent).not.toHaveBeenCalled();
+    });
 
-  it("falls back to create when skip is missing reason", () => {
-    expect(validateDecision({ action: "skip" })).toEqual({ action: "create" });
-  });
+    it("returns parsed update action on success", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      mockGenerateContent.mockResolvedValue({
+        text: '{"action":"update","targetId":"uri1","mergedContent":"merged"}',
+      });
+      const { decideContextAction } = await import("../src/llmRouter");
+      
+      const result = await decideContextAction("uri1", "name", "abstract", [{ id: "1", content: "old", score: 0.8 }]);
+      expect(result).toEqual({ action: "update", targetId: "uri1", mergedContent: "merged" });
+      expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+    });
 
-  it("falls back to create for unknown action", () => {
-    expect(validateDecision({ action: "merge", targetId: "x" })).toEqual({ action: "create" });
-  });
+    it("returns parsed skip action on success", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      mockGenerateContent.mockResolvedValue({
+        text: '{"action":"skip","reason":"dup"}',
+      });
+      const { decideContextAction } = await import("../src/llmRouter");
+      
+      const result = await decideContextAction("uri1", "name", "abstract", [{ id: "1", content: "old", score: 0.8 }]);
+      expect(result).toEqual({ action: "skip", reason: "dup" });
+    });
 
-  it("falls back to create for completely empty object", () => {
-    expect(validateDecision({})).toEqual({ action: "create" });
+    it("returns 'create' on invalid JSON", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      mockGenerateContent.mockResolvedValue({ text: "not json" });
+      const { decideContextAction } = await import("../src/llmRouter");
+      
+      const result = await decideContextAction("uri1", "name", "abstract", [{ id: "1", content: "old", score: 0.8 }]);
+      expect(result).toEqual({ action: "create" });
+    });
+
+    it("returns 'create' on API failure without throwing", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      mockGenerateContent.mockRejectedValue(new Error("API Down"));
+      const { decideContextAction } = await import("../src/llmRouter");
+      
+      const result = await decideContextAction("uri1", "name", "abstract", [{ id: "1", content: "old", score: 0.8 }]);
+      expect(result).toEqual({ action: "create" });
+      expect(mockWarn).toHaveBeenCalledWith("[llmRouter] decideContextAction failed, defaulting to create:", expect.any(Error));
+    });
   });
 });

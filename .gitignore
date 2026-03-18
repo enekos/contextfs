@@ -5,6 +5,7 @@ dashboard/node_modules/
 # Build artifacts
 dist/
 dashboard/dist/
+coverage/
 *.tsbuildinfo
 
 # Environment and secrets

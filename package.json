@@ -34,6 +34,7 @@
     "dashboard:dev": "bun --cwd dashboard run dev",
     "dashboard:build": "bun --cwd dashboard run build",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "lint": "oxlint src",
     "link": "bun run build && bun link",
@@ -56,6 +57,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
     "oxlint": "^1.56.0",
     "typescript": "^5.0.0",
     "vitest": "^2.0.0"
