@@ -22,6 +22,12 @@ function makeResult(overrides: Partial<PerCaseResult> = {}): PerCaseResult {
     topK: 5,
     expected: ["a"],
     retrieved: ["a"],
+    scores: [1],
+    scoreStats: {
+      firstRelevantScore: 1,
+      firstIrrelevantScore: null,
+      relevantIrrelevantGap: null,
+    },
     hitCount: 1,
     recallAtK: 1,
     precisionAtK: 1,
