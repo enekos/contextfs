@@ -2,10 +2,10 @@
 
 Centralized context and memory storage for coding agents with:
 
-- vector embeddings on Turso/LibSQL
-- hybrid retrieval (vector + keyword + optional recency/importance)
+- native hybrid retrieval (kNN + BM25 + function scoring) backed by Elasticsearch
+- Google Gemini embeddings (3072 dims)
 - a CLI for shell automation
-- a simple dashboard
+- a REST API and Svelte dashboard
 - a retrieval evaluation harness (`Recall@K`, `MRR`, latency)
 
 ## Features
@@ -13,84 +13,90 @@ Centralized context and memory storage for coding agents with:
 - `memories`: user and agent facts with category, owner, importance
 - `skills`: reusable capability descriptions
 - `context nodes`: hierarchical context tree with recursive path/subtree queries
+- hybrid search: dense vector cosine similarity + BM25 full-text + recency decay + importance boost
+- fuzzy matching, exact phrase boost, ngram partial matching, synonym expansion
 - configurable embedding model and dimension
 - retrieval quality benchmarking via JSON datasets
 
 ## Requirements
 
 - Bun 1+
-- Turso database URL and auth token
-- Gemini API key (unless you intentionally use zero-vector fallback for local testing)
+- Docker (for Elasticsearch)
+- Gemini API key (unless using zero-vector fallback for local testing)
 
 ## Quickstart
 
 ```bash
+docker compose up -d        # start Elasticsearch
 bun install
 bun --cwd dashboard install
-cp .env.example .env
+cp .env.example .env        # fill in GEMINI_API_KEY
+bun run setup               # create ES indices (destructive)
 ```
 
-Update `.env`:
+Minimal `.env`:
 
 ```env
-TURSO_URL=libsql://your-db-url.turso.io
-TURSO_AUTH_TOKEN=your_turso_auth_token
+ELASTIC_URL=http://localhost:9200
 GEMINI_API_KEY=your_gemini_api_key
 EMBEDDING_MODEL=gemini-embedding-001
-EMBEDDING_DIM=768
+EMBEDDING_DIM=3072
 ALLOW_ZERO_EMBEDDINGS=false
 ```
 
-Initialize schema (destructive reset):
-
-```bash
-bun run setup
-```
-
-Build:
+Build and link CLI globally:
 
 ```bash
 bun run build
+bun run link
 ```
 
-## Embedding Configuration
+## Elasticsearch Fine-Tuning
 
-Embedding behavior is configured end-to-end:
+Index-level settings (require `bun run setup` after changing):
 
-- `EMBEDDING_MODEL`: model name passed to Gemini embeddings API.
-- `EMBEDDING_DIM`: expected embedding dimension.
-- `ALLOW_ZERO_EMBEDDINGS`: when `true`, permits zero-vector fallback if no `GEMINI_API_KEY` is set.
+```env
+ES_BM25_K1=1.2              # term frequency saturation
+ES_BM25_B=0.75              # document length normalization (0 = none, 1 = full)
+ES_SYNONYMS=auth,authentication,authn;db,database;k8s,kubernetes
+```
 
-The runtime validates model/dimension consistency and vector size to prevent drift.
+Query-level defaults (overridable per-search via CLI flags or API params):
+
+```env
+ES_DEFAULT_FUZZINESS=auto   # typo tolerance: auto, 0, 1, 2
+ES_PHRASE_BOOST=2.0         # boost for exact phrase matches (0 = disabled)
+ES_RECENCY_SCALE=30d        # recency half-life (e.g. 7d, 30d, 90d)
+ES_RECENCY_DECAY=0.5        # decay factor at scale distance
+```
 
 ## CLI Usage
 
-Run TypeScript source directly:
-
 ```bash
-bun src/cli.ts --help
-```
-
-Or after build:
-
-```bash
-bun dist/cli.js --help
+context-cli --help
 ```
 
 Examples:
 
 ```bash
 # memories
-bun src/cli.ts memory add "User prefers strict TypeScript and hexagonal architecture" --category preferences --owner user --importance 8
-bun src/cli.ts memory search "coding preferences" --topK 5 --owner user --category preferences --minImportance 5
+context-cli memory store "User prefers strict TypeScript and hexagonal architecture" -c preferences -o user -i 8 -P my-project
+context-cli memory search "coding preferences" -k 5 -P my-project
+context-cli memory search "auth setup" -k 5 -P my-project --fuzziness auto --phraseBoost 3 --highlight
 
 # skills
-bun src/cli.ts skill add "Postgres Expert" "Optimizes large SQL queries and indexes"
-bun src/cli.ts skill search "postgres optimization" --topK 5
+context-cli skill add "Postgres Expert" "Optimizes large SQL queries and indexes" -P my-project
+context-cli skill search "postgres optimization" -k 5 -P my-project
 
 # context nodes
-bun src/cli.ts node add "contextfs://project/backend" "Backend" "Core backend architecture"
-bun src/cli.ts node search "auth architecture" --topK 5
+context-cli node store "contextfs://project/backend" "Backend" "Core backend architecture" -P my-project
+context-cli node search "auth architecture" -k 5 -P my-project
+
+# free-text natural language query
+context-cli vibe-query "how does authentication work?" -P my-project -k 5
+
+# free-text mutation (LLM plans + interactive approval)
+context-cli vibe-mutation "remember we switched to gRPC for internal calls" -P my-project
 ```
 
 ## Retrieval Evaluation Harness
@@ -107,44 +113,31 @@ cp eval/dataset.example.json eval/dataset.json
 
 ```bash
 bun run eval:retrieval -- --dataset eval/dataset.json --topK 5 --verbose true
+# with pass/fail thresholds:
+bun run eval:retrieval -- --dataset eval/dataset.json --topK 5 --fail-below-mrr 0.8 --fail-below-recall 0.75
 ```
 
-Outputs include:
-
-- `avgRecallAtK`
-- `mrr`
-- `avgLatencyMs`
-- optional `perCase` details with hit ranks and retrieved IDs
+Outputs: `avgRecallAtK`, `mrr`, `avgLatencyMs`, optional `perCase` details.
 
 ## Dashboard
 
-Start API:
-
 ```bash
-bun run dashboard:api
+bun run dashboard:api   # REST API on port 8787
+bun run dashboard:dev   # Svelte dev server on port 5173
 ```
-
-Start Svelte UI:
-
-```bash
-bun run dashboard:dev
-```
-
-Open [http://localhost:4173](http://localhost:4173).
 
 ## Package Scripts
 
-- `bun run clean`: remove build output
-- `bun run build`: compile TypeScript
-- `bun run typecheck`: type-check without emit
-- `bun run test`: run unit tests
-- `bun run test:watch`: run tests in watch mode
-- `bun run setup`: reset and initialize Turso schema (destructive)
-- `bun run eval:retrieval -- --dataset ...`: run retrieval benchmark
-
-## Contributing
-
-See `CONTRIBUTING.md`.
+| Command | Description |
+|---|---|
+| `bun run build` | Compile TypeScript → `dist/` |
+| `bun run typecheck` | Type-check without emit |
+| `bun run lint` | Run oxlint on `src/` |
+| `bun run test` | Run Vitest tests once |
+| `bun run test:watch` | Vitest in watch mode |
+| `bun run clean` | Remove `dist/` |
+| `bun run setup` | Init/reset Elasticsearch indices (destructive) |
+| `bun run link` | Build and install `context-cli` globally |
 
 ## License
 
