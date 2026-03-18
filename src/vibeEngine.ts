@@ -12,23 +12,20 @@ import { MemoryCategory, MemoryOwner } from "./types";
 
 const LLM_MODEL = config.llmModel;
 
-const ai = config.geminiApiKey
-  ? new GoogleGenAI({ apiKey: config.geminiApiKey })
-  : null;
-
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
-async function generateWithRetry(model: string, contents: string, attempt = 1): Promise<any> {
-  if (!ai) throw new Error("GoogleGenAI not initialized");
+async function generateWithRetry(model: string, contents: string, attempt = 1, client?: GoogleGenAI): Promise<any> {
+  const activeClient = client ?? (config.geminiApiKey ? new GoogleGenAI({ apiKey: config.geminiApiKey }) : null);
+  if (!activeClient) throw new Error("GoogleGenAI not initialized");
   try {
-    return await ai.models.generateContent({ model, contents });
+    return await activeClient.models.generateContent({ model, contents });
   } catch (error: unknown) {
     if (attempt < MAX_RETRIES && ((error as { status?: number })?.status === 429 || ((error as { status?: number })?.status ?? 0) >= 500 || (error as { message?: string })?.message?.includes("fetch failed"))) {
       const delay = RETRY_DELAY_MS * Math.pow(2, attempt - 1);
       console.warn(`[vibeEngine] API error (${error instanceof Error ? error.message : String(error)}), retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
       await new Promise((resolve) => setTimeout(resolve, delay));
-      return generateWithRetry(model, contents, attempt + 1);
+      return generateWithRetry(model, contents, attempt + 1, activeClient);
     }
     throw error;
   }
@@ -78,7 +75,7 @@ export interface VibeQueryResult {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function planVibeSearch(prompt: string, project?: string): Promise<VibeSearchPlan> {
-  if (!ai) throw new Error("GEMINI_API_KEY is not set");
+  if (!config.geminiApiKey) throw new Error("GEMINI_API_KEY is not set");
 
   const systemPrompt = `You are a search planner for a context/memory database with three stores:
 - "memory": agent memories (facts, observations, decisions). Fields: content, category, owner, importance.
@@ -157,7 +154,7 @@ export async function planVibeMutation(
   project?: string,
   topK = 10
 ): Promise<VibeMutationPlan> {
-  if (!ai) throw new Error("GEMINI_API_KEY is not set");
+  if (!config.geminiApiKey) throw new Error("GEMINI_API_KEY is not set");
 
   // Step 1: search existing data for context
   const queryResult = await executeVibeQuery(cm, prompt, project, topK);

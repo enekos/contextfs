@@ -23,7 +23,25 @@ export interface EvalCase {
 }
 
 export interface EvalDataset {
+  description?: string;
+  fixtures?: {
+    memories?: unknown[];
+    skills?: unknown[];
+    context?: unknown[];
+  };
   cases: EvalCase[];
+}
+
+export interface ScoreStats {
+  min: number;
+  max: number;
+  mean: number;
+  /** ES score of the first relevant document in the ranked list */
+  firstRelevantScore: number | null;
+  /** ES score of the first irrelevant document in the ranked list */
+  firstIrrelevantScore: number | null;
+  /** firstRelevantScore - firstIrrelevantScore; positive = relevant ranked higher */
+  relevantIrrelevantGap: number | null;
 }
 
 export interface PerCaseResult {
@@ -34,6 +52,8 @@ export interface PerCaseResult {
   topK: number;
   expected: string[];
   retrieved: string[];
+  scores: number[];
+  scoreStats: ScoreStats;
   hitCount: number;
   recallAtK: number;
   precisionAtK: number;
@@ -54,6 +74,18 @@ export interface ParseArgsResult {
   outputPath: string | null;
   failBelowMrr: number | null;
   failBelowRecall: number | null;
+  /** Seed fixtures from dataset before running */
+  seed: boolean;
+  /** Delete seeded fixtures after running */
+  cleanup: boolean;
+  /** Run each case with vector-only, keyword-only, and hybrid weights and compare */
+  ablation: boolean;
+  /** Path to a JSON file with custom HybridWeights per domain: { memory, skill, context } */
+  weightsPath: string | null;
+  /** Fail if average negative hit rate exceeds this threshold (0.0–1.0) */
+  failAboveNegativeRate: number | null;
+  /** Scope all searches to this project */
+  project: string | null;
 }
 
 export function parseArgs(argv: string[]): ParseArgsResult {
@@ -67,6 +99,7 @@ export function parseArgs(argv: string[]): ParseArgsResult {
   }
   const failBelowMrrRaw = args.get("fail-below-mrr");
   const failBelowRecallRaw = args.get("fail-below-recall");
+  const failAboveNegativeRateRaw = args.get("fail-above-negative-rate");
   return {
     datasetPath: args.get("dataset") || "eval/dataset.json",
     topK: Number.parseInt(args.get("topK") || "5", 10),
@@ -74,6 +107,12 @@ export function parseArgs(argv: string[]): ParseArgsResult {
     outputPath: args.get("output") || null,
     failBelowMrr: failBelowMrrRaw != null ? parseFloat(failBelowMrrRaw) : null,
     failBelowRecall: failBelowRecallRaw != null ? parseFloat(failBelowRecallRaw) : null,
+    seed: args.get("seed") === "true",
+    cleanup: args.get("cleanup") === "true",
+    ablation: args.get("ablation") === "true",
+    weightsPath: args.get("weights") || null,
+    failAboveNegativeRate: failAboveNegativeRateRaw != null ? parseFloat(failAboveNegativeRateRaw) : null,
+    project: args.get("project") || null,
   };
 }
 
@@ -102,6 +141,8 @@ export interface SummaryStats {
   hitRate: number;
   avgNdcg: number;
   avgNegativeHits: number;
+  /** Mean score gap between first relevant and first irrelevant result (positive = relevant ranked higher) */
+  avgRelevantIrrelevantGap: number | null;
   avgLatencyMs: number;
   p50LatencyMs: number;
   p95LatencyMs: number;
@@ -131,6 +172,7 @@ export function summarize(results: PerCaseResult[]): SummaryStats {
     hitRate: 0,
     avgNdcg: 0,
     avgNegativeHits: 0,
+    avgRelevantIrrelevantGap: null,
     avgLatencyMs: 0,
     p50LatencyMs: 0,
     p95LatencyMs: 0,
@@ -143,6 +185,11 @@ export function summarize(results: PerCaseResult[]): SummaryStats {
 
   const sortedLatencies = [...results.map((r) => r.latencyMs)].sort((a, b) => a - b);
 
+  const gapValues = results.map((r) => r.scoreStats.relevantIrrelevantGap).filter((g): g is number => g !== null);
+  const avgRelevantIrrelevantGap = gapValues.length > 0
+    ? gapValues.reduce((s, v) => s + v, 0) / gapValues.length
+    : null;
+
   return {
     cases: results.length,
     avgRecallAtK,
@@ -153,11 +200,40 @@ export function summarize(results: PerCaseResult[]): SummaryStats {
     hitRate: results.filter((r) => r.hitRate).length / results.length,
     avgNdcg: results.reduce((s, r) => s + r.ndcg, 0) / results.length,
     avgNegativeHits: results.reduce((s, r) => s + r.negativeHits, 0) / results.length,
+    avgRelevantIrrelevantGap,
     avgLatencyMs: sortedLatencies.reduce((s, v) => s + v, 0) / results.length,
     p50LatencyMs: percentile(sortedLatencies, 50),
     p95LatencyMs: percentile(sortedLatencies, 95),
     p99LatencyMs: percentile(sortedLatencies, 99),
   };
+}
+
+export function computeScoreStats(
+  retrieved: string[],
+  scores: number[],
+  expected: string[]
+): ScoreStats {
+  if (scores.length === 0) {
+    return { min: 0, max: 0, mean: 0, firstRelevantScore: null, firstIrrelevantScore: null, relevantIrrelevantGap: null };
+  }
+  const expectedSet = new Set(expected);
+  const min = Math.min(...scores);
+  const max = Math.max(...scores);
+  const mean = scores.reduce((s, v) => s + v, 0) / scores.length;
+
+  let firstRelevantScore: number | null = null;
+  let firstIrrelevantScore: number | null = null;
+  for (let i = 0; i < retrieved.length; i++) {
+    if (expectedSet.has(retrieved[i]) && firstRelevantScore === null) firstRelevantScore = scores[i];
+    if (!expectedSet.has(retrieved[i]) && firstIrrelevantScore === null) firstIrrelevantScore = scores[i];
+  }
+
+  const relevantIrrelevantGap =
+    firstRelevantScore !== null && firstIrrelevantScore !== null
+      ? firstRelevantScore - firstIrrelevantScore
+      : null;
+
+  return { min, max, mean, firstRelevantScore, firstIrrelevantScore, relevantIrrelevantGap };
 }
 
 export interface RecallMetrics {
