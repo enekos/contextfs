@@ -51,6 +51,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse<IncomingM
       return;
     }
 
+    // Cluster stats
+    if (pathname === "/api/cluster" && req.method === "GET") {
+      const stats = await cm.getClusterStats();
+      sendJson(res, 200, stats);
+      return;
+    }
+
     // Dashboard overview
     if (pathname === "/api/dashboard" && req.method === "GET") {
       const [skills, memories, contextNodes] = await Promise.all([

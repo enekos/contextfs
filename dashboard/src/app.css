@@ -25,7 +25,8 @@ header {
 .brand-name { font-weight: 700; font-size: 15px; color: #f1f5f9; }
 .brand-version { font-size: 10px; color: #64748b; background: #334155; padding: 1px 5px; border-radius: 4px; }
 
-.tabs { display: flex; gap: 2px; flex: 1; }
+.tabs { display: flex; gap: 2px; flex: 1; align-items: center; }
+.tab-separator { width: 1px; height: 20px; background: #334155; margin: 0 6px; }
 .tabs button {
   background: none; border: none; color: #94a3b8; padding: 6px 14px;
   border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;

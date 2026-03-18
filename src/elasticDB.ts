@@ -1,4 +1,4 @@
-import { Client } from "@elastic/elasticsearch";
+import { Client, HttpConnection } from "@elastic/elasticsearch";
 import {
   AgentSkill,
   AgentMemory,
@@ -94,8 +94,40 @@ export class ElasticDB {
   constructor(node: string, auth?: { username: string; password: string }) {
     this.client = new Client({
       node,
+      Connection: HttpConnection,
       ...(auth?.username ? { auth } : {}),
     });
+  }
+
+  /** Cluster health + per-index stats for the dashboard */
+  async getClusterStats() {
+    const [health, indicesStats] = await Promise.all([
+      this.client.cluster.health(),
+      this.client.indices.stats({
+        index: [SKILLS_INDEX, MEMORIES_INDEX, CONTEXT_INDEX],
+        metric: ["docs", "store"],
+      }),
+    ]);
+
+    const indices: Record<string, any> = {};
+    for (const idx of [SKILLS_INDEX, MEMORIES_INDEX, CONTEXT_INDEX]) {
+      const s = indicesStats.indices?.[idx];
+      indices[idx] = {
+        docs: s?.primaries?.docs?.count ?? 0,
+        deletedDocs: s?.primaries?.docs?.deleted ?? 0,
+        sizeBytes: s?.primaries?.store?.size_in_bytes ?? 0,
+      };
+    }
+
+    return {
+      clusterName: health.cluster_name,
+      status: health.status,
+      numberOfNodes: health.number_of_nodes,
+      activeShards: health.active_shards,
+      relocatingShards: health.relocating_shards,
+      unassignedShards: health.unassigned_shards,
+      indices,
+    };
   }
 
   async initIndices() {

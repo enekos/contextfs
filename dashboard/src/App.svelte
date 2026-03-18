@@ -6,10 +6,11 @@
   import ContextTab from "./components/ContextTab.svelte";
   import SearchLabTab from "./components/SearchLabTab.svelte";
   import VibeTab from "./components/VibeTab.svelte";
+  import ElasticTab from "./components/ElasticTab.svelte";
 
   const API_BASE = import.meta.env.VITE_DASHBOARD_API_BASE || "http://localhost:8787";
 
-  type Tab = "overview" | "skills" | "memories" | "context" | "search" | "vibe";
+  type Tab = "overview" | "skills" | "memories" | "context" | "search" | "vibe" | "elastic";
 
   let loading = false;
   let searching = false;
@@ -117,13 +118,15 @@
   function setError(e: string) { error = e; }
   function setLastWriteResult(r: unknown) { lastWriteResult = r; }
 
+  const tabsWithSearch = ["skills", "memories", "context"];
+
   load();
 </script>
 
 <main>
   <header>
     <div class="header-brand">
-      <span class="logo">⬡</span>
+      <span class="logo">&#11041;</span>
       <span class="brand-name">contextfs</span>
       <span class="brand-version">v2</span>
     </div>
@@ -141,16 +144,20 @@
       <button class:active={activeTab === "context"} on:click={() => setActiveTab("context")}>
         Context <span class="count">{contextNodes.length}</span>
       </button>
+      <div class="tab-separator"></div>
       <button class:active={activeTab === "search"} on:click={() => setActiveTab("search")}>
         Search Lab
       </button>
       <button class:active={activeTab === "vibe"} on:click={() => setActiveTab("vibe")}>
         Vibe
       </button>
+      <button class:active={activeTab === "elastic"} on:click={() => setActiveTab("elastic")}>
+        Elastic
+      </button>
     </nav>
 
     <div class="header-actions">
-      {#if activeTab !== "overview"}
+      {#if tabsWithSearch.includes(activeTab)}
         <div class="search-wrap">
           <select bind:value={searchMode} on:change={clearSearch}>
             <option value="filter">Filter</option>
@@ -158,14 +165,14 @@
           </select>
           <input
             type="text"
-            placeholder={searchMode === "vector" ? "Semantic query…" : "Filter…"}
+            placeholder={searchMode === "vector" ? "Semantic query..." : "Filter..."}
             bind:value={searchQuery}
             on:input={onSearchInput}
           />
           {#if searching}
-            <span class="spin">⟳</span>
+            <span class="spin">&#10227;</span>
           {:else if searchQuery}
-            <button class="clear-btn" on:click={clearSearch}>✕</button>
+            <button class="clear-btn" on:click={clearSearch}>&#10005;</button>
           {/if}
         </div>
         {#if hasSearchResults}
@@ -173,7 +180,7 @@
         {/if}
       {/if}
       <button class="btn-refresh" on:click={load} disabled={loading}>
-        {loading ? "…" : "↻"}
+        {loading ? "..." : "&#8635;"}
       </button>
     </div>
   </header>
@@ -181,71 +188,73 @@
   {#if error}
     <div class="error-bar">
       <strong>Error:</strong> {error}
-      <button on:click={() => error = ""}>✕</button>
+      <button on:click={() => error = ""}>&#10005;</button>
     </div>
   {/if}
 
   {#if lastWriteResult}
     <div class="write-result" class:skipped={lastWriteResult.skipped} class:updated={lastWriteResult.updated}>
       {#if lastWriteResult.skipped}
-        ⏭ Skipped — {lastWriteResult.reason} (existing: <code>{lastWriteResult.existingId?.slice(0, 12)}…</code>)
+        Skipped — {lastWriteResult.reason} (existing: <code>{lastWriteResult.existingId?.slice(0, 12)}...</code>)
       {:else if lastWriteResult.updated}
-        ✎ Merged into existing entry <code>{lastWriteResult.id?.slice(0, 12)}…</code>
+        Merged into existing entry <code>{lastWriteResult.id?.slice(0, 12)}...</code>
       {:else}
-        ✓ Created <code>{(lastWriteResult.id || lastWriteResult.uri)?.slice(0, 20)}…</code>
+        Created <code>{(lastWriteResult.id || lastWriteResult.uri)?.slice(0, 20)}...</code>
       {/if}
-      <button on:click={() => lastWriteResult = null}>✕</button>
+      <button on:click={() => lastWriteResult = null}>&#10005;</button>
     </div>
   {/if}
 
   <div class="content">
     {#if activeTab === "overview"}
-      <OverviewTab 
-        {skills} 
-        {memories} 
-        {contextNodes} 
-        {setActiveTab} 
+      <OverviewTab
+        {skills}
+        {memories}
+        {contextNodes}
+        {setActiveTab}
       />
     {:else if activeTab === "skills"}
-      <SkillsTab 
-        {displaySkills} 
-        {hasSearchResults} 
-        {searchQuery} 
-        {API_BASE} 
-        {load} 
-        {setLoading} 
-        {setError} 
+      <SkillsTab
+        {displaySkills}
+        {hasSearchResults}
+        {searchQuery}
+        {API_BASE}
+        {load}
+        {setLoading}
+        {setError}
         {setLastWriteResult}
-        {loading} 
+        {loading}
       />
     {:else if activeTab === "memories"}
-      <MemoriesTab 
-        {displayMemories} 
-        {hasSearchResults} 
-        {searchQuery} 
-        {API_BASE} 
-        {load} 
-        {setLoading} 
-        {setError} 
-        {setLastWriteResult} 
+      <MemoriesTab
+        {displayMemories}
+        {hasSearchResults}
+        {searchQuery}
+        {API_BASE}
+        {load}
+        {setLoading}
+        {setError}
+        {setLastWriteResult}
         {loading}
       />
     {:else if activeTab === "context"}
-      <ContextTab 
-        {displayContext} 
-        {hasSearchResults} 
-        {searchQuery} 
-        {API_BASE} 
-        {load} 
-        {setLoading} 
-        {setError} 
-        {setLastWriteResult} 
+      <ContextTab
+        {displayContext}
+        {hasSearchResults}
+        {searchQuery}
+        {API_BASE}
+        {load}
+        {setLoading}
+        {setError}
+        {setLastWriteResult}
         {loading}
       />
     {:else if activeTab === "search"}
       <SearchLabTab {API_BASE} />
     {:else if activeTab === "vibe"}
       <VibeTab {API_BASE} />
+    {:else if activeTab === "elastic"}
+      <ElasticTab {API_BASE} />
     {/if}
   </div>
 </main>
