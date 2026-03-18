@@ -1,7 +1,7 @@
 {
   "name": "agents-context-turso",
   "version": "1.0.0",
-  "description": "Agent memory and context database on Turso with hybrid retrieval, MCP server, CLI, and evaluation harness.",
+  "description": "Agent memory and context database on Turso with hybrid retrieval, CLI, and evaluation harness.",
   "license": "ISC",
   "private": false,
   "main": "dist/index.js",
@@ -13,8 +13,7 @@
     "CHANGELOG.md"
   ],
   "bin": {
-    "context-cli": "dist/cli.js",
-    "context-mcp": "dist/mcp.js"
+    "context-cli": "dist/cli.js"
   },
   "engines": {
     "bun": ">=1"
@@ -37,6 +36,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "oxlint src",
+    "link": "bun run build && bun link",
     "prepublishOnly": "bun run clean && bun run build"
   },
   "keywords": [
@@ -45,14 +45,12 @@
     "context",
     "libsql",
     "vector-search",
-    "mcp",
     "rag"
   ],
   "author": "",
   "dependencies": {
     "@google/genai": "^1.45.0",
     "@libsql/client": "^0.17.0",
-    "@modelcontextprotocol/sdk": "^1.27.1",
     "commander": "^14.0.3",
     "dotenv": "^17.3.1"
   },

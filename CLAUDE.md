@@ -1,13 +1,12 @@
 # contextfs
 
-A dynamic context and memory storage system for coding agents. Provides hybrid vector + keyword retrieval backed by Turso/LibSQL with Google Gemini embeddings. Exposes three interfaces: CLI, MCP server, and REST API (dashboard).
+A dynamic context and memory storage system for coding agents. Provides hybrid vector + keyword retrieval backed by Turso/LibSQL with Google Gemini embeddings. Exposes two interfaces: CLI and REST API (dashboard).
 
 ## Tech Stack
 
 - **Runtime:** Bun 1+, TypeScript (ES2022, CommonJS)
 - **Database:** Turso/LibSQL with vector index support
 - **Embeddings:** Google Gemini (`gemini-embedding-001`, 768 dims)
-- **MCP:** `@modelcontextprotocol/sdk`
 - **Frontend:** Svelte 5 + Vite
 - **Testing:** Vitest
 - **Linting:** oxlint
@@ -25,6 +24,7 @@ bun run setup          # initialize DB schema (destructive — drops and recreat
 
 | Command | Description |
 |---|---|
+| `bun run link` | Build and install `context-cli` globally via `bun link` |
 | `bun run build` | Compile TypeScript → `dist/` |
 | `bun run typecheck` | Type-check without emit |
 | `bun run lint` | Run oxlint on `src/` |
@@ -61,13 +61,12 @@ bun run eval:retrieval -- --dataset eval/dataset.json --topK 5 --fail-below-mrr 
 | File | Role |
 |---|---|
 | `src/TursoVectorDB.ts` | DB layer: CRUD, vector indexing, raw search |
-| `src/ContextManager.ts` | High-level API used by CLI and MCP |
+| `src/ContextManager.ts` | High-level API used by CLI |
 | `src/embedder.ts` | Gemini embedding calls |
 | `src/scorer.ts` | Hybrid re-ranking logic |
 | `src/llmRouter.ts` | LLM-powered deduplication (CREATE / UPDATE / SKIP) |
 | `src/ingestor.ts` | Free-form text → structured context nodes |
 | `src/cli.ts` | CLI entry point |
-| `src/mcp.ts` | MCP server (stdio) |
 | `src/dashboardApi.ts` | REST API for dashboard |
 | `src/evaluate.ts` | Evaluation harness entry point |
 
