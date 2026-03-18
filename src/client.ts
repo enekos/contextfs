@@ -1,13 +1,16 @@
-import { ContextManager } from "./ContextManager";
+import { ContextManager } from "./contextManager";
 import { config } from "./config";
 
 export function createContextManager(): ContextManager {
-  const url = config.tursoUrl;
-  const authToken = config.tursoAuthToken;
+  const node = config.elasticUrl;
 
-  if (!url) {
-    throw new Error("Please set TURSO_URL in your .env file or environment.");
+  if (!node) {
+    throw new Error("Please set ELASTIC_URL in your .env file or environment.");
   }
 
-  return new ContextManager(url, authToken);
+  const auth = config.elasticUsername && config.elasticPassword
+    ? { username: config.elasticUsername, password: config.elasticPassword }
+    : undefined;
+
+  return new ContextManager(node, auth);
 }

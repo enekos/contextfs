@@ -1,4 +1,4 @@
-import { ContextManager } from "../src/ContextManager";
+import { ContextManager } from "../src/contextManager";
 import { MemoryCategory, MemoryOwner } from "../src/types";
 import * as dotenv from "dotenv";
 dotenv.config({ path: require("path").resolve(__dirname, ".env") });

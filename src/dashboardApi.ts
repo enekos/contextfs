@@ -75,15 +75,27 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse<IncomingM
 
       if (!q) { sendJson(res, 400, { error: "q parameter required" }); return; }
 
+      // ES tuning params from query string
+      const tuning: Record<string, any> = {};
+      const fz = parsed.searchParams.get("fuzziness");
+      if (fz) tuning.fuzziness = fz === "auto" ? "auto" : Number(fz);
+      const pb = parsed.searchParams.get("phraseBoost");
+      if (pb) tuning.phraseBoost = Number(pb);
+      const ms = parsed.searchParams.get("minScore");
+      if (ms) tuning.minScore = Number(ms);
+      if (parsed.searchParams.get("highlight") === "true") tuning.highlight = true;
+
+      const opts = { topK, ...tuning };
+
       const results: Record<string, any[]> = {};
       if (type === "all" || type === "skills") {
-        results.skills = await cm.searchSkills(q, { topK });
+        results.skills = await cm.searchSkills(q, opts);
       }
       if (type === "all" || type === "memories") {
-        results.memories = await cm.searchMemories(q, { topK });
+        results.memories = await cm.searchMemories(q, opts);
       }
       if (type === "all" || type === "context") {
-        results.contextNodes = await cm.searchContext(q, { topK });
+        results.contextNodes = await cm.searchContext(q, opts);
       }
       sendJson(res, 200, results);
       return;

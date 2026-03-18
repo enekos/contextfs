@@ -15,6 +15,20 @@ export interface HybridSearchWeights {
   importance?: number;
 }
 
+/** Elasticsearch fine-tuning options available on all search methods */
+export interface ElasticSearchTuning {
+  /** Typo tolerance: "auto" (recommended), 0, 1, or 2 max edits. Default: "auto" */
+  fuzziness?: "auto" | 0 | 1 | 2;
+  /** Boost for exact phrase matches (0 = disabled). Default: 2.0 */
+  phraseBoost?: number;
+  /** Hard minimum ES score cutoff — results below this are dropped. Default: none */
+  minScore?: number;
+  /** Return highlighted snippets showing matched terms. Default: false */
+  highlight?: boolean;
+  /** Custom field boost overrides, e.g. { "name": 5, "content": 1 } */
+  fieldBoosts?: Record<string, number>;
+}
+
 export type MemoryCategory =
   | "profile"
   | "preferences"
@@ -56,7 +70,7 @@ export interface AgentContextNode {
   updated_at?: string;
 }
 
-export interface MemorySearchOptions {
+export interface MemorySearchOptions extends ElasticSearchTuning {
   project?: string;
   topK?: number;
   threshold?: number;
@@ -67,7 +81,7 @@ export interface MemorySearchOptions {
   weights?: HybridSearchWeights;
 }
 
-export interface SkillSearchOptions {
+export interface SkillSearchOptions extends ElasticSearchTuning {
   project?: string;
   topK?: number;
   threshold?: number;
@@ -75,7 +89,7 @@ export interface SkillSearchOptions {
   weights?: HybridSearchWeights;
 }
 
-export interface ContextSearchOptions {
+export interface ContextSearchOptions extends ElasticSearchTuning {
   project?: string;
   topK?: number;
   threshold?: number;

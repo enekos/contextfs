@@ -1,0 +1,783 @@
+import { Client } from "@elastic/elasticsearch";
+import {
+  AgentSkill,
+  AgentMemory,
+  AgentContextNode,
+  MemorySearchOptions,
+  SkillSearchOptions,
+  ContextSearchOptions,
+} from "./types";
+import { assertEmbeddingDimension, config } from "./config";
+import {
+  DEFAULT_MEMORY_WEIGHTS,
+  DEFAULT_SKILL_WEIGHTS,
+  DEFAULT_CONTEXT_WEIGHTS,
+  normalizeWeights,
+} from "./scorer";
+
+const EMBEDDING_DIM = config.embedding.dimension;
+const CANDIDATE_MULTIPLIER = config.candidateMultiplier;
+
+export const SKILLS_INDEX = "contextfs_skills";
+export const MEMORIES_INDEX = "contextfs_memories";
+export const CONTEXT_INDEX = "contextfs_context_nodes";
+
+function buildIndexSettings() {
+  const synonyms = config.elastic.synonyms;
+  const filters: string[] = ["lowercase", "english_stop", "english_stemmer"];
+  const filterDefs: Record<string, any> = {
+    english_stop: { type: "stop" as const, stopwords: ["_english_"] },
+    english_stemmer: { type: "stemmer" as const, language: "english" as const },
+  };
+
+  if (synonyms.length > 0) {
+    filters.splice(1, 0, "contextfs_synonyms");
+    filterDefs.contextfs_synonyms = {
+      type: "synonym" as const,
+      synonyms,
+    };
+  }
+
+  return {
+    number_of_shards: 1,
+    number_of_replicas: 0,
+    analysis: {
+      analyzer: {
+        content_analyzer: {
+          type: "custom" as const,
+          tokenizer: "standard",
+          filter: filters,
+        },
+        ngram_analyzer: {
+          type: "custom" as const,
+          tokenizer: "ngram_tokenizer",
+          filter: ["lowercase"],
+        },
+      },
+      tokenizer: {
+        ngram_tokenizer: {
+          type: "ngram" as const,
+          min_gram: 3,
+          max_gram: 4,
+          token_chars: ["letter", "digit"] as string[],
+        },
+      },
+      filter: filterDefs,
+    },
+    similarity: {
+      contextfs_bm25: {
+        type: "BM25",
+        k1: config.elastic.bm25K1,
+        b: config.elastic.bm25B,
+      },
+    },
+  };
+}
+
+/** Build text field mapping with optional ngram sub-field */
+function textField(opts?: { keyword?: boolean; ngram?: boolean }) {
+  const field: Record<string, any> = {
+    type: "text",
+    analyzer: "content_analyzer",
+    similarity: "contextfs_bm25",
+  };
+  const fields: Record<string, any> = {};
+  if (opts?.keyword) fields.raw = { type: "keyword" };
+  if (opts?.ngram) fields.ngram = { type: "text", analyzer: "ngram_analyzer" };
+  if (Object.keys(fields).length > 0) field.fields = fields;
+  return field;
+}
+
+export class ElasticDB {
+  private client: Client;
+
+  constructor(node: string, auth?: { username: string; password: string }) {
+    this.client = new Client({
+      node,
+      ...(auth?.username ? { auth } : {}),
+    });
+  }
+
+  async initIndices() {
+    const settings = buildIndexSettings();
+
+    await this.createIndexIfNotExists(SKILLS_INDEX, settings, {
+      id: { type: "keyword" },
+      project: { type: "keyword" },
+      name: textField({ keyword: true, ngram: true }),
+      description: textField({ ngram: true }),
+      embedding: { type: "dense_vector", dims: EMBEDDING_DIM, index: true, similarity: "cosine" },
+      metadata: { type: "object", dynamic: true },
+      created_at: { type: "date" },
+      updated_at: { type: "date" },
+    });
+
+    await this.createIndexIfNotExists(MEMORIES_INDEX, settings, {
+      id: { type: "keyword" },
+      project: { type: "keyword" },
+      content: textField({ ngram: true }),
+      category: { type: "keyword" },
+      owner: { type: "keyword" },
+      importance: { type: "integer" },
+      embedding: { type: "dense_vector", dims: EMBEDDING_DIM, index: true, similarity: "cosine" },
+      metadata: { type: "object", dynamic: true },
+      created_at: { type: "date" },
+      updated_at: { type: "date" },
+    });
+
+    await this.createIndexIfNotExists(CONTEXT_INDEX, settings, {
+      uri: { type: "keyword" },
+      project: { type: "keyword" },
+      parent_uri: { type: "keyword" },
+      ancestors: { type: "keyword" },
+      name: textField({ keyword: true, ngram: true }),
+      abstract: textField({ ngram: true }),
+      overview: textField(),
+      content: textField(),
+      embedding: { type: "dense_vector", dims: EMBEDDING_DIM, index: true, similarity: "cosine" },
+      metadata: { type: "object", dynamic: true },
+      created_at: { type: "date" },
+      updated_at: { type: "date" },
+    });
+  }
+
+  async resetIndices() {
+    for (const idx of [SKILLS_INDEX, MEMORIES_INDEX, CONTEXT_INDEX]) {
+      const exists = await this.client.indices.exists({ index: idx });
+      if (exists) await this.client.indices.delete({ index: idx });
+    }
+  }
+
+  private async createIndexIfNotExists(index: string, settings: any, properties: Record<string, any>) {
+    const exists = await this.client.indices.exists({ index });
+    if (!exists) {
+      await this.client.indices.create({
+        index,
+        settings,
+        mappings: { properties },
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Skills
+  // ---------------------------------------------------------------------------
+
+  async addSkill(skill: AgentSkill, embedding: number[]) {
+    assertEmbeddingDimension(embedding, "ElasticDB.addSkill");
+    const ts = new Date().toISOString();
+    await this.client.index({
+      index: SKILLS_INDEX,
+      id: skill.id,
+      document: {
+        id: skill.id,
+        project: skill.project || null,
+        name: skill.name,
+        description: skill.description,
+        embedding,
+        metadata: skill.metadata || null,
+        created_at: skill.created_at || ts,
+        updated_at: skill.updated_at || ts,
+      },
+      refresh: true,
+    });
+  }
+
+  async updateSkill(id: string, updates: { name?: string; description?: string; metadata?: Record<string, any> }, embedding?: number[]) {
+    const doc: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (updates.name !== undefined) doc.name = updates.name;
+    if (updates.description !== undefined) doc.description = updates.description;
+    if (updates.metadata !== undefined) doc.metadata = updates.metadata;
+    if (embedding) {
+      assertEmbeddingDimension(embedding, "ElasticDB.updateSkill");
+      doc.embedding = embedding;
+    }
+    await this.client.update({ index: SKILLS_INDEX, id, doc, refresh: true });
+  }
+
+  async searchSkills(queryEmbedding: number[], queryText: string, options: SkillSearchOptions = {}): Promise<(AgentSkill & { _score: number; _highlight?: Record<string, string[]> })[]> {
+    assertEmbeddingDimension(queryEmbedding, "ElasticDB.searchSkills");
+    const topK = options.topK ?? 10;
+    const ow = options.weights ?? DEFAULT_SKILL_WEIGHTS;
+    const w = normalizeWeights({
+      vector: ow.vector, keyword: ow.keyword,
+      recency: ow.recency ?? 0, importance: 0,
+    });
+
+    const fuzziness = options.fuzziness ?? config.elastic.defaultFuzziness;
+    const phraseBoost = options.phraseBoost ?? config.elastic.defaultPhraseBoost;
+    const fb = options.fieldBoosts ?? {};
+
+    const filters: any[] = [];
+    if (options.project) filters.push({ term: { project: options.project } });
+    if (options.maxAgeDays) filters.push({ range: { created_at: { gte: `now-${options.maxAgeDays}d` } } });
+
+    const nameBoost = fb.name ?? 2;
+    const descBoost = fb.description ?? 1;
+
+    const should: any[] = [
+      { multi_match: { query: queryText, fields: [`name^${nameBoost}`, `description^${descBoost}`], boost: w.keyword * 10, analyzer: "content_analyzer", fuzziness } },
+    ];
+
+    // Ngram sub-field for partial/substring matching
+    should.push({ multi_match: { query: queryText, fields: ["name.ngram", "description.ngram"], boost: w.keyword * 2 } });
+
+    // Phrase boost for exact ordering
+    if (phraseBoost > 0) {
+      should.push({ multi_match: { query: queryText, fields: [`name^${nameBoost}`, `description^${descBoost}`], type: "phrase", boost: phraseBoost } });
+    }
+
+    const body: any = {
+      size: topK,
+      knn: {
+        field: "embedding",
+        query_vector: queryEmbedding,
+        k: topK,
+        num_candidates: topK * CANDIDATE_MULTIPLIER,
+        boost: w.vector * 10,
+        ...(filters.length ? { filter: filters } : {}),
+      },
+      query: {
+        bool: {
+          should,
+          ...(filters.length ? { filter: filters } : {}),
+          minimum_should_match: 0,
+        },
+      },
+      _source: { excludes: ["embedding"] },
+    };
+
+    if (options.minScore) body.min_score = options.minScore;
+    if (options.highlight) body.highlight = buildHighlight(["name", "description"]);
+
+    const res = await this.client.search(body as any);
+    return this.mapHits<AgentSkill>(res, options.highlight);
+  }
+
+  async searchSkillsByVector(queryEmbedding: number[], options: { topK?: number; project?: string } = {}): Promise<(AgentSkill & { _score: number })[]> {
+    assertEmbeddingDimension(queryEmbedding, "ElasticDB.searchSkillsByVector");
+    const topK = options.topK ?? 10;
+    const filters: any[] = [];
+    if (options.project) filters.push({ term: { project: options.project } });
+
+    const res = await this.client.search({
+      index: SKILLS_INDEX,
+      size: topK,
+      knn: {
+        field: "embedding",
+        query_vector: queryEmbedding,
+        k: topK,
+        num_candidates: topK * CANDIDATE_MULTIPLIER,
+        ...(filters.length ? { filter: filters } : {}),
+      },
+      _source: { excludes: ["embedding"] },
+    } as any);
+    return this.mapHits<AgentSkill>(res);
+  }
+
+  async listSkills(options?: SkillSearchOptions, limit = 100, offset = 0): Promise<AgentSkill[]> {
+    const filters: any[] = [];
+    if (options?.project) filters.push({ term: { project: options.project } });
+
+    const res = await this.client.search({
+      index: SKILLS_INDEX,
+      size: limit,
+      from: offset,
+      query: filters.length ? { bool: { filter: filters } } : { match_all: {} },
+      sort: [{ updated_at: { order: "desc" } }],
+      _source: { excludes: ["embedding"] },
+    });
+    return this.mapSources<AgentSkill>(res);
+  }
+
+  async getSkill(id: string): Promise<AgentSkill | null> {
+    try {
+      const res = await this.client.get({ index: SKILLS_INDEX, id, _source_excludes: ["embedding"] });
+      return res._source as AgentSkill;
+    } catch (e: any) {
+      if (e.meta?.statusCode === 404) return null;
+      throw e;
+    }
+  }
+
+  async deleteSkill(id: string) {
+    await this.client.delete({ index: SKILLS_INDEX, id, refresh: true }).catch((e: any) => {
+      if (e.meta?.statusCode !== 404) throw e;
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Memories
+  // ---------------------------------------------------------------------------
+
+  async addMemory(memory: AgentMemory, embedding: number[]) {
+    assertEmbeddingDimension(embedding, "ElasticDB.addMemory");
+    const ts = new Date().toISOString();
+    await this.client.index({
+      index: MEMORIES_INDEX,
+      id: memory.id,
+      document: {
+        id: memory.id,
+        project: memory.project || null,
+        content: memory.content,
+        category: memory.category,
+        owner: memory.owner,
+        importance: memory.importance,
+        embedding,
+        metadata: memory.metadata || null,
+        created_at: memory.created_at || ts,
+        updated_at: memory.updated_at || ts,
+      },
+      refresh: true,
+    });
+  }
+
+  async updateMemory(
+    id: string,
+    updates: { content?: string; importance?: number; metadata?: Record<string, any> },
+    embedding?: number[]
+  ) {
+    const doc: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (updates.content !== undefined) doc.content = updates.content;
+    if (updates.importance !== undefined) doc.importance = updates.importance;
+    if (updates.metadata !== undefined) doc.metadata = updates.metadata;
+    if (embedding) {
+      assertEmbeddingDimension(embedding, "ElasticDB.updateMemory");
+      doc.embedding = embedding;
+    }
+    await this.client.update({ index: MEMORIES_INDEX, id, doc, refresh: true });
+  }
+
+  async searchMemories(queryEmbedding: number[], queryText: string, options: MemorySearchOptions = {}): Promise<(AgentMemory & { _score: number; _highlight?: Record<string, string[]> })[]> {
+    assertEmbeddingDimension(queryEmbedding, "ElasticDB.searchMemories");
+    const topK = options.topK ?? 10;
+    const ow = options.weights ?? DEFAULT_MEMORY_WEIGHTS;
+    const w = normalizeWeights({
+      vector: ow.vector, keyword: ow.keyword,
+      recency: ow.recency ?? 0, importance: ow.importance ?? 0,
+    });
+
+    const fuzziness = options.fuzziness ?? config.elastic.defaultFuzziness;
+    const phraseBoost = options.phraseBoost ?? config.elastic.defaultPhraseBoost;
+    const fb = options.fieldBoosts ?? {};
+
+    const filters: any[] = [];
+    if (options.project) filters.push({ term: { project: options.project } });
+    if (options.owner) filters.push({ term: { owner: options.owner } });
+    if (options.category) filters.push({ term: { category: options.category } });
+    if (options.minImportance) filters.push({ range: { importance: { gte: options.minImportance } } });
+    if (options.maxAgeDays) filters.push({ range: { created_at: { gte: `now-${options.maxAgeDays}d` } } });
+
+    const contentBoost = fb.content ?? 1;
+
+    const should: any[] = [
+      { match: { content: { query: queryText, boost: w.keyword * 10 * contentBoost, analyzer: "content_analyzer", fuzziness } } },
+    ];
+
+    // Ngram for partial matching
+    should.push({ match: { "content.ngram": { query: queryText, boost: w.keyword * 2 } } });
+
+    // Phrase boost
+    if (phraseBoost > 0) {
+      should.push({ match_phrase: { content: { query: queryText, boost: phraseBoost } } });
+    }
+
+    const functions: any[] = [];
+    if (w.importance > 0) {
+      functions.push({
+        script_score: { script: { source: "doc['importance'].size() > 0 ? doc['importance'].value / 10.0 : 0.1" } },
+        weight: w.importance * 10,
+      });
+    }
+    if (w.recency > 0) {
+      functions.push({
+        exp: { created_at: { origin: "now", scale: config.elastic.recencyScale, decay: config.elastic.recencyDecay } },
+        weight: w.recency * 10,
+      });
+    }
+
+    const textQuery: any = {
+      bool: {
+        should,
+        ...(filters.length ? { filter: filters } : {}),
+        minimum_should_match: 0,
+      },
+    };
+
+    const query = functions.length > 0
+      ? { function_score: { query: textQuery, functions, score_mode: "sum", boost_mode: "sum" } }
+      : textQuery;
+
+    const body: any = {
+      size: topK,
+      knn: {
+        field: "embedding",
+        query_vector: queryEmbedding,
+        k: topK,
+        num_candidates: topK * CANDIDATE_MULTIPLIER,
+        boost: w.vector * 10,
+        ...(filters.length ? { filter: filters } : {}),
+      },
+      query,
+      _source: { excludes: ["embedding"] },
+    };
+
+    if (options.minScore) body.min_score = options.minScore;
+    if (options.highlight) body.highlight = buildHighlight(["content"]);
+
+    const res = await this.client.search(body as any);
+    return this.mapHits<AgentMemory>(res, options.highlight);
+  }
+
+  async searchMemoriesByVector(queryEmbedding: number[], options: { topK?: number; project?: string } = {}): Promise<(AgentMemory & { _score: number })[]> {
+    assertEmbeddingDimension(queryEmbedding, "ElasticDB.searchMemoriesByVector");
+    const topK = options.topK ?? 10;
+    const filters: any[] = [];
+    if (options.project) filters.push({ term: { project: options.project } });
+
+    const res = await this.client.search({
+      index: MEMORIES_INDEX,
+      size: topK,
+      knn: {
+        field: "embedding",
+        query_vector: queryEmbedding,
+        k: topK,
+        num_candidates: topK * CANDIDATE_MULTIPLIER,
+        ...(filters.length ? { filter: filters } : {}),
+      },
+      _source: { excludes: ["embedding"] },
+    } as any);
+    return this.mapHits<AgentMemory>(res);
+  }
+
+  async listMemories(options?: MemorySearchOptions, limit = 100, offset = 0): Promise<AgentMemory[]> {
+    const filters: any[] = [];
+    if (options?.project) filters.push({ term: { project: options.project } });
+
+    const res = await this.client.search({
+      index: MEMORIES_INDEX,
+      size: limit,
+      from: offset,
+      query: filters.length ? { bool: { filter: filters } } : { match_all: {} },
+      sort: [{ updated_at: { order: "desc" } }],
+      _source: { excludes: ["embedding"] },
+    });
+    return this.mapSources<AgentMemory>(res);
+  }
+
+  async getMemory(id: string): Promise<AgentMemory | null> {
+    try {
+      const res = await this.client.get({ index: MEMORIES_INDEX, id, _source_excludes: ["embedding"] });
+      return res._source as AgentMemory;
+    } catch (e: any) {
+      if (e.meta?.statusCode === 404) return null;
+      throw e;
+    }
+  }
+
+  async deleteMemory(id: string) {
+    await this.client.delete({ index: MEMORIES_INDEX, id, refresh: true }).catch((e: any) => {
+      if (e.meta?.statusCode !== 404) throw e;
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Context Nodes
+  // ---------------------------------------------------------------------------
+
+  async addContextNode(node: AgentContextNode, embedding: number[]) {
+    assertEmbeddingDimension(embedding, "ElasticDB.addContextNode");
+    const ts = new Date().toISOString();
+
+    const ancestors = await this.computeAncestors(node.parent_uri);
+
+    await this.client.index({
+      index: CONTEXT_INDEX,
+      id: node.uri,
+      document: {
+        uri: node.uri,
+        project: node.project || null,
+        parent_uri: node.parent_uri,
+        ancestors,
+        name: node.name,
+        abstract: node.abstract,
+        overview: node.overview || null,
+        content: node.content || null,
+        embedding,
+        metadata: node.metadata || null,
+        created_at: node.created_at || ts,
+        updated_at: node.updated_at || ts,
+      },
+      refresh: true,
+    });
+  }
+
+  async updateContextNode(
+    uri: string,
+    updates: { name?: string; abstract?: string; overview?: string; content?: string; metadata?: Record<string, any> },
+    embedding?: number[]
+  ) {
+    const doc: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (updates.name !== undefined) doc.name = updates.name;
+    if (updates.abstract !== undefined) doc.abstract = updates.abstract;
+    if (updates.overview !== undefined) doc.overview = updates.overview;
+    if (updates.content !== undefined) doc.content = updates.content;
+    if (updates.metadata !== undefined) doc.metadata = updates.metadata;
+    if (embedding) {
+      assertEmbeddingDimension(embedding, "ElasticDB.updateContextNode");
+      doc.embedding = embedding;
+    }
+    await this.client.update({ index: CONTEXT_INDEX, id: uri, doc, refresh: true });
+  }
+
+  async searchContextNodes(queryEmbedding: number[], queryText: string, options: ContextSearchOptions = {}): Promise<(AgentContextNode & { _score: number; _highlight?: Record<string, string[]> })[]> {
+    assertEmbeddingDimension(queryEmbedding, "ElasticDB.searchContextNodes");
+    const topK = options.topK ?? 10;
+    const ow = options.weights ?? DEFAULT_CONTEXT_WEIGHTS;
+    const w = normalizeWeights({
+      vector: ow.vector, keyword: ow.keyword,
+      recency: ow.recency ?? 0, importance: 0,
+    });
+
+    const fuzziness = options.fuzziness ?? config.elastic.defaultFuzziness;
+    const phraseBoost = options.phraseBoost ?? config.elastic.defaultPhraseBoost;
+    const fb = options.fieldBoosts ?? {};
+
+    const filters: any[] = [];
+    if (options.project) filters.push({ term: { project: options.project } });
+    if (options.parentUri) filters.push({ term: { parent_uri: options.parentUri } });
+    if (options.maxAgeDays) filters.push({ range: { created_at: { gte: `now-${options.maxAgeDays}d` } } });
+
+    const nameBoost = fb.name ?? 3;
+    const abstractBoost = fb.abstract ?? 2;
+    const overviewBoost = fb.overview ?? 1;
+    const contentBoost = fb.content ?? 1;
+
+    const should: any[] = [
+      { multi_match: { query: queryText, fields: [`name^${nameBoost}`, `abstract^${abstractBoost}`, `overview^${overviewBoost}`, `content^${contentBoost}`], boost: w.keyword * 10, analyzer: "content_analyzer", fuzziness } },
+    ];
+
+    // Ngram partial matching on name and abstract
+    should.push({ multi_match: { query: queryText, fields: ["name.ngram", "abstract.ngram"], boost: w.keyword * 2 } });
+
+    // Phrase boost
+    if (phraseBoost > 0) {
+      should.push({ multi_match: { query: queryText, fields: [`name^${nameBoost}`, `abstract^${abstractBoost}`, `overview^${overviewBoost}`, `content^${contentBoost}`], type: "phrase", boost: phraseBoost } });
+    }
+
+    const functions: any[] = [];
+    if (w.recency > 0) {
+      functions.push({
+        exp: { created_at: { origin: "now", scale: config.elastic.recencyScale, decay: config.elastic.recencyDecay } },
+        weight: w.recency * 10,
+      });
+    }
+
+    const textQuery: any = {
+      bool: {
+        should,
+        ...(filters.length ? { filter: filters } : {}),
+        minimum_should_match: 0,
+      },
+    };
+
+    const query = functions.length > 0
+      ? { function_score: { query: textQuery, functions, score_mode: "sum", boost_mode: "sum" } }
+      : textQuery;
+
+    const body: any = {
+      size: topK,
+      knn: {
+        field: "embedding",
+        query_vector: queryEmbedding,
+        k: topK,
+        num_candidates: topK * CANDIDATE_MULTIPLIER,
+        boost: w.vector * 10,
+        ...(filters.length ? { filter: filters } : {}),
+      },
+      query,
+      _source: { excludes: ["embedding"] },
+    };
+
+    if (options.minScore) body.min_score = options.minScore;
+    if (options.highlight) body.highlight = buildHighlight(["name", "abstract", "overview", "content"]);
+
+    const res = await this.client.search(body as any);
+    return this.mapHits<AgentContextNode>(res, options.highlight);
+  }
+
+  async searchContextNodesByVector(queryEmbedding: number[], options: { topK?: number; project?: string } = {}): Promise<(AgentContextNode & { _score: number })[]> {
+    assertEmbeddingDimension(queryEmbedding, "ElasticDB.searchContextNodesByVector");
+    const topK = options.topK ?? 10;
+    const filters: any[] = [];
+    if (options.project) filters.push({ term: { project: options.project } });
+
+    const res = await this.client.search({
+      index: CONTEXT_INDEX,
+      size: topK,
+      knn: {
+        field: "embedding",
+        query_vector: queryEmbedding,
+        k: topK,
+        num_candidates: topK * CANDIDATE_MULTIPLIER,
+        ...(filters.length ? { filter: filters } : {}),
+      },
+      _source: { excludes: ["embedding"] },
+    } as any);
+    return this.mapHits<AgentContextNode>(res);
+  }
+
+  async listContextNodes(parentUri?: string, options?: ContextSearchOptions, limit = 100, offset = 0): Promise<AgentContextNode[]> {
+    const filters: any[] = [];
+    if (options?.project) filters.push({ term: { project: options.project } });
+    if (parentUri) filters.push({ term: { parent_uri: parentUri } });
+
+    const res = await this.client.search({
+      index: CONTEXT_INDEX,
+      size: limit,
+      from: offset,
+      query: filters.length ? { bool: { filter: filters } } : { match_all: {} },
+      sort: [{ updated_at: { order: "desc" } }],
+      _source: { excludes: ["embedding"] },
+    });
+    return this.mapSources<AgentContextNode>(res);
+  }
+
+  async getContextNode(uri: string): Promise<AgentContextNode | null> {
+    try {
+      const res = await this.client.get({ index: CONTEXT_INDEX, id: uri, _source_excludes: ["embedding"] });
+      return res._source as AgentContextNode;
+    } catch (e: any) {
+      if (e.meta?.statusCode === 404) return null;
+      throw e;
+    }
+  }
+
+  async deleteContextNode(uri: string) {
+    await this.client.deleteByQuery({
+      index: CONTEXT_INDEX,
+      query: { term: { ancestors: uri } },
+      refresh: true,
+    }).catch(() => {});
+
+    await this.client.delete({ index: CONTEXT_INDEX, id: uri, refresh: true }).catch((e: any) => {
+      if (e.meta?.statusCode !== 404) throw e;
+    });
+  }
+
+  async getContextSubtree(nodeUri: string): Promise<(AgentContextNode & { depth: number })[]> {
+    const res = await this.client.search({
+      index: CONTEXT_INDEX,
+      size: 1000,
+      query: {
+        bool: {
+          should: [
+            { term: { uri: nodeUri } },
+            { term: { ancestors: nodeUri } },
+          ],
+          minimum_should_match: 1,
+        },
+      },
+      _source: { excludes: ["embedding"] },
+    });
+
+    const nodes = this.mapSources<AgentContextNode & { ancestors?: string[] }>(res);
+    const rootNode = nodes.find((n) => n.uri === nodeUri);
+    const rootDepth = rootNode && (rootNode as any).ancestors ? (rootNode as any).ancestors.length : 0;
+
+    return nodes
+      .map((n) => {
+        const nodeAncestors: string[] = (n as any).ancestors || [];
+        const depth = nodeAncestors.length - rootDepth;
+        const { ancestors: _, ...rest } = n as any;
+        return { ...rest, depth } as AgentContextNode & { depth: number };
+      })
+      .sort((a, b) => a.depth - b.depth);
+  }
+
+  async getContextPath(nodeUri: string): Promise<(AgentContextNode & { depth: number })[]> {
+    const node = await this.getContextNodeWithAncestors(nodeUri);
+    if (!node) return [];
+
+    const ancestorUris: string[] = (node as any).ancestors || [];
+    if (ancestorUris.length === 0) {
+      return [{ ...node, depth: 0 }];
+    }
+
+    const res = await this.client.search({
+      index: CONTEXT_INDEX,
+      size: ancestorUris.length + 1,
+      query: {
+        bool: {
+          should: [
+            { terms: { uri: [...ancestorUris, nodeUri] } },
+          ],
+          minimum_should_match: 1,
+        },
+      },
+      _source: { excludes: ["embedding"] },
+    });
+
+    const allNodes = this.mapSources<AgentContextNode & { ancestors?: string[] }>(res);
+
+    return allNodes
+      .map((n) => {
+        const nodeAncestors: string[] = (n as any).ancestors || [];
+        const depth = nodeAncestors.length;
+        const { ancestors: _, ...rest } = n as any;
+        return { ...rest, depth } as AgentContextNode & { depth: number };
+      })
+      .sort((a, b) => a.depth - b.depth);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  private async computeAncestors(parentUri: string | null): Promise<string[]> {
+    if (!parentUri) return [];
+    const parent = await this.getContextNodeWithAncestors(parentUri);
+    if (!parent) return [parentUri];
+    const parentAncestors: string[] = (parent as any).ancestors || [];
+    return [...parentAncestors, parentUri];
+  }
+
+  private async getContextNodeWithAncestors(uri: string): Promise<(AgentContextNode & { ancestors?: string[] }) | null> {
+    try {
+      const res = await this.client.get({ index: CONTEXT_INDEX, id: uri, _source_excludes: ["embedding"] });
+      return res._source as AgentContextNode & { ancestors?: string[] };
+    } catch (e: any) {
+      if (e.meta?.statusCode === 404) return null;
+      throw e;
+    }
+  }
+
+  private mapHits<T>(res: any, includeHighlight?: boolean): (T & { _score: number; _highlight?: Record<string, string[]> })[] {
+    return (res.hits?.hits || []).map((hit: any) => ({
+      ...hit._source,
+      _score: hit._score ?? 0,
+      ...(includeHighlight && hit.highlight ? { _highlight: hit.highlight } : {}),
+    }));
+  }
+
+  private mapSources<T>(res: any): T[] {
+    return (res.hits?.hits || []).map((hit: any) => hit._source as T);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Highlight config builder
+// ---------------------------------------------------------------------------
+
+function buildHighlight(fields: string[]): any {
+  const highlightFields: Record<string, any> = {};
+  for (const f of fields) {
+    highlightFields[f] = {
+      fragment_size: 150,
+      number_of_fragments: 2,
+      pre_tags: ["<mark>"],
+      post_tags: ["</mark>"],
+    };
+  }
+  return { fields: highlightFields };
+}

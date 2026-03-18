@@ -9,6 +9,14 @@ import * as readline from "readline";
 const cm = createContextManager();
 const program = new Command();
 
+function parseFuzziness(val?: string): "auto" | 0 | 1 | 2 | undefined {
+  if (val === undefined) return undefined;
+  if (val === "auto") return "auto";
+  const n = parseInt(val);
+  if (n === 0 || n === 1 || n === 2) return n;
+  return "auto";
+}
+
 program
   .name("context-cli")
   .description("contextfs CLI — manage agent memory, skills, and context nodes")
@@ -49,7 +57,7 @@ memCmd
 
 memCmd
   .command("search <query>")
-  .description("Search memories with hybrid vector + keyword re-ranking")
+  .description("Search memories with hybrid kNN + BM25 scoring")
   .option("-P, --project <project>", "Filter by project")
   .option("-k, --topK <n>", "Results to return", "10")
   .option("-t, --threshold <n>", "Max cosine distance (0-2)")
@@ -57,6 +65,10 @@ memCmd
   .option("--category <cat>", "Filter by category")
   .option("--minImportance <n>", "Min importance score")
   .option("--maxAgeDays <n>", "Max age in days")
+  .option("--fuzziness <f>", "Typo tolerance: auto, 0, 1, 2")
+  .option("--phraseBoost <n>", "Boost for exact phrase matches (0=off)")
+  .option("--minScore <n>", "Hard minimum score cutoff")
+  .option("--highlight", "Show highlighted match snippets")
   .action(async (query, opts) => {
     try {
       const results = await cm.searchMemories(query, {
@@ -67,6 +79,10 @@ memCmd
         category: opts.category,
         minImportance: opts.minImportance !== undefined ? parseInt(opts.minImportance) : undefined,
         maxAgeDays: opts.maxAgeDays !== undefined ? parseInt(opts.maxAgeDays) : undefined,
+        fuzziness: parseFuzziness(opts.fuzziness),
+        phraseBoost: opts.phraseBoost !== undefined ? parseFloat(opts.phraseBoost) : undefined,
+        minScore: opts.minScore !== undefined ? parseFloat(opts.minScore) : undefined,
+        highlight: opts.highlight ?? false,
       });
       console.log(JSON.stringify(results, null, 2));
     } catch (e) { console.error("Error:", e); process.exit(1); }
@@ -127,17 +143,25 @@ skillCmd
 
 skillCmd
   .command("search <query>")
-  .description("Search skills with hybrid vector + keyword re-ranking")
+  .description("Search skills with hybrid kNN + BM25 scoring")
   .option("-P, --project <project>", "Filter by project")
   .option("-k, --topK <n>", "Results to return", "10")
   .option("-t, --threshold <n>", "Max cosine distance (0-2)")
   .option("--maxAgeDays <n>", "Max age in days")
+  .option("--fuzziness <f>", "Typo tolerance: auto, 0, 1, 2")
+  .option("--phraseBoost <n>", "Boost for exact phrase matches (0=off)")
+  .option("--minScore <n>", "Hard minimum score cutoff")
+  .option("--highlight", "Show highlighted match snippets")
   .action(async (query, opts) => {
     try {
       const results = await cm.searchSkills(query, {
         topK: parseInt(opts.topK),
         threshold: opts.threshold !== undefined ? parseFloat(opts.threshold) : undefined,
         maxAgeDays: opts.maxAgeDays !== undefined ? parseInt(opts.maxAgeDays) : undefined,
+        fuzziness: parseFuzziness(opts.fuzziness),
+        phraseBoost: opts.phraseBoost !== undefined ? parseFloat(opts.phraseBoost) : undefined,
+        minScore: opts.minScore !== undefined ? parseFloat(opts.minScore) : undefined,
+        highlight: opts.highlight ?? false,
       });
       console.log(JSON.stringify(results, null, 2));
     } catch (e) { console.error("Error:", e); process.exit(1); }
@@ -205,6 +229,10 @@ nodeCmd
   .option("-t, --threshold <n>", "Max cosine distance (0-2)")
   .option("--parentUri <uri>", "Filter by parent URI")
   .option("--maxAgeDays <n>", "Max age in days")
+  .option("--fuzziness <f>", "Typo tolerance: auto, 0, 1, 2")
+  .option("--phraseBoost <n>", "Boost for exact phrase matches (0=off)")
+  .option("--minScore <n>", "Hard minimum score cutoff")
+  .option("--highlight", "Show highlighted match snippets")
   .action(async (query, opts) => {
     try {
       const results = await cm.searchContext(query, {
@@ -212,6 +240,10 @@ nodeCmd
         threshold: opts.threshold !== undefined ? parseFloat(opts.threshold) : undefined,
         parentUri: opts.parentUri,
         maxAgeDays: opts.maxAgeDays !== undefined ? parseInt(opts.maxAgeDays) : undefined,
+        fuzziness: parseFuzziness(opts.fuzziness),
+        phraseBoost: opts.phraseBoost !== undefined ? parseFloat(opts.phraseBoost) : undefined,
+        minScore: opts.minScore !== undefined ? parseFloat(opts.minScore) : undefined,
+        highlight: opts.highlight ?? false,
       });
       console.log(JSON.stringify(results, null, 2));
     } catch (e) { console.error("Error:", e); process.exit(1); }
@@ -438,8 +470,8 @@ program
         }
         for (const item of group.items) {
           const id = item.id || item.uri;
-          const score = item._hybrid_score !== undefined
-            ? ` (score: ${item._hybrid_score.toFixed(3)})`
+          const score = item._score !== undefined
+            ? ` (score: ${item._score.toFixed(3)})`
             : "";
           switch (group.store) {
             case "memory":

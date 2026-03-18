@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { TursoVectorDB } from "./TursoVectorDB";
+import { ElasticDB } from "./elasticDB";
 import { Embedder } from "./embedder";
 import {
   AgentContextNode,
@@ -12,23 +12,16 @@ import {
   SkippedWrite,
   UpdatedWrite,
 } from "./types";
-import {
-  hybridRerank,
-  DEFAULT_MEMORY_WEIGHTS,
-  DEFAULT_SKILL_WEIGHTS,
-  DEFAULT_CONTEXT_WEIGHTS,
-  HybridWeights,
-} from "./scorer";
 import { decideMemoryAction, decideContextAction, RouterCandidate } from "./llmRouter";
 import { parseTextIntoContextNodes, ProposedContextNode } from "./ingestor";
 
 export type { ProposedContextNode };
 
 export class ContextManager {
-  private db: TursoVectorDB;
+  private db: ElasticDB;
 
-  constructor(url: string, authToken?: string) {
-    this.db = new TursoVectorDB(url, authToken);
+  constructor(node: string, auth?: { username: string; password: string }) {
+    this.db = new ElasticDB(node, auth);
   }
 
   // ---------------------------------------------------------------------------
@@ -53,9 +46,9 @@ export class ContextManager {
   async updateSkill(id: string, updates: { name?: string; description?: string; project?: string; metadata?: Record<string, any> }) {
     let embedding: number[] | undefined;
     const current = await this.db.getSkill(id);
-    
+
     if (current && (
-      (updates.name !== undefined && updates.name !== current.name) || 
+      (updates.name !== undefined && updates.name !== current.name) ||
       (updates.description !== undefined && updates.description !== current.description)
     )) {
       const name = updates.name ?? current.name ?? "";
@@ -70,21 +63,7 @@ export class ContextManager {
     const opts = this.normalizeOptions<SkillSearchOptions>(topKOrOptions, threshold);
     const topK = opts.topK ?? 10;
     const embedding = await Embedder.getEmbedding(query);
-    const candidates = await this.db.searchSkills(embedding, opts);
-
-    const weights: HybridWeights = {
-      vector: opts.weights?.vector ?? DEFAULT_SKILL_WEIGHTS.vector,
-      keyword: opts.weights?.keyword ?? DEFAULT_SKILL_WEIGHTS.keyword,
-      recency: opts.weights?.recency ?? DEFAULT_SKILL_WEIGHTS.recency,
-      importance: 0,
-    };
-
-    const ranked = hybridRerank(candidates, query, ["name", "description"], weights);
-    const results = opts.threshold !== undefined
-      ? ranked.filter((r) => r.distance <= opts.threshold!)
-      : ranked;
-
-    return results.slice(0, topK);
+    return this.db.searchSkills(embedding, query, { ...opts, topK });
   }
 
   async listSkills(options?: SkillSearchOptions, limit = 100) {
@@ -99,10 +78,6 @@ export class ContextManager {
   // Memories
   // ---------------------------------------------------------------------------
 
-  /**
-   * Smart add: embeds content, searches for similar existing memories,
-   * and uses the LLM router to decide create/update/skip.
-   */
   async addMemory(
     content: string,
     category: MemoryCategory,
@@ -115,14 +90,13 @@ export class ContextManager {
     const embedding = await Embedder.getEmbedding(content);
 
     if (useRouter) {
-      // Fetch top similar candidates for the LLM to consider
-      const candidates = await this.db.searchMemories(embedding, { topK: 5, project });
-      const ranked = hybridRerank(candidates, content, ["content"], DEFAULT_MEMORY_WEIGHTS);
+      // Use vector-only search for dedup — scores are pure cosine similarity in [0, 1]
+      const candidates = await this.db.searchMemoriesByVector(embedding, { topK: 5, project });
 
-      const routerCandidates: RouterCandidate[] = ranked.slice(0, 5).map((r) => ({
+      const routerCandidates: RouterCandidate[] = candidates.slice(0, 5).map((r) => ({
         id: r.id as string,
         content: r.content as string,
-        score: r._hybrid_score,
+        score: r._score,
       }));
 
       const decision = await decideMemoryAction(content, routerCandidates);
@@ -164,7 +138,7 @@ export class ContextManager {
   ) {
     let embedding: number[] | undefined;
     const current = await this.db.getMemory(id);
-    
+
     if (current && updates.content !== undefined && updates.content !== current.content) {
       embedding = await Embedder.getEmbedding(updates.content);
     }
@@ -176,21 +150,7 @@ export class ContextManager {
     const opts = this.normalizeOptions<MemorySearchOptions>(topKOrOptions, threshold);
     const topK = opts.topK ?? 10;
     const embedding = await Embedder.getEmbedding(query);
-    const candidates = await this.db.searchMemories(embedding, opts);
-
-    const weights: HybridWeights = {
-      vector: opts.weights?.vector ?? DEFAULT_MEMORY_WEIGHTS.vector,
-      keyword: opts.weights?.keyword ?? DEFAULT_MEMORY_WEIGHTS.keyword,
-      recency: opts.weights?.recency ?? DEFAULT_MEMORY_WEIGHTS.recency,
-      importance: opts.weights?.importance ?? DEFAULT_MEMORY_WEIGHTS.importance,
-    };
-
-    const ranked = hybridRerank(candidates, query, ["content"], weights, "importance");
-    const results = opts.threshold !== undefined
-      ? ranked.filter((r) => r.distance <= opts.threshold!)
-      : ranked;
-
-    return results.slice(0, topK);
+    return this.db.searchMemories(embedding, query, { ...opts, topK });
   }
 
   async listMemories(options?: MemorySearchOptions, limit = 100) {
@@ -205,9 +165,6 @@ export class ContextManager {
   // Context Nodes
   // ---------------------------------------------------------------------------
 
-  /**
-   * Smart add: uses LLM router to decide create/update/skip for context nodes.
-   */
   async addContextNode(
     uri: string,
     name: string,
@@ -222,13 +179,12 @@ export class ContextManager {
     const embedding = await Embedder.getEmbedding(`${name}: ${abstract}`);
 
     if (useRouter) {
-      const candidates = await this.db.searchContextNodes(embedding, { topK: 5, project });
-      const ranked = hybridRerank(candidates, `${name}: ${abstract}`, ["name", "abstract"], DEFAULT_CONTEXT_WEIGHTS);
+      const candidates = await this.db.searchContextNodesByVector(embedding, { topK: 5, project });
 
-      const routerCandidates: RouterCandidate[] = ranked.slice(0, 5).map((r) => ({
+      const routerCandidates: RouterCandidate[] = candidates.slice(0, 5).map((r) => ({
         id: r.uri as string,
         content: r.abstract as string,
-        score: r._hybrid_score,
+        score: r._score,
       }));
 
       const decision = await decideContextAction(uri, name, abstract, routerCandidates);
@@ -271,9 +227,9 @@ export class ContextManager {
   ) {
     let embedding: number[] | undefined;
     const current = await this.db.getContextNode(uri);
-    
+
     if (current && (
-      (updates.name !== undefined && updates.name !== current.name) || 
+      (updates.name !== undefined && updates.name !== current.name) ||
       (updates.abstract !== undefined && updates.abstract !== current.abstract)
     )) {
       const name = updates.name ?? current.name ?? "";
@@ -288,22 +244,7 @@ export class ContextManager {
     const opts = this.normalizeOptions<ContextSearchOptions>(topKOrOptions, threshold);
     const topK = opts.topK ?? 10;
     const embedding = await Embedder.getEmbedding(query);
-    const candidates = await this.db.searchContextNodes(embedding, opts);
-
-    const weights: HybridWeights = {
-      vector: opts.weights?.vector ?? DEFAULT_CONTEXT_WEIGHTS.vector,
-      keyword: opts.weights?.keyword ?? DEFAULT_CONTEXT_WEIGHTS.keyword,
-      recency: opts.weights?.recency ?? DEFAULT_CONTEXT_WEIGHTS.recency,
-      importance: 0,
-    };
-
-    // Search across all text layers for best keyword overlap
-    const ranked = hybridRerank(candidates, query, ["name", "abstract", "overview", "content"], weights);
-    const results = opts.threshold !== undefined
-      ? ranked.filter((r) => r.distance <= opts.threshold!)
-      : ranked;
-
-    return results.slice(0, topK);
+    return this.db.searchContextNodes(embedding, query, { ...opts, topK });
   }
 
   async listContextNodes(parentUri?: string, options?: ContextSearchOptions, limit = 100) {
@@ -326,13 +267,6 @@ export class ContextManager {
   // Ingest
   // ---------------------------------------------------------------------------
 
-  /**
-   * Parse free text or markdown into proposed context nodes via LLM.
-   * Does NOT write to the database — call addContextNode() for each approved node.
-   *
-   * @param text     Raw text or markdown content
-   * @param baseUri  Optional URI namespace prefix (default: "contextfs://ingested")
-   */
   async parseIngestText(text: string, baseUri?: string): Promise<ProposedContextNode[]> {
     return parseTextIntoContextNodes(text, baseUri);
   }

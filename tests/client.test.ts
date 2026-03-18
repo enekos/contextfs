@@ -10,8 +10,8 @@ vi.mock("dotenv", () => {
 // Mock ContextManager
 vi.mock("../src/ContextManager", () => {
   return {
-    ContextManager: vi.fn().mockImplementation((url, token) => {
-      return { url, token };
+    ContextManager: vi.fn().mockImplementation((node, auth) => {
+      return { node, auth };
     }),
   };
 });
@@ -37,31 +37,39 @@ describe("client", () => {
     process.env = originalEnv;
   });
 
-  it("throws an error if TURSO_URL is missing", async () => {
-    delete process.env.TURSO_URL;
-    const { createContextManager } = await import("../src/client");
-    expect(() => createContextManager()).toThrow("Please set TURSO_URL in your .env file or environment.");
-  });
-
-  it("returns a new ContextManager with url and token", async () => {
-    process.env.TURSO_URL = "http://example.com";
-    process.env.TURSO_AUTH_TOKEN = "secret123";
+  it("creates ContextManager with default ELASTIC_URL", async () => {
+    process.env.ELASTIC_URL = "http://localhost:9200";
+    delete process.env.ELASTIC_USERNAME;
+    delete process.env.ELASTIC_PASSWORD;
 
     const { createContextManager } = await import("../src/client");
     const manager = createContextManager() as any;
 
-    expect(manager.url).toBe("http://example.com");
-    expect(manager.token).toBe("secret123");
+    expect(manager.node).toBe("http://localhost:9200");
+    expect(manager.auth).toBeUndefined();
   });
 
-  it("returns a new ContextManager even if TURSO_AUTH_TOKEN is missing", async () => {
-    process.env.TURSO_URL = "http://example.com";
-    delete process.env.TURSO_AUTH_TOKEN;
+  it("passes auth when username and password are set", async () => {
+    process.env.ELASTIC_URL = "http://localhost:9200";
+    process.env.ELASTIC_USERNAME = "elastic";
+    process.env.ELASTIC_PASSWORD = "changeme";
 
     const { createContextManager } = await import("../src/client");
     const manager = createContextManager() as any;
 
-    expect(manager.url).toBe("http://example.com");
-    expect(manager.token).toBeUndefined();
+    expect(manager.node).toBe("http://localhost:9200");
+    expect(manager.auth).toEqual({ username: "elastic", password: "changeme" });
+  });
+
+  it("works without auth when only ELASTIC_URL is set", async () => {
+    process.env.ELASTIC_URL = "http://custom:9200";
+    delete process.env.ELASTIC_USERNAME;
+    delete process.env.ELASTIC_PASSWORD;
+
+    const { createContextManager } = await import("../src/client");
+    const manager = createContextManager() as any;
+
+    expect(manager.node).toBe("http://custom:9200");
+    expect(manager.auth).toBeUndefined();
   });
 });

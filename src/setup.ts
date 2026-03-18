@@ -1,25 +1,27 @@
-import { TursoVectorDB } from "./TursoVectorDB";
+import { ElasticDB } from "./elasticDB";
 import { config } from "./config";
 
-const url = config.tursoUrl;
-const authToken = config.tursoAuthToken;
+const node = config.elasticUrl;
 
-if (!url) {
-  console.error("Please set TURSO_URL and TURSO_AUTH_TOKEN in your .env file");
+if (!node) {
+  console.error("Please set ELASTIC_URL in your .env file");
   process.exit(1);
 }
 
-// setup.ts directly uses TursoVectorDB (not ContextManager) to init tables before embedder is available
-const db = new TursoVectorDB(url, authToken);
+const auth = config.elasticUsername && config.elasticPassword
+  ? { username: config.elasticUsername, password: config.elasticPassword }
+  : undefined;
+
+const db = new ElasticDB(node, auth);
 
 async function main() {
-  console.log("Resetting and initializing Turso Vector Database for Agent Context...");
+  console.log("Resetting and initializing Elasticsearch indices for Agent Context...");
   try {
-    await db.resetTables();
-    await db.initTables();
-    console.log("Successfully reset and initialized tables!");
+    await db.resetIndices();
+    await db.initIndices();
+    console.log("Successfully reset and initialized indices!");
   } catch (err) {
-    console.error("Failed to reset/initialize tables:", err);
+    console.error("Failed to reset/initialize indices:", err);
   }
 }
 

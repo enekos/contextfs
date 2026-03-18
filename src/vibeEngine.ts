@@ -7,7 +7,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { extractJsonObject } from "./jsonUtils";
 import { config } from "./config";
-import { ContextManager } from "./ContextManager";
+import { ContextManager } from "./contextManager";
 import { MemoryCategory, MemoryOwner } from "./types";
 
 const LLM_MODEL = config.llmModel;
@@ -183,7 +183,7 @@ export async function planVibeMutation(
   const contextStr = deduped.length > 0
     ? JSON.stringify(deduped.map((item) => {
         // Trim verbose fields for the LLM prompt
-        const { _vector_score, _keyword_score, _recency_score, _importance_score, _hybrid_score, embedding: _embedding, distance: _distance, ...rest } = item;
+        const { _score: _s, embedding: _embedding, ancestors: _anc, ...rest } = item;
         return rest;
       }), null, 2)
     : "(no existing entries found)";

@@ -1,18 +1,16 @@
-import { createClient } from "@libsql/client";
+import { ElasticDB } from "../src/elasticDB";
 import * as dotenv from "dotenv";
 dotenv.config();
-const client = createClient({
-  url: process.env.TURSO_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN!,
-});
+
+const db = new ElasticDB(
+  process.env.ELASTIC_URL || "http://localhost:9200",
+  process.env.ELASTIC_USERNAME && process.env.ELASTIC_PASSWORD
+    ? { username: process.env.ELASTIC_USERNAME, password: process.env.ELASTIC_PASSWORD }
+    : undefined
+);
 
 async function run() {
-  await client.execute("DROP INDEX IF EXISTS idx_skills_vec;");
-  await client.execute("DROP INDEX IF EXISTS idx_memories_vec;");
-  await client.execute("DROP INDEX IF EXISTS idx_context_nodes_vec;");
-  await client.execute("DROP TABLE IF EXISTS agent_context_nodes;");
-  await client.execute("DROP TABLE IF EXISTS agent_memories;");
-  await client.execute("DROP TABLE IF EXISTS agent_skills;");
-  console.log("Tables and indexes dropped!");
+  await db.resetIndices();
+  console.log("Indices dropped!");
 }
 run();
