@@ -310,9 +310,10 @@ nodeCmd
 nodeCmd
   .command("ls <uri>")
   .description("List direct children of a context node")
-  .action(async (uri) => {
+  .option("-P, --project <project>", "Filter by project")
+  .action(async (uri, opts) => {
     try {
-      console.log(JSON.stringify(await cm.listContextNodes(uri), null, 2));
+      console.log(JSON.stringify(await cm.listContextNodes(uri, { project: opts.project }), null, 2));
     } catch (e) { console.error("Error:", e); process.exit(1); }
   });
 
