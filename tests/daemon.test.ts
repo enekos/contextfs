@@ -5,13 +5,13 @@ import * as path from "path";
 import { CodebaseDaemon } from "../src/daemon";
 
 type ManagerStub = {
-  addContextNode: ReturnType<typeof vi.fn>;
+  upsertFileContextNode: ReturnType<typeof vi.fn>;
   deleteContextNode: ReturnType<typeof vi.fn>;
 };
 
 function createManagerStub(): ManagerStub {
   return {
-    addContextNode: vi.fn().mockResolvedValue(undefined),
+    upsertFileContextNode: vi.fn().mockResolvedValue(undefined),
     deleteContextNode: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -55,16 +55,15 @@ describe("CodebaseDaemon", () => {
 
     await (daemon as any).processFile(filePath);
 
-    expect(manager.addContextNode).toHaveBeenCalledTimes(1);
-    const call = manager.addContextNode.mock.calls[0];
-    const [uri, name, abstractText, overviewText, content, parentUri, project, metadata, useRouter] = call;
+    expect(manager.upsertFileContextNode).toHaveBeenCalledTimes(1);
+    const call = manager.upsertFileContextNode.mock.calls[0];
+    const [uri, name, abstractText, overviewText, content, parentUri, project, metadata] = call;
 
     expect(uri).toBe("contextfs://proj/src/domain/feature.ts");
     expect(name).toBe("feature.ts");
     expect(parentUri).toBe("contextfs://proj/src/domain");
     expect(project).toBe("proj");
     expect(metadata).toEqual({ type: "file", path: filePath });
-    expect(useRouter).toBe(false);
 
     expect(abstractText).toContain("Exports 1 classes: UserService");
     expect(abstractText).toContain("Exports 1 functions: greet");
@@ -106,8 +105,8 @@ describe("CodebaseDaemon", () => {
 
     await (daemon as any).processFile(filePath);
 
-    expect(manager.addContextNode).toHaveBeenCalledTimes(1);
-    const [, , abstractText, overviewText, content] = manager.addContextNode.mock.calls[0];
+    expect(manager.upsertFileContextNode).toHaveBeenCalledTimes(1);
+    const [, , abstractText, overviewText, content] = manager.upsertFileContextNode.mock.calls[0];
 
     expect(abstractText).toBe("File helpers.ts containing source code.");
     expect(overviewText).toBe("No exported classes or functions found.");
@@ -131,7 +130,7 @@ describe("CodebaseDaemon", () => {
 
     await (daemon as any).processFile(filePath);
 
-    expect(manager.addContextNode).not.toHaveBeenCalled();
+    expect(manager.upsertFileContextNode).not.toHaveBeenCalled();
   });
 
   it("skips files inside ignored directories", async () => {
@@ -145,7 +144,7 @@ describe("CodebaseDaemon", () => {
 
     await (daemon as any).processFile(ignoredFile);
 
-    expect(manager.addContextNode).not.toHaveBeenCalled();
+    expect(manager.upsertFileContextNode).not.toHaveBeenCalled();
   });
 
   it("removes deleted files from ts-morph project cache", async () => {
@@ -169,5 +168,60 @@ describe("CodebaseDaemon", () => {
 
     expect(manager.deleteContextNode).toHaveBeenCalledTimes(1);
     expect((daemon as any).tsProject.getSourceFile(filePath)).toBeUndefined();
+  });
+
+  it("skips mtime-only changes when file content is unchanged", async () => {
+    const tempDir = makeTempDir();
+    const filePath = path.join(tempDir, "module.ts");
+    fs.writeFileSync(
+      filePath,
+      source([
+        "export function ping() {",
+        "  return 'pong';",
+        "}",
+      ]),
+      "utf8"
+    );
+
+    const manager = createManagerStub();
+    const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+
+    await (daemon as any).processFile(filePath);
+    fs.utimesSync(filePath, new Date(Date.now() + 1000), new Date(Date.now() + 1000));
+    await (daemon as any).processFile(filePath);
+
+    expect(manager.upsertFileContextNode).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips context upsert when compact payload does not change", async () => {
+    const tempDir = makeTempDir();
+    const filePath = path.join(tempDir, "math.ts");
+    fs.writeFileSync(
+      filePath,
+      source([
+        "export function add(a: number, b: number) {",
+        "  return a + b;",
+        "}",
+      ]),
+      "utf8"
+    );
+
+    const manager = createManagerStub();
+    const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+
+    await (daemon as any).processFile(filePath);
+    fs.writeFileSync(
+      filePath,
+      source([
+        "export function add(a: number, b: number) {",
+        "  const sum = a + b;",
+        "  return sum;",
+        "}",
+      ]),
+      "utf8"
+    );
+    await (daemon as any).processFile(filePath);
+
+    expect(manager.upsertFileContextNode).toHaveBeenCalledTimes(1);
   });
 });

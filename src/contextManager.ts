@@ -260,6 +260,62 @@ export class ContextManager {
     return node;
   }
 
+  /**
+   * Daemon-oriented upsert for file-backed context nodes.
+   * Re-embeds only when `name` or `abstract` changed.
+   */
+  async upsertFileContextNode(
+    uri: string,
+    name: string,
+    abstract: string,
+    overview: string | undefined,
+    content: string | undefined,
+    parentUri: string | null,
+    project?: string,
+    metadata: Record<string, any> = {}
+  ): Promise<AgentContextNode | UpdatedWrite> {
+    const existing = await this.db.getContextNode(uri);
+
+    if (existing) {
+      const shouldReembed = existing.name !== name || existing.abstract !== abstract;
+      const embedding = shouldReembed
+        ? await Embedder.getEmbedding(`${name}: ${abstract}`)
+        : undefined;
+
+      await this.db.updateContextNode(
+        uri,
+        {
+          name,
+          abstract,
+          overview,
+          content,
+          metadata,
+        },
+        embedding
+      );
+      return { updated: true, id: uri };
+    }
+
+    const embedding = await Embedder.getEmbedding(`${name}: ${abstract}`);
+    const node = {
+      uri,
+      project,
+      parent_uri: parentUri,
+      name,
+      abstract,
+      overview,
+      content,
+      ai_intent: null,
+      ai_topics: null,
+      ai_quality_score: null,
+      metadata,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    await this.db.addContextNode(node, embedding);
+    return node;
+  }
+
   async updateContextNode(
     uri: string,
     updates: {

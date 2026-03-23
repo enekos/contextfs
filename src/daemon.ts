@@ -3,6 +3,7 @@ import { ContextManager } from "./contextManager";
 import * as path from "path";
 import * as chokidar from "chokidar";
 import * as fs from "fs";
+import { createHash } from "crypto";
 
 type ContentFormat = "compact" | "full";
 
@@ -43,6 +44,8 @@ export class CodebaseDaemon {
   private readonly processingDebounceMs: number;
   private readonly contentFormat: ContentFormat;
   private readonly fileFingerprints: Map<string, string> = new Map();
+  private readonly fileContentHashes: Map<string, string> = new Map();
+  private readonly nodePayloadHashes: Map<string, string> = new Map();
 
   constructor(manager: ContextManager, project: string, watchDir: string, options: DaemonOptions = {}) {
     this.manager = manager;
@@ -133,6 +136,10 @@ export class CodebaseDaemon {
 
   private fingerprintForStats(stats: fs.Stats): string {
     return `${stats.size}:${stats.mtimeMs}`;
+  }
+
+  private hashText(value: string): string {
+    return createHash("sha1").update(value).digest("hex");
   }
 
   private flushPendingSoon() {
@@ -370,6 +377,8 @@ export class CodebaseDaemon {
     const uri = this.fileToUri(absPath);
     this.pendingFiles.delete(absPath);
     this.fileFingerprints.delete(absPath);
+    this.fileContentHashes.delete(absPath);
+    this.nodePayloadHashes.delete(absPath);
     this.clearSourceFileFromProject(absPath);
 
     console.log(`[Daemon] File deleted, removing context node: ${uri}`);
@@ -396,7 +405,21 @@ export class CodebaseDaemon {
     if (this.fileFingerprints.get(absPath) === nextFingerprint) {
       return;
     }
-    this.fileFingerprints.set(absPath, nextFingerprint);
+
+    let rawContent: string;
+    try {
+      rawContent = fs.readFileSync(absPath, "utf8");
+    } catch (err) {
+      console.warn(`[Daemon] Failed to read file ${absPath}`, err);
+      return;
+    }
+
+    const nextContentHash = this.hashText(rawContent);
+    if (this.fileContentHashes.get(absPath) === nextContentHash) {
+      // mtime-only/no-op write; skip AST + indexing work.
+      this.fileFingerprints.set(absPath, nextFingerprint);
+      return;
+    }
 
     let sourceFile = this.tsProject.getSourceFile(absPath);
     try {
@@ -418,11 +441,19 @@ export class CodebaseDaemon {
     const summary = this.summarizeSourceFile(sourceFile);
     const name = path.basename(absPath);
     const content = this.contentFormat === "full"
-      ? sourceFile.getFullText()
+      ? rawContent
       : this.buildCompactContent(absPath, sourceFile, summary);
+    const nextNodePayloadHash = this.hashText(`${summary.abstractText}\n${summary.overviewText}\n${content}`);
 
-    // We update or add the file as a context node, skipping the router so it overrides directly.
-    await this.manager.addContextNode(
+    if (this.nodePayloadHashes.get(absPath) === nextNodePayloadHash) {
+      // File changed but extracted daemon payload is identical.
+      this.fileFingerprints.set(absPath, nextFingerprint);
+      this.fileContentHashes.set(absPath, nextContentHash);
+      return;
+    }
+
+    // Upsert file nodes directly, avoiding router-based dedup.
+    await this.manager.upsertFileContextNode(
       uri,
       name,
       summary.abstractText,
@@ -430,9 +461,12 @@ export class CodebaseDaemon {
       content,
       parentUri,
       this.project,
-      { type: "file", path: absPath },
-      false // don't use router, force update
+      { type: "file", path: absPath }
     );
+
+    this.fileFingerprints.set(absPath, nextFingerprint);
+    this.fileContentHashes.set(absPath, nextContentHash);
+    this.nodePayloadHashes.set(absPath, nextNodePayloadHash);
 
     console.log(`[Daemon] Updated AST context for ${name} (${uri})`);
   }
