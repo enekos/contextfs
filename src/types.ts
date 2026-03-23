@@ -3,6 +3,9 @@ export interface AgentSkill {
   id: string;
   name: string;
   description: string;
+  ai_intent?: "fact" | "decision" | "how_to" | "todo" | "warning" | null;
+  ai_topics?: string[] | null;
+  ai_quality_score?: number | null;
   metadata?: Record<string, any>;
   created_at: string;
   updated_at?: string;
@@ -55,6 +58,9 @@ export interface AgentMemory {
   category: MemoryCategory;
   owner: MemoryOwner;
   importance: number;
+  ai_intent?: "fact" | "decision" | "how_to" | "todo" | "warning" | null;
+  ai_topics?: string[] | null;
+  ai_quality_score?: number | null;
   metadata?: Record<string, any>;
   created_at: string;
   updated_at?: string;
@@ -69,6 +75,9 @@ export interface AgentContextNode {
   abstract: string;      // L0: ~100 tokens, used for vector search and embedding
   overview?: string;     // L1: ~2k tokens, for reranking/navigation
   content?: string;      // L2: full detail, loaded on demand
+  ai_intent?: "fact" | "decision" | "how_to" | "todo" | "warning" | null;
+  ai_topics?: string[] | null;
+  ai_quality_score?: number | null;
   metadata?: Record<string, any>;
   created_at: string;
   updated_at?: string;

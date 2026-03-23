@@ -387,6 +387,43 @@ describe("vibeEngine", () => {
   // ─────────────────────────────────────────────────────────────────────────
 
   describe("executeMutationOp", () => {
+    it("forwards AI metadata fields on create_memory", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      const mockCm = {
+        addMemory: vi.fn().mockResolvedValue({ id: "mem_ai" }),
+      };
+
+      const { executeMutationOp } = await import("../src/vibeEngine");
+      await executeMutationOp(mockCm as any, {
+        op: "create_memory",
+        description: "create with ai fields",
+        data: {
+          content: "Auth uses signed JWTs",
+          category: "decision",
+          owner: "agent",
+          importance: 8,
+          ai_intent: "decision",
+          ai_topics: ["auth", "security"],
+          ai_quality_score: 0.92,
+        },
+      }, "my-project");
+
+      expect(mockCm.addMemory).toHaveBeenCalledWith(
+        "Auth uses signed JWTs",
+        "decision",
+        "agent",
+        8,
+        "my-project",
+        {},
+        false,
+        {
+          ai_intent: "decision",
+          ai_topics: ["auth", "security"],
+          ai_quality_score: 0.92,
+        }
+      );
+    });
+
     it("executes create_memory", async () => {
       process.env.GEMINI_API_KEY = "fake-key";
       const mockCm = {
@@ -402,7 +439,18 @@ describe("vibeEngine", () => {
 
       expect(result).toContain("Created memory: mem_new123");
       expect(mockCm.addMemory).toHaveBeenCalledWith(
-        "test content", "observation", "agent", 7, "my-project", {}, false
+        "test content",
+        "observation",
+        "agent",
+        7,
+        "my-project",
+        {},
+        false,
+        {
+          ai_intent: undefined,
+          ai_topics: undefined,
+          ai_quality_score: undefined,
+        }
       );
     });
 
@@ -420,6 +468,30 @@ describe("vibeEngine", () => {
 
       expect(result).toBe("Updated memory: mem_abc");
       expect(mockCm.updateMemory).toHaveBeenCalledWith("mem_abc", { content: "updated content" });
+    });
+
+    it("forwards AI metadata fields on update_node", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+      const mockCm = { updateContextNode: vi.fn().mockResolvedValue({}) };
+
+      const { executeMutationOp } = await import("../src/vibeEngine");
+      const result = await executeMutationOp(mockCm as any, {
+        op: "update_node",
+        target: "ctx://existing",
+        description: "update node ai metadata",
+        data: {
+          ai_intent: "how_to",
+          ai_topics: ["retrieval", "infra"],
+          ai_quality_score: 0.75,
+        },
+      });
+
+      expect(result).toBe("Updated node: ctx://existing");
+      expect(mockCm.updateContextNode).toHaveBeenCalledWith("ctx://existing", {
+        ai_intent: "how_to",
+        ai_topics: ["retrieval", "infra"],
+        ai_quality_score: 0.75,
+      });
     });
 
     it("executes delete_memory", async () => {
@@ -451,7 +523,11 @@ describe("vibeEngine", () => {
       }, "proj");
 
       expect(result).toContain("Created skill: skill_new");
-      expect(mockCm.addSkill).toHaveBeenCalledWith("Testing", "Run vitest tests", "proj", {});
+      expect(mockCm.addSkill).toHaveBeenCalledWith("Testing", "Run vitest tests", "proj", {}, {
+        ai_intent: undefined,
+        ai_topics: undefined,
+        ai_quality_score: undefined,
+      });
     });
 
     it("executes update_skill", async () => {
@@ -499,7 +575,20 @@ describe("vibeEngine", () => {
 
       expect(result).toContain("Created node: ctx://new");
       expect(mockCm.addContextNode).toHaveBeenCalledWith(
-        "ctx://new", "New Node", "A new node", undefined, undefined, null, "proj", {}, false
+        "ctx://new",
+        "New Node",
+        "A new node",
+        undefined,
+        undefined,
+        null,
+        "proj",
+        {},
+        false,
+        {
+          ai_intent: undefined,
+          ai_topics: undefined,
+          ai_quality_score: undefined,
+        }
       );
     });
 
@@ -548,7 +637,18 @@ describe("vibeEngine", () => {
 
       // Should use defaults: category=observation, owner=agent, importance=5
       expect(mockCm.addMemory).toHaveBeenCalledWith(
-        "just content", "observation", "agent", 5, undefined, {}, false
+        "just content",
+        "observation",
+        "agent",
+        5,
+        undefined,
+        {},
+        false,
+        {
+          ai_intent: undefined,
+          ai_topics: undefined,
+          ai_quality_score: undefined,
+        }
       );
     });
 

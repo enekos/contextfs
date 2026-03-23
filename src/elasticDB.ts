@@ -21,6 +21,7 @@ const CANDIDATE_MULTIPLIER = config.candidateMultiplier;
 export const SKILLS_INDEX = "contextfs_skills";
 export const MEMORIES_INDEX = "contextfs_memories";
 export const CONTEXT_INDEX = "contextfs_context_nodes";
+const AI_QUALITY_FUNCTION_WEIGHT = 2;
 
 function buildIndexSettings() {
   const synonyms = config.elastic.synonyms;
@@ -138,6 +139,9 @@ export class ElasticDB {
       project: { type: "keyword" },
       name: textField({ keyword: true, ngram: true }),
       description: textField({ ngram: true }),
+      ai_intent: { type: "keyword" },
+      ai_topics: { type: "keyword" },
+      ai_quality_score: { type: "float" },
       embedding: { type: "dense_vector", dims: EMBEDDING_DIM, index: true, similarity: "cosine", index_options: { type: "hnsw", m: 32, ef_construction: 200 } },
       metadata: { type: "object", dynamic: true },
       created_at: { type: "date" },
@@ -151,6 +155,9 @@ export class ElasticDB {
       category: { type: "keyword" },
       owner: { type: "keyword" },
       importance: { type: "integer" },
+      ai_intent: { type: "keyword" },
+      ai_topics: { type: "keyword" },
+      ai_quality_score: { type: "float" },
       embedding: { type: "dense_vector", dims: EMBEDDING_DIM, index: true, similarity: "cosine", index_options: { type: "hnsw", m: 32, ef_construction: 200 } },
       metadata: { type: "object", dynamic: true },
       created_at: { type: "date" },
@@ -166,6 +173,9 @@ export class ElasticDB {
       abstract: textField({ ngram: true }),
       overview: textField(),
       content: textField(),
+      ai_intent: { type: "keyword" },
+      ai_topics: { type: "keyword" },
+      ai_quality_score: { type: "float" },
       embedding: { type: "dense_vector", dims: EMBEDDING_DIM, index: true, similarity: "cosine", index_options: { type: "hnsw", m: 32, ef_construction: 200 } },
       metadata: { type: "object", dynamic: true },
       created_at: { type: "date" },
@@ -174,6 +184,13 @@ export class ElasticDB {
       deleted_at: { type: "date" },
       version_history: { type: "object", dynamic: true, enabled: false }, // Store full objects but do not index their internal fields for search
     });
+
+    // Backward-compatible mapping upgrades for existing indices.
+    await Promise.all([
+      this.ensureAiFieldMappings(SKILLS_INDEX),
+      this.ensureAiFieldMappings(MEMORIES_INDEX),
+      this.ensureAiFieldMappings(CONTEXT_INDEX),
+    ]);
   }
 
   async resetIndices() {
@@ -209,6 +226,9 @@ export class ElasticDB {
         project: skill.project || null,
         name: skill.name,
         description: skill.description,
+        ai_intent: skill.ai_intent ?? null,
+        ai_topics: skill.ai_topics ?? null,
+        ai_quality_score: skill.ai_quality_score ?? null,
         embedding,
         metadata: skill.metadata || null,
         created_at: skill.created_at || ts,
@@ -218,10 +238,24 @@ export class ElasticDB {
     });
   }
 
-  async updateSkill(id: string, updates: { name?: string; description?: string; metadata?: Record<string, any> }, embedding?: number[]) {
+  async updateSkill(
+    id: string,
+    updates: {
+      name?: string;
+      description?: string;
+      ai_intent?: AgentSkill["ai_intent"];
+      ai_topics?: AgentSkill["ai_topics"];
+      ai_quality_score?: AgentSkill["ai_quality_score"];
+      metadata?: Record<string, any>;
+    },
+    embedding?: number[]
+  ) {
     const doc: Record<string, any> = { updated_at: new Date().toISOString() };
     if (updates.name !== undefined) doc.name = updates.name;
     if (updates.description !== undefined) doc.description = updates.description;
+    if (updates.ai_intent !== undefined) doc.ai_intent = updates.ai_intent;
+    if (updates.ai_topics !== undefined) doc.ai_topics = updates.ai_topics;
+    if (updates.ai_quality_score !== undefined) doc.ai_quality_score = updates.ai_quality_score;
     if (updates.metadata !== undefined) doc.metadata = updates.metadata;
     if (embedding) {
       assertEmbeddingDimension(embedding, "ElasticDB.updateSkill");
@@ -262,6 +296,24 @@ export class ElasticDB {
       should.push({ multi_match: { query: queryText, fields: [`name^${nameBoost}`, `description^${descBoost}`], type: "phrase", boost: phraseBoost } });
     }
 
+    const functions: any[] = [buildAiQualityFunction()];
+    if (w.recency > 0) {
+      functions.push({
+        exp: { created_at: { origin: "now", scale: options.recencyScale || config.elastic.recencyScale, decay: options.recencyDecay || config.elastic.recencyDecay } },
+        weight: w.recency * 10,
+      });
+    }
+
+    const query = {
+      function_score: { query: {
+        bool: {
+          should,
+          ...(filters.length ? { filter: filters } : {}),
+          minimum_should_match: 0,
+        },
+      }, functions, score_mode: "sum", boost_mode: "sum" },
+    };
+
     const body: any = {
       index: SKILLS_INDEX,
       size: topK,
@@ -273,13 +325,7 @@ export class ElasticDB {
         boost: w.vector * 10,
         ...(filters.length ? { filter: filters } : {}),
       },
-      query: {
-        bool: {
-          should,
-          ...(filters.length ? { filter: filters } : {}),
-          minimum_should_match: 0,
-        },
-      },
+      query,
       _source: { excludes: ["embedding"] },
     };
 
@@ -359,6 +405,9 @@ export class ElasticDB {
         category: memory.category,
         owner: memory.owner,
         importance: memory.importance,
+        ai_intent: memory.ai_intent ?? null,
+        ai_topics: memory.ai_topics ?? null,
+        ai_quality_score: memory.ai_quality_score ?? null,
         embedding,
         metadata: memory.metadata || null,
         created_at: memory.created_at || ts,
@@ -370,12 +419,22 @@ export class ElasticDB {
 
   async updateMemory(
     id: string,
-    updates: { content?: string; importance?: number; metadata?: Record<string, any> },
+    updates: {
+      content?: string;
+      importance?: number;
+      ai_intent?: AgentMemory["ai_intent"];
+      ai_topics?: AgentMemory["ai_topics"];
+      ai_quality_score?: AgentMemory["ai_quality_score"];
+      metadata?: Record<string, any>;
+    },
     embedding?: number[]
   ) {
     const doc: Record<string, any> = { updated_at: new Date().toISOString() };
     if (updates.content !== undefined) doc.content = updates.content;
     if (updates.importance !== undefined) doc.importance = updates.importance;
+    if (updates.ai_intent !== undefined) doc.ai_intent = updates.ai_intent;
+    if (updates.ai_topics !== undefined) doc.ai_topics = updates.ai_topics;
+    if (updates.ai_quality_score !== undefined) doc.ai_quality_score = updates.ai_quality_score;
     if (updates.metadata !== undefined) doc.metadata = updates.metadata;
     if (embedding) {
       assertEmbeddingDimension(embedding, "ElasticDB.updateMemory");
@@ -425,6 +484,7 @@ export class ElasticDB {
         weight: w.importance * 10,
       });
     }
+    functions.push(buildAiQualityFunction());
     if (w.recency > 0) {
       functions.push({
         exp: { created_at: { origin: "now", scale: options.recencyScale || config.elastic.recencyScale, decay: options.recencyDecay || config.elastic.recencyDecay } },
@@ -540,6 +600,9 @@ export class ElasticDB {
         abstract: node.abstract,
         overview: node.overview || null,
         content: node.content || null,
+        ai_intent: node.ai_intent ?? null,
+        ai_topics: node.ai_topics ?? null,
+        ai_quality_score: node.ai_quality_score ?? null,
         embedding,
         metadata: node.metadata || null,
         created_at: node.created_at || ts,
@@ -551,7 +614,16 @@ export class ElasticDB {
 
   async updateContextNode(
     uri: string,
-    updates: { name?: string; abstract?: string; overview?: string; content?: string; metadata?: Record<string, any> },
+    updates: {
+      name?: string;
+      abstract?: string;
+      overview?: string;
+      content?: string;
+      ai_intent?: AgentContextNode["ai_intent"];
+      ai_topics?: AgentContextNode["ai_topics"];
+      ai_quality_score?: AgentContextNode["ai_quality_score"];
+      metadata?: Record<string, any>;
+    },
     embedding?: number[]
   ) {
     const doc: Record<string, any> = { updated_at: new Date().toISOString() };
@@ -559,6 +631,9 @@ export class ElasticDB {
     if (updates.abstract !== undefined) doc.abstract = updates.abstract;
     if (updates.overview !== undefined) doc.overview = updates.overview;
     if (updates.content !== undefined) doc.content = updates.content;
+    if (updates.ai_intent !== undefined) doc.ai_intent = updates.ai_intent;
+    if (updates.ai_topics !== undefined) doc.ai_topics = updates.ai_topics;
+    if (updates.ai_quality_score !== undefined) doc.ai_quality_score = updates.ai_quality_score;
     if (updates.metadata !== undefined) doc.metadata = updates.metadata;
     if (embedding) {
       assertEmbeddingDimension(embedding, "ElasticDB.updateContextNode");
@@ -582,6 +657,9 @@ export class ElasticDB {
         if (params.doc.abstract != null) ctx._source.abstract = params.doc.abstract;
         if (params.doc.overview != null) ctx._source.overview = params.doc.overview;
         if (params.doc.content != null) ctx._source.content = params.doc.content;
+        if (params.doc.containsKey('ai_intent')) ctx._source.ai_intent = params.doc.ai_intent;
+        if (params.doc.containsKey('ai_topics')) ctx._source.ai_topics = params.doc.ai_topics;
+        if (params.doc.containsKey('ai_quality_score')) ctx._source.ai_quality_score = params.doc.ai_quality_score;
         if (params.doc.metadata != null) ctx._source.metadata = params.doc.metadata;
         if (params.doc.embedding != null) ctx._source.embedding = params.doc.embedding;
         
@@ -645,6 +723,7 @@ export class ElasticDB {
     }
 
     const functions: any[] = [];
+    functions.push(buildAiQualityFunction());
     if (w.recency > 0) {
       functions.push({
         exp: { created_at: { origin: "now", scale: options.recencyScale || config.elastic.recencyScale, decay: options.recencyDecay || config.elastic.recencyDecay } },
@@ -874,6 +953,17 @@ export class ElasticDB {
     return [...parentAncestors, parentUri];
   }
 
+  private async ensureAiFieldMappings(index: string) {
+    await this.client.indices.putMapping({
+      index,
+      properties: {
+        ai_intent: { type: "keyword" },
+        ai_topics: { type: "keyword" },
+        ai_quality_score: { type: "float" },
+      },
+    } as any);
+  }
+
   private async getContextNodeWithAncestors(uri: string): Promise<(AgentContextNode & { ancestors?: string[] }) | null> {
     try {
       const res = await this.client.get({ index: CONTEXT_INDEX, id: uri, _source_excludes: ["embedding"] });
@@ -912,4 +1002,11 @@ function buildHighlight(fields: string[]): any {
     };
   }
   return { fields: highlightFields };
+}
+
+function buildAiQualityFunction() {
+  return {
+    script_score: { script: { source: "doc['ai_quality_score'].size() > 0 ? Math.max(doc['ai_quality_score'].value, 0) : 0" } },
+    weight: AI_QUALITY_FUNCTION_WEIGHT,
+  };
 }

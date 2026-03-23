@@ -334,7 +334,12 @@ export async function executeMutationOp(
         d.importance ?? 5,
         d.project || project,
         d.metadata || {},
-        false
+        false,
+        {
+          ai_intent: d.ai_intent,
+          ai_topics: d.ai_topics,
+          ai_quality_score: d.ai_quality_score,
+        }
       );
       if ("id" in result) return `Created memory: ${result.id}`;
       return `Memory write result: ${JSON.stringify(result)}`;
@@ -348,7 +353,17 @@ export async function executeMutationOp(
       return `Deleted memory: ${op.target}`;
     }
     case "create_skill": {
-      const result = await cm.addSkill(d.name, d.description, d.project || project, d.metadata || {});
+      const result = await cm.addSkill(
+        d.name,
+        d.description,
+        d.project || project,
+        d.metadata || {},
+        {
+          ai_intent: d.ai_intent,
+          ai_topics: d.ai_topics,
+          ai_quality_score: d.ai_quality_score,
+        }
+      );
       return `Created skill: ${result.id}`;
     }
     case "update_skill": {
@@ -362,7 +377,12 @@ export async function executeMutationOp(
     case "create_node": {
       const result = await cm.addContextNode(
         d.uri, d.name, d.abstract, d.overview, d.content,
-        d.parent_uri || null, d.project || project, d.metadata || {}, false
+        d.parent_uri || null, d.project || project, d.metadata || {}, false,
+        {
+          ai_intent: d.ai_intent,
+          ai_topics: d.ai_topics,
+          ai_quality_score: d.ai_quality_score,
+        }
       );
       if ("uri" in result) return `Created node: ${result.uri}`;
       return `Node write result: ${JSON.stringify(result)}`;

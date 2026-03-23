@@ -134,13 +134,25 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse<IncomingM
         const body = await readBody(req);
         const name = validateString(body.name, "name");
         const description = validateString(body.description, "description");
-        const result = await cm.addSkill(name, description, body.project, body.metadata ?? {});
+        const aiMetadata = {
+          ai_intent: body.ai_intent,
+          ai_topics: body.ai_topics,
+          ai_quality_score: body.ai_quality_score,
+        };
+        const result = await cm.addSkill(name, description, body.project, body.metadata ?? {}, aiMetadata);
         sendJson(res, 201, result);
         return;
       }
       if (req.method === "PUT") {
         const body = await readBody(req);
-        const result = await cm.updateSkill(body.id, { name: body.name, description: body.description, metadata: body.metadata });
+        const result = await cm.updateSkill(body.id, {
+          name: body.name,
+          description: body.description,
+          ai_intent: body.ai_intent,
+          ai_topics: body.ai_topics,
+          ai_quality_score: body.ai_quality_score,
+          metadata: body.metadata,
+        });
         sendJson(res, 200, result);
         return;
       }
@@ -168,14 +180,26 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse<IncomingM
           body.importance ?? 5,
           body.project,
           body.metadata ?? {},
-          useRouter
+          useRouter,
+          {
+            ai_intent: body.ai_intent,
+            ai_topics: body.ai_topics,
+            ai_quality_score: body.ai_quality_score,
+          }
         );
         sendJson(res, 201, result);
         return;
       }
       if (req.method === "PUT") {
         const body = await readBody(req);
-        const result = await cm.updateMemory(body.id, { content: body.content, importance: body.importance, metadata: body.metadata });
+        const result = await cm.updateMemory(body.id, {
+          content: body.content,
+          importance: body.importance,
+          ai_intent: body.ai_intent,
+          ai_topics: body.ai_topics,
+          ai_quality_score: body.ai_quality_score,
+          metadata: body.metadata,
+        });
         sendJson(res, 200, result);
         return;
       }
@@ -206,14 +230,28 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse<IncomingM
           body.parent_uri || null,
           body.project,
           body.metadata ?? {},
-          useRouter
+          useRouter,
+          {
+            ai_intent: body.ai_intent,
+            ai_topics: body.ai_topics,
+            ai_quality_score: body.ai_quality_score,
+          }
         );
         sendJson(res, 201, result);
         return;
       }
       if (req.method === "PUT") {
         const body = await readBody(req);
-        const result = await cm.updateContextNode(body.uri, { name: body.name, abstract: body.abstract, overview: body.overview, content: body.content, metadata: body.metadata });
+        const result = await cm.updateContextNode(body.uri, {
+          name: body.name,
+          abstract: body.abstract,
+          overview: body.overview,
+          content: body.content,
+          ai_intent: body.ai_intent,
+          ai_topics: body.ai_topics,
+          ai_quality_score: body.ai_quality_score,
+          metadata: body.metadata,
+        });
         sendJson(res, 200, result);
         return;
       }

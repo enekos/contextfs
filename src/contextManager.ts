@@ -4,6 +4,7 @@ import { Embedder } from "./embedder";
 import {
   AgentContextNode,
   AgentMemory,
+  AgentSkill,
   ContextSearchOptions,
   MemoryCategory,
   MemoryOwner,
@@ -17,6 +18,8 @@ import { parseTextIntoContextNodes, ProposedContextNode } from "./ingestor";
 
 export type { ProposedContextNode };
 
+type AiMetadataUpdates = Pick<AgentMemory, "ai_intent" | "ai_topics" | "ai_quality_score">;
+
 export class ContextManager {
   private db: ElasticDB;
 
@@ -28,13 +31,22 @@ export class ContextManager {
   // Skills
   // ---------------------------------------------------------------------------
 
-  async addSkill(name: string, description: string, project?: string, metadata: Record<string, any> = {}) {
+  async addSkill(
+    name: string,
+    description: string,
+    project?: string,
+    metadata: Record<string, any> = {},
+    aiMetadata: Pick<AgentSkill, "ai_intent" | "ai_topics" | "ai_quality_score"> = {}
+  ) {
     const embedding = await Embedder.getEmbedding(`${name}: ${description}`);
     const skill = {
       id: `skill_${randomUUID().replace(/-/g, "")}`,
       project,
       name,
       description,
+      ai_intent: aiMetadata.ai_intent ?? null,
+      ai_topics: aiMetadata.ai_topics ?? null,
+      ai_quality_score: aiMetadata.ai_quality_score ?? null,
       metadata,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -43,7 +55,18 @@ export class ContextManager {
     return skill;
   }
 
-  async updateSkill(id: string, updates: { name?: string; description?: string; project?: string; metadata?: Record<string, any> }) {
+  async updateSkill(
+    id: string,
+    updates: {
+      name?: string;
+      description?: string;
+      project?: string;
+      ai_intent?: AgentSkill["ai_intent"];
+      ai_topics?: AgentSkill["ai_topics"];
+      ai_quality_score?: AgentSkill["ai_quality_score"];
+      metadata?: Record<string, any>;
+    }
+  ) {
     let embedding: number[] | undefined;
     const current = await this.db.getSkill(id);
 
@@ -85,7 +108,8 @@ export class ContextManager {
     importance = 1,
     project?: string,
     metadata: Record<string, any> = {},
-    useRouter = true
+    useRouter = true,
+    aiMetadata: AiMetadataUpdates = {}
   ): Promise<AgentMemory | SkippedWrite | UpdatedWrite> {
     const embedding = await Embedder.getEmbedding(content);
 
@@ -125,6 +149,9 @@ export class ContextManager {
       owner,
       importance,
       metadata,
+      ai_intent: aiMetadata.ai_intent ?? null,
+      ai_topics: aiMetadata.ai_topics ?? null,
+      ai_quality_score: aiMetadata.ai_quality_score ?? null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -134,7 +161,15 @@ export class ContextManager {
 
   async updateMemory(
     id: string,
-    updates: { content?: string; importance?: number; project?: string; metadata?: Record<string, any> }
+    updates: {
+      content?: string;
+      importance?: number;
+      project?: string;
+      ai_intent?: AgentMemory["ai_intent"];
+      ai_topics?: AgentMemory["ai_topics"];
+      ai_quality_score?: AgentMemory["ai_quality_score"];
+      metadata?: Record<string, any>;
+    }
   ) {
     let embedding: number[] | undefined;
     const current = await this.db.getMemory(id);
@@ -174,7 +209,8 @@ export class ContextManager {
     parentUri: string | null = null,
     project?: string,
     metadata: Record<string, any> = {},
-    useRouter = true
+    useRouter = true,
+    aiMetadata: Pick<AgentContextNode, "ai_intent" | "ai_topics" | "ai_quality_score"> = {}
   ): Promise<AgentContextNode | SkippedWrite | UpdatedWrite> {
     const embedding = await Embedder.getEmbedding(`${name}: ${abstract}`);
 
@@ -213,6 +249,9 @@ export class ContextManager {
       abstract,
       overview,
       content,
+      ai_intent: aiMetadata.ai_intent ?? null,
+      ai_topics: aiMetadata.ai_topics ?? null,
+      ai_quality_score: aiMetadata.ai_quality_score ?? null,
       metadata,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -223,7 +262,17 @@ export class ContextManager {
 
   async updateContextNode(
     uri: string,
-    updates: { name?: string; abstract?: string; overview?: string; content?: string; project?: string; metadata?: Record<string, any> }
+    updates: {
+      name?: string;
+      abstract?: string;
+      overview?: string;
+      content?: string;
+      project?: string;
+      ai_intent?: AgentContextNode["ai_intent"];
+      ai_topics?: AgentContextNode["ai_topics"];
+      ai_quality_score?: AgentContextNode["ai_quality_score"];
+      metadata?: Record<string, any>;
+    }
   ) {
     let embedding: number[] | undefined;
     const current = await this.db.getContextNode(uri);
