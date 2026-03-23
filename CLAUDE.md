@@ -161,43 +161,51 @@ To integrate OpenContextFS into Claude or Opencode using the CLI, refer to this 
 
 **IMPORTANT**: Always use the `-P, --project <project>` flag when managing or searching memories/context so that information is correctly isolated by project.
 
-### 1. Saving context/memory
-Whenever you learn something new, solve a complex bug, or want to remember a project convention:
+### 1. Deterministic Retrieval (Recommended Default)
+When starting a new session or debugging an issue, you MUST search memories and context nodes for existing constraints or decisions.
+Prefer direct retrieval commands first so the agent can control scope and ranking behavior explicitly:
+
+```bash
+context-cli memory search "authentication token validation rules" -k 5 -P my-project
+context-cli node search "authentication architecture" -k 5 -P my-project
+context-cli node ls "contextfs://my-project/backend/auth" -P my-project
+```
+
+### 2. Natural Language Storage (Recommended)
+When you successfully complete a complex task, summarize the structural decisions and save them. `vibe-mutation` interprets your instructions and automatically updates/creates memories and nodes.
+**Note:** Always pass `-y` to auto-approve mutations.
+
+```bash
+context-cli vibe-mutation "remember that we switched from REST to gRPC for internal service calls" -P my-project -y
+```
+
+### 3. Natural-Language Retrieval (Optional Fallback)
+Use `vibe-query` only when direct memory/node searches are not sufficient (for example, broad or ambiguous questions that need multi-step planning).
+
+```bash
+context-cli vibe-query "how does the authentication system work?" -P my-project
+```
+
+### 4. Advanced/Precise Operations
+Use direct commands when you need exact control over what is stored or retrieved.
+
+**Memory Store:**
 ```bash
 context-cli memory store "In project X, we use Vitest instead of Jest for unit testing." -c observation -o agent -i 5 -P my-project
 ```
 
-### 2. Searching memory
-If you are starting a new session or need to recall constraints or architecture decisions for the current task:
+**Memory Search:**
 ```bash
 context-cli memory search "testing framework" -k 5 -P my-project
 
 # With fine-tuning: fuzzy matching + exact phrase boost + highlights
 context-cli memory search "authentcation setup" -k 5 -P my-project --fuzziness auto --phraseBoost 3 --highlight
-
-# Strict mode: only high-confidence results
-context-cli memory search "JWT tokens" -k 10 --minScore 5 --fuzziness 0
 ```
 
-### 3. Managing Context Nodes (Hierarchical Knowledge)
-For broader documentation or code architecture, you can store and read nodes:
+**Managing Context Nodes (Hierarchical Knowledge):**
 ```bash
 context-cli node store "contextfs://my-project/backend/auth" "Auth Module" "Uses JWT with RSA signatures." -P my-project
 context-cli node ls "contextfs://my-project/backend" -P my-project
 ```
 
-### 4. Free-text Query (vibe-query)
-When you need to explore the knowledge base with a natural language question:
-```bash
-context-cli vibe-query "how does the authentication system work?" -P my-project -k 5
-```
-The LLM plans and executes multi-store searches automatically.
-
-### 5. Free-text Mutation (vibe-mutation)
-When you want to add or update entries from a natural language description:
-```bash
-context-cli vibe-mutation "remember that we switched from REST to gRPC for internal service calls" -P my-project
-```
-The LLM plans mutations, shows a diff, and waits for interactive approval. Use `-y` to auto-approve.
-
-Agents should proactively search memories when beginning a task and store important discoveries or user preferences as they work.
+Agents should proactively search memories and context nodes when beginning a task, and store important discoveries or user preferences as they work.

@@ -14,6 +14,10 @@ const LLM_MODEL = config.llmModel;
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
+const MAX_SEARCH_PROMPT_CHARS = 8000;
+const MAX_MUTATION_PROMPT_CHARS = 16000;
+const MAX_CONTEXT_ITEMS = 20;
+const MAX_CONTEXT_CHARS = 24000;
 
 async function generateWithRetry(model: string, contents: string, attempt = 1, client?: GoogleGenAI): Promise<any> {
   const activeClient = client ?? (config.geminiApiKey ? new GoogleGenAI({ apiKey: config.geminiApiKey }) : null);
@@ -29,6 +33,46 @@ async function generateWithRetry(model: string, contents: string, attempt = 1, c
     }
     throw error;
   }
+}
+
+function truncateForLlm(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const marker = `\n...[truncated ${text.length - maxChars} chars]...\n`;
+  const headLen = Math.max(0, Math.floor((maxChars - marker.length) * 0.75));
+  const tailLen = Math.max(0, maxChars - marker.length - headLen);
+  return `${text.slice(0, headLen)}${marker}${text.slice(text.length - tailLen)}`;
+}
+
+function buildBoundedContext(entries: Array<Record<string, any>>): string {
+  if (entries.length === 0) return "(no existing entries found)";
+
+  const compact = entries.slice(0, MAX_CONTEXT_ITEMS).map((item) => {
+    // Trim verbose fields for the LLM prompt
+    const { _score: _s, embedding: _embedding, ancestors: _anc, ...rest } = item;
+    return rest;
+  });
+
+  let serialized = JSON.stringify(compact, null, 2);
+  if (serialized.length <= MAX_CONTEXT_CHARS) {
+    const omitted = entries.length - compact.length;
+    return omitted > 0
+      ? `${serialized}\n\n(Note: ${omitted} additional entries omitted due to context size limits.)`
+      : serialized;
+  }
+
+  const bounded: Array<Record<string, any>> = [];
+  for (const item of compact) {
+    const candidate = [...bounded, item];
+    const next = JSON.stringify(candidate, null, 2);
+    if (next.length > MAX_CONTEXT_CHARS) break;
+    bounded.push(item);
+    serialized = next;
+  }
+
+  const omitted = entries.length - bounded.length;
+  return omitted > 0
+    ? `${serialized}\n\n(Note: ${omitted} additional entries omitted due to context size limits.)`
+    : serialized;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -156,8 +200,12 @@ export async function planVibeMutation(
 ): Promise<VibeMutationPlan> {
   if (!config.geminiApiKey) throw new Error("GEMINI_API_KEY is not set");
 
+  const normalizedPrompt = prompt.trim();
+  const searchPrompt = truncateForLlm(normalizedPrompt, MAX_SEARCH_PROMPT_CHARS);
+  const mutationPrompt = truncateForLlm(normalizedPrompt, MAX_MUTATION_PROMPT_CHARS);
+
   // Step 1: search existing data for context
-  const queryResult = await executeVibeQuery(cm, prompt, project, topK);
+  const queryResult = await executeVibeQuery(cm, searchPrompt, project, topK);
 
   // Flatten all results for the LLM to see
   const existingContext: Array<Record<string, any>> = queryResult.results
@@ -177,13 +225,7 @@ export async function planVibeMutation(
     return true;
   });
 
-  const contextStr = deduped.length > 0
-    ? JSON.stringify(deduped.map((item) => {
-        // Trim verbose fields for the LLM prompt
-        const { _score: _s, embedding: _embedding, ancestors: _anc, ...rest } = item;
-        return rest;
-      }), null, 2)
-    : "(no existing entries found)";
+  const contextStr = buildBoundedContext(deduped);
 
   const systemPrompt = `You are a mutation planner for a context/memory database. Based on the user's intent, plan what entries to create, update, or delete.
 
@@ -219,8 +261,37 @@ Respond with ONLY a JSON object:
   ]
 }`;
 
-  const response = await generateWithRetry(LLM_MODEL, `${systemPrompt}\n\nUSER PROMPT: ${prompt}`);
-  const parsed = extractJsonObject(response.text?.trim() || "");
+  const basePrompt = `${systemPrompt}\n\nUSER PROMPT: ${mutationPrompt}`;
+  const response = await generateWithRetry(LLM_MODEL, basePrompt);
+  let parsed = extractJsonObject(response.text?.trim() || "");
+
+  if (!parsed || !Array.isArray(parsed.operations)) {
+    // Retry once with a minimal compact prompt for oversized/noisy free text.
+    const compactSystemPrompt = `You are a JSON mutation planner.
+
+Return ONLY valid JSON matching this schema:
+{
+  "reasoning": "brief explanation",
+  "operations": [
+    {
+      "op": "create_memory"|"update_memory"|"delete_memory"|"create_skill"|"update_skill"|"delete_skill"|"create_node"|"update_node"|"delete_node",
+      "target": "id or uri (for update/delete)",
+      "description": "human-readable description",
+      "data": {}
+    }
+  ]
+}
+
+Use empty operations if no changes are needed.
+${project ? `Use project: "${project}" for new entries.` : ""}
+Existing entries summary (truncated): ${truncateForLlm(contextStr, 8000)}`;
+
+    const compactResponse = await generateWithRetry(
+      LLM_MODEL,
+      `${compactSystemPrompt}\n\nUSER PROMPT (possibly truncated): ${truncateForLlm(mutationPrompt, 6000)}`
+    );
+    parsed = extractJsonObject(compactResponse.text?.trim() || "");
+  }
 
   if (!parsed || !Array.isArray(parsed.operations)) {
     throw new Error(`LLM returned unparseable mutation plan:\n${(response.text || "").slice(0, 500)}`);

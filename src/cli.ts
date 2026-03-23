@@ -496,15 +496,27 @@ program
   });
 
 program
-  .command("vibe-mutation <prompt>")
+  .command("vibe-mutation [prompt]")
   .description("Plan and apply mutations from free-text (LLM plans changes, you approve)")
+  .option("-f, --file <path>", "Read prompt/content from a file")
   .option("-P, --project <project>", "Project namespace")
   .option("-k, --topK <n>", "Context search depth", "10")
   .option("-y, --yes", "Skip interactive review and apply all operations")
   .action(async (userPrompt, opts) => {
     try {
+      let finalPrompt = userPrompt || "";
+      if (opts.file) {
+        const fileContent = fs.readFileSync(opts.file, "utf8");
+        finalPrompt = finalPrompt ? `${finalPrompt}\n\n${fileContent}` : fileContent;
+      }
+      
+      if (!finalPrompt.trim()) {
+        console.error("Error: Must provide a prompt argument or use --file <path>");
+        process.exit(1);
+      }
+
       console.log("\nAnalyzing existing data and planning mutations...\n");
-      const plan = await planVibeMutation(cm, userPrompt, opts.project, parseInt(opts.topK));
+      const plan = await planVibeMutation(cm, finalPrompt, opts.project, parseInt(opts.topK));
 
       if (plan.operations.length === 0) {
         console.log("No mutations planned. The LLM determined no changes are needed.");

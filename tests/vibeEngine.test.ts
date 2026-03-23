@@ -264,7 +264,11 @@ describe("vibeEngine", () => {
         }),
       });
 
-      const mockCm = { searchMemories: vi.fn().mockResolvedValue([]) };
+      const mockCm = {
+        searchMemories: vi.fn().mockResolvedValue([]),
+        searchSkills: vi.fn().mockResolvedValue([]),
+        searchContext: vi.fn().mockResolvedValue([]),
+      };
 
       const { planVibeMutation } = await import("../src/vibeEngine");
       const result = await planVibeMutation(mockCm as any, "test");
@@ -284,12 +288,66 @@ describe("vibeEngine", () => {
         text: "totally not json",
       });
 
-      const mockCm = { searchMemories: vi.fn().mockResolvedValue([]) };
+      const mockCm = {
+        searchMemories: vi.fn().mockResolvedValue([]),
+        searchSkills: vi.fn().mockResolvedValue([]),
+        searchContext: vi.fn().mockResolvedValue([]),
+      };
 
       const { planVibeMutation } = await import("../src/vibeEngine");
       await expect(planVibeMutation(mockCm as any, "test")).rejects.toThrow(
         /LLM returned unparseable mutation plan/
       );
+    });
+
+    it("retries mutation planning with compact payload when first response is unparseable", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+
+      // Search planning call
+      mockGenerateContent.mockResolvedValueOnce({
+        text: JSON.stringify({ reasoning: "s", queries: [{ store: "memory", query: "t" }] }),
+      });
+      // First mutation planning call (bad)
+      mockGenerateContent.mockResolvedValueOnce({
+        text: "this is not valid json",
+      });
+      // Second mutation planning call (compact retry succeeds)
+      mockGenerateContent.mockResolvedValueOnce({
+        text: JSON.stringify({
+          reasoning: "compact retry succeeded",
+          operations: [],
+        }),
+      });
+
+      const mockCm = { searchMemories: vi.fn().mockResolvedValue([]) };
+
+      const { planVibeMutation } = await import("../src/vibeEngine");
+      const result = await planVibeMutation(mockCm as any, "test");
+
+      expect(result.reasoning).toBe("compact retry succeeded");
+      expect(result.operations).toEqual([]);
+      expect(mockGenerateContent).toHaveBeenCalledTimes(3);
+    });
+
+    it("truncates very large prompts before sending to mutation planner", async () => {
+      process.env.GEMINI_API_KEY = "fake-key";
+
+      mockGenerateContent.mockResolvedValueOnce({
+        text: JSON.stringify({ reasoning: "s", queries: [{ store: "memory", query: "t" }] }),
+      });
+      mockGenerateContent.mockResolvedValueOnce({
+        text: JSON.stringify({ reasoning: "ok", operations: [] }),
+      });
+
+      const mockCm = { searchMemories: vi.fn().mockResolvedValue([]) };
+      const veryLargePrompt = `BEGIN\n${"x".repeat(40000)}\nEND`;
+
+      const { planVibeMutation } = await import("../src/vibeEngine");
+      await planVibeMutation(mockCm as any, veryLargePrompt);
+
+      const mutationPrompt = mockGenerateContent.mock.calls[1][0].contents as string;
+      expect(mutationPrompt).toContain("[truncated");
+      expect(mutationPrompt.length).toBeLessThan(30000);
     });
 
     it("deduplicates existing context entries by id/uri", async () => {

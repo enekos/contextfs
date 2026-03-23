@@ -260,6 +260,7 @@ export class ElasticDB {
     }
 
     const body: any = {
+      index: SKILLS_INDEX,
       size: topK,
       knn: {
         field: "embedding",
@@ -441,6 +442,7 @@ export class ElasticDB {
       : textQuery;
 
     const body: any = {
+      index: MEMORIES_INDEX,
       size: topK,
       knn: {
         field: "embedding",
@@ -618,6 +620,7 @@ export class ElasticDB {
       : textQuery;
 
     const body: any = {
+      index: CONTEXT_INDEX,
       size: topK,
       knn: {
         field: "embedding",

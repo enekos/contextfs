@@ -92,7 +92,7 @@ context-cli skill search "postgres optimization" -k 5 -P my-project
 context-cli node store "contextfs://project/backend" "Backend" "Core backend architecture" -P my-project
 context-cli node search "auth architecture" -k 5 -P my-project
 
-# free-text natural language query
+# optional free-text query planner (fallback when direct searches are insufficient)
 context-cli vibe-query "how does authentication work?" -P my-project -k 5
 
 # free-text mutation (LLM plans + interactive approval)
