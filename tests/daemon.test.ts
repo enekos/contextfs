@@ -29,22 +29,30 @@ afterEach(() => {
 });
 
 describe("CodebaseDaemon", () => {
-  it("stores rich AST context details for exported symbols", async () => {
+  it("stores compact logic graph with module-internal symbols and call edges", async () => {
     const tempDir = makeTempDir();
     const nestedDir = path.join(tempDir, "src", "domain");
     fs.mkdirSync(nestedDir, { recursive: true });
     const filePath = path.join(nestedDir, "feature.ts");
     const code = source([
-      "export interface Profile { id: string; }",
-      "export type UserId = string;",
-      'export enum Mode { Read = "read", Write = "write" }',
-      "export const FEATURE_FLAG = true;",
-      "export function greet(name: string, loud: boolean) {",
-      "  return loud ? name.toUpperCase() : name;",
+      "import { slugify } from './slug';",
+      "const INTERNAL_SEED = 42;",
+      "",
+      "function normalize(name: string) {",
+      "  return slugify(`${name}-${INTERNAL_SEED}`);",
       "}",
+      "",
+      "export function greet(name: string) {",
+      "  return normalize(name);",
+      "}",
+      "",
       "export class UserService {",
-      "  public login(userId: UserId) {",
-      "    return userId.length > 0;",
+      "  public run(input: string) {",
+      "    this.bump();",
+      "    return greet(input);",
+      "  }",
+      "  private bump() {",
+      "    return normalize('x');",
       "  }",
       "}",
     ]);
@@ -65,38 +73,28 @@ describe("CodebaseDaemon", () => {
     expect(project).toBe("proj");
     expect(metadata).toEqual({ type: "file", path: filePath });
 
-    expect(abstractText).toContain("Exports 1 classes: UserService");
-    expect(abstractText).toContain("Exports 1 functions: greet");
-    expect(abstractText).toContain("Exports 1 variables: FEATURE_FLAG");
-    expect(abstractText).toContain("Exports 1 interfaces: Profile");
-    expect(abstractText).toContain("Exports 1 enums: Mode");
-    expect(abstractText).toContain("Exports 1 type aliases: UserId");
-
-    expect(overviewText).toContain("Class UserService:");
-    expect(overviewText).toContain("Methods: login");
-    expect(overviewText).toContain("Function greet(name, loud)");
+    expect(abstractText).toBe("");
+    expect(overviewText).toBe("");
     expect(content).toContain("File: src/domain/feature.ts");
     expect(content).toContain("Language: ts");
-    expect(content).toContain("Imports:");
-    expect(content).toContain("- (none)");
-    expect(content).toContain("Exports:");
-    expect(content).toContain("- class UserService { methods: login }");
-    expect(content).toContain("- Function greet(name, loud)");
-    expect(content).toContain("- const/let/var FEATURE_FLAG");
-    expect(content).toContain("- interface Profile");
-    expect(content).toContain("- enum Mode");
-    expect(content).toContain("- type UserId");
-    expect(content).not.toContain("return userId.length > 0;");
+    expect(content).toContain("LogicGraph: v1");
+    expect(content).toContain("Symbols:");
+    expect(content).toContain("- fn fn:greet");
+    expect(content).toContain("- fn fn:normalize");
+    expect(content).toContain("- mtd mtd:UserService.run");
+    expect(content).toContain("Edges:");
+    expect(content).toContain("- call fn:greet -> fn:normalize");
+    expect(content).toContain("- call mtd:UserService.run -> mtd:UserService.bump");
+    expect(content).toContain("- call mtd:UserService.run -> fn:greet");
+    expect(content).toContain("- import file -> module:./slug");
+    expect(content).not.toContain("return slugify");
   });
 
-  it("falls back to default abstract and overview when no exports exist", async () => {
+  it("falls back to default abstract and overview when no declarations exist", async () => {
     const tempDir = makeTempDir();
     const filePath = path.join(tempDir, "helpers.ts");
     const code = source([
-      "const localValue = 42;",
-      "function internalOnly() {",
-      "  return localValue;",
-      "}",
+      "/* empty module */",
     ]);
     fs.writeFileSync(filePath, code, "utf8");
 
@@ -108,13 +106,14 @@ describe("CodebaseDaemon", () => {
     expect(manager.upsertFileContextNode).toHaveBeenCalledTimes(1);
     const [, , abstractText, overviewText, content] = manager.upsertFileContextNode.mock.calls[0];
 
-    expect(abstractText).toBe("File helpers.ts containing source code.");
-    expect(overviewText).toBe("No exported classes or functions found.");
+    expect(abstractText).toBe("");
+    expect(overviewText).toBe("");
     expect(content).toContain("File: helpers.ts");
     expect(content).toContain("Language: ts");
-    expect(content).toContain("Exports:");
+    expect(content).toContain("Symbols:");
     expect(content).toContain("- (none)");
-    expect(content).not.toContain("const localValue = 42;");
+    expect(content).toContain("Edges:");
+    expect(content).not.toContain("empty module");
   });
 
   it("skips files larger than the configured size limit", async () => {
@@ -223,5 +222,27 @@ describe("CodebaseDaemon", () => {
     await (daemon as any).processFile(filePath);
 
     expect(manager.upsertFileContextNode).toHaveBeenCalledTimes(1);
+  });
+
+  it("enforces compact payload bounds with truncation markers", async () => {
+    const tempDir = makeTempDir();
+    const filePath = path.join(tempDir, "huge.ts");
+    const lines: string[] = [];
+    for (let i = 0; i < 180; i += 1) {
+      lines.push(`export function f${i}(value: number) { return value + ${i}; }`);
+    }
+    fs.writeFileSync(filePath, source(lines), "utf8");
+
+    const manager = createManagerStub();
+    const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+
+    await (daemon as any).processFile(filePath);
+
+    expect(manager.upsertFileContextNode).toHaveBeenCalledTimes(1);
+    const [, , , , content, , , metadata] = manager.upsertFileContextNode.mock.calls[0];
+    expect(metadata).toEqual({ type: "file", path: filePath });
+    expect(content).toContain("GraphStats:");
+    expect(content).toContain("Truncated:");
+    expect(content.length).toBeLessThanOrEqual(16_100);
   });
 });

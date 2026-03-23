@@ -1,4 +1,12 @@
-import { Project, SourceFile } from "ts-morph";
+import {
+  CallExpression,
+  FunctionDeclaration,
+  MethodDeclaration,
+  Node,
+  Project,
+  SourceFile,
+  SyntaxKind,
+} from "ts-morph";
 import { ContextManager } from "./contextManager";
 import * as path from "path";
 import * as chokidar from "chokidar";
@@ -20,16 +28,78 @@ const SUPPORTED_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cj
 const IGNORED_PATH_SEGMENTS = new Set(["node_modules", "dist", "build"]);
 
 interface SourceSummary {
-  classNames: string[];
-  classMethods: Map<string, string[]>;
-  functionSignatures: string[];
-  variableNames: string[];
-  interfaceNames: string[];
-  enumNames: string[];
-  typeAliasNames: string[];
   abstractText: string;
   overviewText: string;
+  compactContent: string;
+  logicGraphMetadata: Record<string, unknown>;
 }
+
+type LogicSymbolKind = "cls" | "fn" | "mtd" | "var" | "iface" | "enum" | "type";
+type LogicEdgeKind = "call" | "import" | "read" | "write" | "extends" | "implements";
+type ComplexityBucket = "low" | "medium" | "high";
+
+interface LogicSymbol {
+  id: string;
+  kind: LogicSymbolKind;
+  name: string;
+  exported: boolean;
+  parentId: string | null;
+  params: string[];
+  complexity: ComplexityBucket;
+  control: {
+    async: boolean;
+    branch: boolean;
+    await: boolean;
+    throw: boolean;
+  };
+  line: number;
+}
+
+interface LogicEdge {
+  kind: LogicEdgeKind;
+  from: string;
+  to: string;
+}
+
+interface RawLogicGraph {
+  symbols: LogicSymbol[];
+  edges: LogicEdge[];
+  imports: string[];
+}
+
+interface SelectedLogicGraph {
+  symbols: LogicSymbol[];
+  edges: LogicEdge[];
+  totalSymbols: number;
+  totalEdges: number;
+  truncatedSymbols: number;
+  truncatedEdges: number;
+  exportedCount: number;
+  internalCount: number;
+}
+
+interface CallableSymbolRef {
+  symbolId: string;
+  className: string | null;
+  node: FunctionDeclaration | MethodDeclaration;
+}
+
+const LOGIC_GRAPH_VERSION = 1;
+const MAX_SERIALIZED_SYMBOLS = 80;
+const MAX_SERIALIZED_EDGES = 220;
+const MAX_EDGES_PER_SOURCE_SYMBOL = 8;
+const MAX_CONTENT_CHARS = 16_000;
+const MAX_OVERVIEW_EDGE_LINES = 8;
+
+const KIND_SORT_ORDER: Record<LogicSymbolKind, number> = {
+  cls: 0,
+  fn: 1,
+  mtd: 2,
+  var: 3,
+  iface: 4,
+  enum: 5,
+  type: 6,
+};
 
 export class CodebaseDaemon {
   private manager: ContextManager;
@@ -160,181 +230,507 @@ export class CodebaseDaemon {
     }
   }
 
-  private summarizeSourceFile(sourceFile: SourceFile): SourceSummary {
-    const exportedDecls = sourceFile.getExportedDeclarations();
-    const classNames = new Set<string>();
-    const functionNames = new Set<string>();
-    const variableNames = new Set<string>();
-    const interfaceNames = new Set<string>();
-    const enumNames = new Set<string>();
-    const typeAliasNames = new Set<string>();
-
-    for (const [name, declarations] of exportedDecls.entries()) {
-      for (const declaration of declarations) {
-        if (declaration.getKindName() === "ClassDeclaration") {
-          classNames.add(name);
-          continue;
-        }
-        if (declaration.getKindName() === "FunctionDeclaration") {
-          functionNames.add(name);
-          continue;
-        }
-        if (declaration.getKindName() === "VariableDeclaration") {
-          variableNames.add(name);
-          continue;
-        }
-        if (declaration.getKindName() === "InterfaceDeclaration") {
-          interfaceNames.add(name);
-          continue;
-        }
-        if (declaration.getKindName() === "EnumDeclaration") {
-          enumNames.add(name);
-          continue;
-        }
-        if (declaration.getKindName() === "TypeAliasDeclaration") {
-          typeAliasNames.add(name);
-          continue;
-        }
-      }
-    }
-
-    const classes = Array.from(classNames).sort();
-    const functions = Array.from(functionNames).sort();
-    const variables = Array.from(variableNames).sort();
-    const interfaces = Array.from(interfaceNames).sort();
-    const enums = Array.from(enumNames).sort();
-    const typeAliases = Array.from(typeAliasNames).sort();
-
-    const abstractParts: string[] = [];
-    const overviewParts: string[] = [];
-    const classMethods = new Map<string, string[]>();
-    const functionSignatures: string[] = [];
-
-    if (classes.length > 0) {
-      abstractParts.push(`Exports ${classes.length} classes: ${classes.join(", ")}`);
-      for (const className of classes) {
-        const cls = sourceFile.getClass(className);
-        overviewParts.push(`Class ${className}:`);
-        if (!cls) {
-          classMethods.set(className, []);
-          continue;
-        }
-        const methods = cls.getMethods().map((m) => m.getName()).sort();
-        classMethods.set(className, methods);
-        if (methods.length > 0) {
-          overviewParts.push(`  Methods: ${methods.join(", ")}`);
-        }
-      }
-    }
-
-    if (functions.length > 0) {
-      abstractParts.push(`Exports ${functions.length} functions: ${functions.join(", ")}`);
-      for (const fnName of functions) {
-        const fn = sourceFile.getFunction(fnName);
-        if (fn) {
-          const params = fn.getParameters().map((p) => p.getName()).join(", ");
-          const signature = `Function ${fnName}(${params})`;
-          functionSignatures.push(signature);
-          overviewParts.push(signature);
-        } else {
-          const signature = `Function ${fnName}(...)`;
-          functionSignatures.push(signature);
-          overviewParts.push(signature);
-        }
-      }
-    }
-
-    if (variables.length > 0) {
-      abstractParts.push(`Exports ${variables.length} variables: ${variables.join(", ")}`);
-    }
-    if (interfaces.length > 0) {
-      abstractParts.push(`Exports ${interfaces.length} interfaces: ${interfaces.join(", ")}`);
-    }
-    if (enums.length > 0) {
-      abstractParts.push(`Exports ${enums.length} enums: ${enums.join(", ")}`);
-    }
-    if (typeAliases.length > 0) {
-      abstractParts.push(`Exports ${typeAliases.length} type aliases: ${typeAliases.join(", ")}`);
-    }
-
-    const abstractText = abstractParts.length > 0
-      ? abstractParts.join(". ")
-      : `File ${sourceFile.getBaseName()} containing source code.`;
-    const overviewText = overviewParts.length > 0
-      ? overviewParts.join("\n")
-      : "No exported classes or functions found.";
-
-    return {
-      classNames: classes,
-      classMethods,
-      functionSignatures,
-      variableNames: variables,
-      interfaceNames: interfaces,
-      enumNames: enums,
-      typeAliasNames: typeAliases,
-      abstractText,
-      overviewText,
+  private summarizeSourceFile(filePath: string, sourceFile: SourceFile): SourceSummary {
+    const rawGraph = this.extractRawLogicGraph(sourceFile);
+    const selectedGraph = this.selectGraphForSerialization(rawGraph);
+    const compactContent = this.buildCompactContent(filePath, selectedGraph);
+    const abstractText = this.buildAbstractText(sourceFile, selectedGraph);
+    const overviewText = this.buildOverviewText(selectedGraph);
+    const logicGraphMetadata = {
+      version: LOGIC_GRAPH_VERSION,
+      totals: {
+        symbols: selectedGraph.totalSymbols,
+        edges: selectedGraph.totalEdges,
+        exported_symbols: selectedGraph.exportedCount,
+        internal_symbols: selectedGraph.internalCount,
+        truncated_symbols: selectedGraph.truncatedSymbols,
+        truncated_edges: selectedGraph.truncatedEdges,
+      },
+      symbols: selectedGraph.symbols,
+      edges: selectedGraph.edges,
+      imports: rawGraph.imports,
     };
+    return { abstractText, overviewText, compactContent, logicGraphMetadata };
   }
 
-  private buildCompactContent(filePath: string, sourceFile: SourceFile, summary: SourceSummary): string {
-    const relPath = path.relative(this.watchDir, filePath).replace(/\\/g, "/");
-    const importModules = sourceFile.getImportDeclarations()
-      .map((decl) => decl.getModuleSpecifierValue())
-      .filter(Boolean);
-    const lines: string[] = [
-      `File: ${relPath}`,
-      `Language: ${path.extname(filePath).slice(1) || "unknown"}`,
-      "",
-      "Imports:",
+  private buildAbstractText(sourceFile: SourceFile, graph: SelectedLogicGraph): string {
+    if (graph.totalSymbols === 0) {
+      return `File ${sourceFile.getBaseName()} containing source code.`;
+    }
+    return [
+      `Logic graph with ${graph.totalSymbols} symbols and ${graph.totalEdges} edges.`,
+      `${graph.exportedCount} exported symbols, ${graph.internalCount} internal symbols.`,
+      graph.truncatedSymbols > 0 || graph.truncatedEdges > 0
+        ? `Serialized with truncation (${graph.truncatedSymbols} symbols, ${graph.truncatedEdges} edges omitted).`
+        : "Serialized without truncation.",
+    ].join(" ");
+  }
+
+  private buildOverviewText(graph: SelectedLogicGraph): string {
+    if (graph.totalSymbols === 0) {
+      return "No declarations discovered for logic graph extraction.";
+    }
+
+    const highlightedCalls = graph.edges
+      .filter((edge) => edge.kind === "call")
+      .slice(0, MAX_OVERVIEW_EDGE_LINES)
+      .map((edge) => `- ${edge.from} -> ${edge.to}`);
+
+    const lines = [
+      `Logic graph v${LOGIC_GRAPH_VERSION}`,
+      `Symbols: ${graph.totalSymbols} total (${graph.exportedCount} exported, ${graph.internalCount} internal)`,
+      `Edges: ${graph.totalEdges} total`,
     ];
 
-    if (importModules.length === 0) {
-      lines.push("- (none)");
-    } else {
-      for (const moduleName of importModules) {
-        lines.push(`- ${moduleName}`);
-      }
+    if (highlightedCalls.length > 0) {
+      lines.push("Top call edges:", ...highlightedCalls);
     }
 
-    lines.push("", "Exports:");
-    const hasExports = summary.classNames.length > 0
-      || summary.functionSignatures.length > 0
-      || summary.variableNames.length > 0
-      || summary.interfaceNames.length > 0
-      || summary.enumNames.length > 0
-      || summary.typeAliasNames.length > 0;
-
-    if (!hasExports) {
-      lines.push("- (none)");
-      return lines.join("\n");
-    }
-
-    for (const className of summary.classNames) {
-      const methods = summary.classMethods.get(className) ?? [];
-      if (methods.length === 0) {
-        lines.push(`- class ${className}`);
-      } else {
-        lines.push(`- class ${className} { methods: ${methods.join(", ")} }`);
-      }
-    }
-    for (const signature of summary.functionSignatures) {
-      lines.push(`- ${signature}`);
-    }
-    for (const variableName of summary.variableNames) {
-      lines.push(`- const/let/var ${variableName}`);
-    }
-    for (const interfaceName of summary.interfaceNames) {
-      lines.push(`- interface ${interfaceName}`);
-    }
-    for (const enumName of summary.enumNames) {
-      lines.push(`- enum ${enumName}`);
-    }
-    for (const typeAliasName of summary.typeAliasNames) {
-      lines.push(`- type ${typeAliasName}`);
+    if (graph.truncatedSymbols > 0 || graph.truncatedEdges > 0) {
+      lines.push(`Truncated: ${graph.truncatedSymbols} symbols, ${graph.truncatedEdges} edges`);
     }
 
     return lines.join("\n");
+  }
+
+  private buildCompactContent(filePath: string, graph: SelectedLogicGraph): string {
+    const relPath = path.relative(this.watchDir, filePath).replace(/\\/g, "/");
+    const lines: string[] = [
+      `File: ${relPath}`,
+      `Language: ${path.extname(filePath).slice(1) || "unknown"}`,
+      `LogicGraph: v${LOGIC_GRAPH_VERSION}`,
+      `GraphStats: symbols=${graph.totalSymbols} shown=${graph.symbols.length} edges=${graph.totalEdges} shown=${graph.edges.length} exported=${graph.exportedCount} internal=${graph.internalCount}`,
+      "",
+      "Symbols:",
+    ];
+
+    if (graph.symbols.length === 0) {
+      lines.push("- (none)");
+    } else {
+      for (const symbol of graph.symbols) {
+        const params = symbol.params.length > 0 ? `(${symbol.params.join(",")})` : "()";
+        const parent = symbol.parentId ? ` parent=${symbol.parentId}` : "";
+        const controlTokens = [
+          symbol.control.async ? "async" : "",
+          symbol.control.branch ? "branch" : "",
+          symbol.control.await ? "await" : "",
+          symbol.control.throw ? "throw" : "",
+        ].filter(Boolean);
+        lines.push(
+          [
+            `- ${symbol.kind} ${symbol.id}`,
+            `name=${symbol.name}`,
+            `exp=${symbol.exported ? "1" : "0"}`,
+            `params=${params}`,
+            `cx=${symbol.complexity}`,
+            controlTokens.length > 0 ? `ctrl=${controlTokens.join("|")}` : "",
+            parent,
+          ].filter(Boolean).join(" ")
+        );
+      }
+    }
+
+    lines.push("", "Edges:");
+    if (graph.edges.length === 0) {
+      lines.push("- (none)");
+    } else {
+      for (const edge of graph.edges) {
+        lines.push(`- ${edge.kind} ${edge.from} -> ${edge.to}`);
+      }
+    }
+
+    if (graph.truncatedSymbols > 0 || graph.truncatedEdges > 0) {
+      lines.push("", `Truncated: symbols=${graph.truncatedSymbols}, edges=${graph.truncatedEdges}`);
+    }
+
+    const serialized = lines.join("\n");
+    if (serialized.length <= MAX_CONTENT_CHARS) return serialized;
+    return `${serialized.slice(0, MAX_CONTENT_CHARS)}\n...TRUNCATED_BY_MAX_CONTENT_CHARS`;
+  }
+
+  private extractRawLogicGraph(sourceFile: SourceFile): RawLogicGraph {
+    const symbols: LogicSymbol[] = [];
+    const edgesMap = new Map<string, LogicEdge>();
+    const nameToSymbolIds = new Map<string, string[]>();
+    const symbolById = new Map<string, LogicSymbol>();
+    const methodByClassAndName = new Map<string, string>();
+    const methodIdsByName = new Map<string, string[]>();
+    const callableSymbols: CallableSymbolRef[] = [];
+    const moduleVariableByName = new Map<string, string>();
+
+    const pushSymbol = (symbol: LogicSymbol) => {
+      symbols.push(symbol);
+      symbolById.set(symbol.id, symbol);
+      const existing = nameToSymbolIds.get(symbol.name) ?? [];
+      existing.push(symbol.id);
+      nameToSymbolIds.set(symbol.name, existing);
+    };
+
+    const addEdge = (edge: LogicEdge) => {
+      const key = `${edge.kind}|${edge.from}|${edge.to}`;
+      if (!edgesMap.has(key)) {
+        edgesMap.set(key, edge);
+      }
+    };
+
+    for (const importDecl of sourceFile.getImportDeclarations()) {
+      const moduleName = importDecl.getModuleSpecifierValue().trim();
+      if (!moduleName) continue;
+      addEdge({ kind: "import", from: "file", to: `module:${moduleName}` });
+    }
+
+    for (const cls of sourceFile.getClasses()) {
+      const className = cls.getName() ?? `anonymous_class_${cls.getStartLineNumber()}`;
+      const classId = `cls:${className}`;
+      pushSymbol(this.makeSymbol(classId, "cls", className, cls.isExported(), null, [], cls));
+
+      const extendsNode = cls.getExtends();
+      if (extendsNode) {
+        addEdge({
+          kind: "extends",
+          from: classId,
+          to: `type:${extendsNode.getExpression().getText().trim()}`,
+        });
+      }
+      for (const implemented of cls.getImplements()) {
+        addEdge({
+          kind: "implements",
+          from: classId,
+          to: `type:${implemented.getText().trim()}`,
+        });
+      }
+
+      for (const method of cls.getMethods()) {
+        const methodName = method.getName();
+        const methodId = `mtd:${className}.${methodName}`;
+        pushSymbol(
+          this.makeSymbol(
+            methodId,
+            "mtd",
+            methodName,
+            cls.isExported(),
+            classId,
+            method.getParameters().map((param) => param.getName()),
+            method
+          )
+        );
+        methodByClassAndName.set(`${className}.${methodName}`, methodId);
+        const existingMethodIds = methodIdsByName.get(methodName) ?? [];
+        existingMethodIds.push(methodId);
+        methodIdsByName.set(methodName, existingMethodIds);
+        callableSymbols.push({ symbolId: methodId, className, node: method });
+      }
+    }
+
+    for (const fn of sourceFile.getFunctions()) {
+      const fnName = fn.getName() ?? `anonymous_fn_${fn.getStartLineNumber()}`;
+      const fnId = `fn:${fnName}`;
+      pushSymbol(
+        this.makeSymbol(
+          fnId,
+          "fn",
+          fnName,
+          fn.isExported(),
+          null,
+          fn.getParameters().map((param) => param.getName()),
+          fn
+        )
+      );
+      callableSymbols.push({ symbolId: fnId, className: null, node: fn });
+    }
+
+    for (const decl of sourceFile.getVariableDeclarations()) {
+      const variableStmt = decl.getVariableStatement();
+      if (!variableStmt) continue;
+      if (variableStmt.getParent() !== sourceFile) continue;
+
+      const variableName = decl.getName();
+      const symbolId = `var:${variableName}`;
+      pushSymbol(this.makeSymbol(symbolId, "var", variableName, variableStmt.isExported(), null, [], decl));
+      moduleVariableByName.set(variableName, symbolId);
+    }
+
+    for (const iface of sourceFile.getInterfaces()) {
+      const name = iface.getName();
+      const symbolId = `iface:${name}`;
+      pushSymbol(this.makeSymbol(symbolId, "iface", name, iface.isExported(), null, [], iface));
+    }
+
+    for (const enumDecl of sourceFile.getEnums()) {
+      const name = enumDecl.getName();
+      const symbolId = `enum:${name}`;
+      pushSymbol(this.makeSymbol(symbolId, "enum", name, enumDecl.isExported(), null, [], enumDecl));
+    }
+
+    for (const typeAlias of sourceFile.getTypeAliases()) {
+      const name = typeAlias.getName();
+      const symbolId = `type:${name}`;
+      pushSymbol(this.makeSymbol(symbolId, "type", name, typeAlias.isExported(), null, [], typeAlias));
+    }
+
+    for (const callable of callableSymbols) {
+      for (const callExpr of callable.node.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+        const targetId = this.resolveCallTarget(
+          callExpr,
+          callable.className,
+          methodByClassAndName,
+          methodIdsByName,
+          nameToSymbolIds,
+          symbolById
+        );
+        if (!targetId) continue;
+        addEdge({ kind: "call", from: callable.symbolId, to: targetId });
+      }
+
+      for (const identifier of callable.node.getDescendantsOfKind(SyntaxKind.Identifier)) {
+        const identifierName = identifier.getText();
+        const variableId = moduleVariableByName.get(identifierName);
+        if (!variableId) continue;
+        if (this.isDeclarationIdentifier(identifier)) continue;
+
+        const isWrite = this.isWriteIdentifier(identifier);
+        addEdge({
+          kind: isWrite ? "write" : "read",
+          from: callable.symbolId,
+          to: variableId,
+        });
+      }
+    }
+
+    const imports = Array.from(
+      new Set(
+        sourceFile.getImportDeclarations()
+          .map((decl) => decl.getModuleSpecifierValue().trim())
+          .filter((value) => value.length > 0)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+
+    return {
+      symbols: this.sortSymbols(symbols),
+      edges: this.sortEdges(Array.from(edgesMap.values())),
+      imports,
+    };
+  }
+
+  private makeSymbol(
+    id: string,
+    kind: LogicSymbolKind,
+    name: string,
+    exported: boolean,
+    parentId: string | null,
+    params: string[],
+    node: Node
+  ): LogicSymbol {
+    const functionLikeNode = this.asFunctionLikeNode(node);
+    const control = {
+      async: this.isAsyncFunctionLike(functionLikeNode),
+      branch: !!functionLikeNode && this.hasBranching(functionLikeNode),
+      await: !!functionLikeNode && functionLikeNode.getDescendantsOfKind(SyntaxKind.AwaitExpression).length > 0,
+      throw: !!functionLikeNode && functionLikeNode.getDescendantsOfKind(SyntaxKind.ThrowStatement).length > 0,
+    };
+
+    return {
+      id,
+      kind,
+      name,
+      exported,
+      parentId,
+      params: [...params].sort((a, b) => a.localeCompare(b)),
+      complexity: this.computeComplexityBucket(functionLikeNode),
+      control,
+      line: node.getStartLineNumber(),
+    };
+  }
+
+  private asFunctionLikeNode(node: Node): FunctionDeclaration | MethodDeclaration | null {
+    if (Node.isFunctionDeclaration(node)) return node;
+    if (Node.isMethodDeclaration(node)) return node;
+    return null;
+  }
+
+  private isAsyncFunctionLike(node: FunctionDeclaration | MethodDeclaration | null): boolean {
+    if (!node) return false;
+    return node.isAsync();
+  }
+
+  private hasBranching(node: FunctionDeclaration | MethodDeclaration): boolean {
+    return node.getDescendantsOfKind(SyntaxKind.IfStatement).length > 0
+      || node.getDescendantsOfKind(SyntaxKind.SwitchStatement).length > 0
+      || node.getDescendantsOfKind(SyntaxKind.ConditionalExpression).length > 0
+      || node.getDescendantsOfKind(SyntaxKind.ForStatement).length > 0
+      || node.getDescendantsOfKind(SyntaxKind.ForOfStatement).length > 0
+      || node.getDescendantsOfKind(SyntaxKind.ForInStatement).length > 0
+      || node.getDescendantsOfKind(SyntaxKind.WhileStatement).length > 0
+      || node.getDescendantsOfKind(SyntaxKind.DoStatement).length > 0;
+  }
+
+  private computeComplexityBucket(node: FunctionDeclaration | MethodDeclaration | null): ComplexityBucket {
+    if (!node) return "low";
+    const statements = node.getDescendants().filter((descendant) => Node.isStatement(descendant)).length;
+    if (statements >= 18) return "high";
+    if (statements >= 6) return "medium";
+    return "low";
+  }
+
+  private resolveCallTarget(
+    callExpr: CallExpression,
+    callerClassName: string | null,
+    methodByClassAndName: Map<string, string>,
+    methodIdsByName: Map<string, string[]>,
+    nameToSymbolIds: Map<string, string[]>,
+    symbolById: Map<string, LogicSymbol>
+  ): string | null {
+    const callTarget = callExpr.getExpression();
+    if (Node.isIdentifier(callTarget)) {
+      const symbolIds = nameToSymbolIds.get(callTarget.getText()) ?? [];
+      return this.pickBestCallableSymbolId(symbolIds, symbolById);
+    }
+
+    if (Node.isPropertyAccessExpression(callTarget)) {
+      const methodName = callTarget.getName();
+      const expressionText = callTarget.getExpression().getText();
+      if (expressionText === "this" && callerClassName) {
+        const ownMethod = methodByClassAndName.get(`${callerClassName}.${methodName}`);
+        if (ownMethod) return ownMethod;
+      }
+      const candidateMethodIds = methodIdsByName.get(methodName) ?? [];
+      if (candidateMethodIds.length === 1) return candidateMethodIds[0];
+    }
+
+    return null;
+  }
+
+  private pickBestCallableSymbolId(symbolIds: string[], symbolById: Map<string, LogicSymbol>): string | null {
+    const ranked = symbolIds
+      .map((symbolId) => symbolById.get(symbolId))
+      .filter((symbol): symbol is LogicSymbol => !!symbol)
+      .filter((symbol) => symbol.kind === "fn" || symbol.kind === "mtd")
+      .sort((a, b) => {
+        const kindWeight = (symbol: LogicSymbol) => (symbol.kind === "fn" ? 0 : 1);
+        const weightDiff = kindWeight(a) - kindWeight(b);
+        if (weightDiff !== 0) return weightDiff;
+        return a.id.localeCompare(b.id);
+      });
+    return ranked[0]?.id ?? null;
+  }
+
+  private isDeclarationIdentifier(identifier: Node): boolean {
+    const parent = identifier.getParent();
+    if (!parent) return false;
+    if (Node.isVariableDeclaration(parent) && parent.getNameNode() === identifier) return true;
+    if (Node.isParameterDeclaration(parent) && parent.getNameNode() === identifier) return true;
+    if (Node.isFunctionDeclaration(parent) && parent.getNameNode() === identifier) return true;
+    if (Node.isMethodDeclaration(parent) && parent.getNameNode() === identifier) return true;
+    if (Node.isClassDeclaration(parent) && parent.getNameNode() === identifier) return true;
+    if (Node.isInterfaceDeclaration(parent) && parent.getNameNode() === identifier) return true;
+    if (Node.isTypeAliasDeclaration(parent) && parent.getNameNode() === identifier) return true;
+    if (Node.isEnumDeclaration(parent) && parent.getNameNode() === identifier) return true;
+    return false;
+  }
+
+  private isWriteIdentifier(identifier: Node): boolean {
+    const parent = identifier.getParent();
+    if (!parent) return false;
+
+    if (Node.isBinaryExpression(parent) && parent.getLeft() === identifier) {
+      const operatorText = parent.getOperatorToken().getText();
+      return operatorText.endsWith("=");
+    }
+
+    if ((Node.isPrefixUnaryExpression(parent) || Node.isPostfixUnaryExpression(parent)) && parent.getOperand() === identifier) {
+      const operatorText = parent.getOperatorToken();
+      return operatorText === SyntaxKind.PlusPlusToken || operatorText === SyntaxKind.MinusMinusToken;
+    }
+
+    return false;
+  }
+
+  private selectGraphForSerialization(graph: RawLogicGraph): SelectedLogicGraph {
+    const outgoingCounts = new Map<string, number>();
+    for (const edge of graph.edges) {
+      outgoingCounts.set(edge.from, (outgoingCounts.get(edge.from) ?? 0) + 1);
+    }
+
+    const rankedSymbols = [...graph.symbols].sort((a, b) => {
+      const scoreDiff = this.symbolScore(b, outgoingCounts) - this.symbolScore(a, outgoingCounts);
+      if (scoreDiff !== 0) return scoreDiff;
+      return this.compareSymbols(a, b);
+    });
+
+    const selectedSymbols = rankedSymbols.slice(0, MAX_SERIALIZED_SYMBOLS);
+    const selectedSymbolIds = new Set(selectedSymbols.map((symbol) => symbol.id));
+    const perSourceEdgeCounts = new Map<string, number>();
+    const selectedEdges: LogicEdge[] = [];
+
+    for (const edge of graph.edges) {
+      if (edge.kind !== "import") {
+        if (!selectedSymbolIds.has(edge.from)) continue;
+        if (!selectedSymbolIds.has(edge.to)) continue;
+        const sourceCount = perSourceEdgeCounts.get(edge.from) ?? 0;
+        if (sourceCount >= MAX_EDGES_PER_SOURCE_SYMBOL) continue;
+        perSourceEdgeCounts.set(edge.from, sourceCount + 1);
+      }
+      selectedEdges.push(edge);
+      if (selectedEdges.length >= MAX_SERIALIZED_EDGES) break;
+    }
+
+    const exportedCount = graph.symbols.filter((symbol) => symbol.exported).length;
+    const totalSymbols = graph.symbols.length;
+    const totalEdges = graph.edges.length;
+    return {
+      symbols: this.sortSymbols(selectedSymbols),
+      edges: this.sortEdges(selectedEdges),
+      totalSymbols,
+      totalEdges,
+      truncatedSymbols: Math.max(0, totalSymbols - selectedSymbols.length),
+      truncatedEdges: Math.max(0, totalEdges - selectedEdges.length),
+      exportedCount,
+      internalCount: Math.max(0, totalSymbols - exportedCount),
+    };
+  }
+
+  private symbolScore(symbol: LogicSymbol, outgoingCounts: Map<string, number>): number {
+    const kindBoost = {
+      cls: 80,
+      fn: 70,
+      mtd: 60,
+      var: 40,
+      iface: 35,
+      enum: 35,
+      type: 30,
+    }[symbol.kind];
+    const complexityBoost = symbol.complexity === "high" ? 12 : symbol.complexity === "medium" ? 6 : 0;
+    const controlBoost = (symbol.control.branch ? 3 : 0)
+      + (symbol.control.await ? 3 : 0)
+      + (symbol.control.throw ? 2 : 0)
+      + (symbol.control.async ? 2 : 0);
+    const exportedBoost = symbol.exported ? 1000 : 0;
+    const edgeBoost = (outgoingCounts.get(symbol.id) ?? 0) * 5;
+    return exportedBoost + kindBoost + complexityBoost + controlBoost + edgeBoost;
+  }
+
+  private sortSymbols(symbols: LogicSymbol[]): LogicSymbol[] {
+    return [...symbols].sort((a, b) => this.compareSymbols(a, b));
+  }
+
+  private compareSymbols(a: LogicSymbol, b: LogicSymbol): number {
+    const kindDiff = KIND_SORT_ORDER[a.kind] - KIND_SORT_ORDER[b.kind];
+    if (kindDiff !== 0) return kindDiff;
+    const nameDiff = a.name.localeCompare(b.name);
+    if (nameDiff !== 0) return nameDiff;
+    const lineDiff = a.line - b.line;
+    if (lineDiff !== 0) return lineDiff;
+    return a.id.localeCompare(b.id);
+  }
+
+  private sortEdges(edges: LogicEdge[]): LogicEdge[] {
+    return [...edges].sort((a, b) => {
+      const kindDiff = a.kind.localeCompare(b.kind);
+      if (kindDiff !== 0) return kindDiff;
+      const fromDiff = a.from.localeCompare(b.from);
+      if (fromDiff !== 0) return fromDiff;
+      return a.to.localeCompare(b.to);
+    });
   }
 
   private queueFile(filePath: string) {
@@ -438,12 +834,22 @@ export class CodebaseDaemon {
 
     const uri = this.fileToUri(absPath);
     const parentUri = this.fileToParentUri(absPath);
-    const summary = this.summarizeSourceFile(sourceFile);
+    const summary = this.summarizeSourceFile(absPath, sourceFile);
     const name = path.basename(absPath);
+    const compactMode = this.contentFormat !== "full";
+    const abstractText = compactMode ? "" : summary.abstractText;
+    const overviewText = compactMode ? "" : summary.overviewText;
     const content = this.contentFormat === "full"
       ? rawContent
-      : this.buildCompactContent(absPath, sourceFile, summary);
-    const nextNodePayloadHash = this.hashText(`${summary.abstractText}\n${summary.overviewText}\n${content}`);
+      : summary.compactContent;
+    const metadata = {
+      type: "file",
+      path: absPath,
+      ...(compactMode ? {} : { logic_graph: summary.logicGraphMetadata }),
+    };
+    const nextNodePayloadHash = this.hashText(
+      `${abstractText}\n${overviewText}\n${content}\n${JSON.stringify(metadata)}`
+    );
 
     if (this.nodePayloadHashes.get(absPath) === nextNodePayloadHash) {
       // File changed but extracted daemon payload is identical.
@@ -456,12 +862,12 @@ export class CodebaseDaemon {
     await this.manager.upsertFileContextNode(
       uri,
       name,
-      summary.abstractText,
-      summary.overviewText,
+      abstractText,
+      overviewText,
       content,
       parentUri,
       this.project,
-      { type: "file", path: absPath }
+      metadata
     );
 
     this.fileFingerprints.set(absPath, nextFingerprint);
