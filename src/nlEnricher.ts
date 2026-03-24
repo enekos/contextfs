@@ -73,7 +73,7 @@ export function enrichDescriptions(
 
       // Find the first mention of the callee name (as a word boundary match)
       // and append the parenthetical right after it
-      const nameRegex = new RegExp(`(\`?${escapeRegExp(calleeName)}\`?)`, "");
+      const nameRegex = new RegExp(`(\`${escapeRegExp(calleeName)}\`|\\b${escapeRegExp(calleeName)}\\b)`, "");
       if (nameRegex.test(enriched)) {
         enriched = enriched.replace(nameRegex, `$1${parenthetical}`);
       } else {

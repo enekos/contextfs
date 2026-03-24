@@ -120,7 +120,7 @@ export class CodebaseDaemon {
 
     // Watch for changes
     this.watcher = chokidar.watch(`${this.watchDir}/**/*.{ts,tsx,js,jsx,mjs,cjs}`, {
-      ignored: /(^|[\/\\])\..|node_modules|dist|build/, // ignore dotfiles and generated folders
+      ignored: /(^|[/\\])\..|node_modules|dist|build/, // ignore dotfiles and generated folders
       persistent: true,
       ignoreInitial: true,
       awaitWriteFinish: {
@@ -503,11 +503,11 @@ export class CodebaseDaemon {
     concurrency: number,
     fn: (item: T) => Promise<void>
   ): Promise<void> {
-    let index = 0;
-    const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-      while (index < items.length) {
-        const currentIndex = index++;
-        await fn(items[currentIndex]);
+    const queue = [...items];
+    const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+      let item: T | undefined;
+      while ((item = queue.shift()) !== undefined) {
+        await fn(item);
       }
     });
     await Promise.all(workers);
