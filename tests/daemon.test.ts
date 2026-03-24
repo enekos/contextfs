@@ -323,4 +323,73 @@ describe("CodebaseDaemon", () => {
     expect(content).toMatch(/process/i);
     expect(content).toMatch(/[Cc]all.*validate/);
   });
+
+  it("produces rich NL content for a realistic async service file", async () => {
+    const tempDir = makeTempDir();
+    const filePath = path.join(tempDir, "userService.ts");
+    const code = source([
+      "import { db } from './database';",
+      "import { hash } from './crypto';",
+      "",
+      "interface User {",
+      "  id: string;",
+      "  name: string;",
+      "  email: string;",
+      "}",
+      "",
+      "const MAX_RETRIES = 3;",
+      "",
+      "export async function createUser(name: string, email: string): Promise<User> {",
+      "  const existing = await db.findByEmail(email);",
+      "  if (existing) {",
+      "    throw new Error('Email already registered');",
+      "  }",
+      "  const id = hash(email + Date.now());",
+      "  const user = { id, name, email };",
+      "  await db.insert(user);",
+      "  return user;",
+      "}",
+      "",
+      "export async function getUser(id: string): Promise<User | null> {",
+      "  let retries = 0;",
+      "  while (retries < MAX_RETRIES) {",
+      "    try {",
+      "      const user = await db.findById(id);",
+      "      return user;",
+      "    } catch (e) {",
+      "      retries++;",
+      "      if (retries >= MAX_RETRIES) {",
+      "        throw e;",
+      "      }",
+      "    }",
+      "  }",
+      "  return null;",
+      "}",
+    ]);
+    fs.writeFileSync(filePath, code, "utf8");
+
+    const manager = createManagerStub();
+    const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+    await (daemon as any).processFile(filePath);
+
+    const [, , abstractText, overviewText, content] = manager.upsertFileContextNode.mock.calls[0];
+
+    // Abstract: meaningful NL summary
+    expect(abstractText.length).toBeGreaterThan(20);
+    expect(abstractText).toMatch(/createUser|getUser|user/i);
+
+    // Overview: has compact graph
+    expect(overviewText).toContain("fn fn:createUser");
+    expect(overviewText).toContain("fn fn:getUser");
+    expect(overviewText).toContain("Symbols:");
+
+    // Content: NL descriptions with statement-level detail
+    expect(content).toMatch(/createUser/);
+    expect(content).toMatch(/[Aa]waits|await/);
+    expect(content).toMatch(/[Ee]mail.*registered|already/);
+    expect(content).toMatch(/[Tt]hrows/);
+    expect(content).toMatch(/getUser/);
+    expect(content).toMatch(/[Rr]etr(y|ies)|[Ww]hile|[Ll]oop/);
+    expect(content).toMatch(/MAX_RETRIES|retries/);
+  });
 });
