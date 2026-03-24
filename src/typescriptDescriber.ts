@@ -15,11 +15,13 @@ import type {
   LogicSymbolKind,
   ComplexityBucket,
 } from "./languageDescriber";
+import { describeStatements } from "./nlDescriber";
 
 interface RawLogicGraph {
   symbols: LogicSymbol[];
   edges: LogicEdge[];
   imports: string[];
+  callableSymbols: CallableSymbolRef[];
 }
 
 interface CallableSymbolRef {
@@ -50,14 +52,49 @@ export class TypeScriptDescriber implements LanguageDescriber {
     const sourceFile = project.createSourceFile(filePath, sourceText);
     const rawGraph = this.extractRawLogicGraph(sourceFile);
 
+    // Generate per-symbol NL descriptions
+    const symbolDescriptions = new Map<string, string>();
+
+    for (const callable of rawGraph.callableSymbols) {
+      symbolDescriptions.set(callable.symbolId, describeStatements(callable.node));
+    }
+
+    // Generate class summaries
+    for (const cls of sourceFile.getClasses()) {
+      const className = cls.getName() ?? `anonymous_class_${cls.getStartLineNumber()}`;
+      const classId = `cls:${className}`;
+      const extendsNode = cls.getExtends();
+      const extendsStr = extendsNode ? ` extends ${extendsNode.getExpression().getText().trim()}` : "";
+      const methodNames = cls.getMethods().map((m) => m.getName());
+      symbolDescriptions.set(
+        classId,
+        `Class \`${className}\`${extendsStr} with methods: ${methodNames.join(", ")}`
+      );
+    }
+
+    // Generate file summary
+    let fileSummary: string;
+    if (rawGraph.symbols.length === 0) {
+      fileSummary = "Empty or declaration-free source file.";
+    } else {
+      const exportedSymbols = rawGraph.symbols.filter((s) => s.exported);
+      const names = exportedSymbols.map((s) => s.name);
+      const kindCounts = new Map<string, number>();
+      for (const s of exportedSymbols) {
+        kindCounts.set(s.kind, (kindCounts.get(s.kind) ?? 0) + 1);
+      }
+      const kindSummary = Array.from(kindCounts.entries())
+        .map(([kind, count]) => `${count} ${kind}${count > 1 ? "s" : ""}`)
+        .join(", ");
+      fileSummary = `File containing ${exportedSymbols.length} exported symbols (${kindSummary}): ${names.join(", ")}.`;
+    }
+
     return {
       symbols: rawGraph.symbols,
       edges: rawGraph.edges,
       imports: rawGraph.imports,
-      symbolDescriptions: new Map(),
-      fileSummary: rawGraph.symbols.length === 0
-        ? "Empty or declaration-free source file."
-        : `Source file with ${rawGraph.symbols.length} symbols and ${rawGraph.edges.length} edges.`,
+      symbolDescriptions,
+      fileSummary,
     };
   }
 
@@ -222,6 +259,7 @@ export class TypeScriptDescriber implements LanguageDescriber {
       symbols: this.sortSymbols(symbols),
       edges: this.sortEdges(Array.from(edgesMap.values())),
       imports,
+      callableSymbols,
     };
   }
 

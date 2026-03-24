@@ -47,6 +47,60 @@ describe("TypeScriptDescriber", () => {
     expect(result.imports).toContain("./slug");
   });
 
+  it("generates NL descriptions for each function/method symbol", () => {
+    const source = [
+      "export function greet(name: string) {",
+      "  const trimmed = name.trim();",
+      "  if (!trimmed) {",
+      "    throw new Error('Name required');",
+      "  }",
+      "  return `Hello ${trimmed}`;",
+      "}",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/greet.ts", source);
+
+    const greetDesc = result.symbolDescriptions.get("fn:greet");
+    expect(greetDesc).toBeDefined();
+    expect(greetDesc).toContain("trimmed");
+    expect(greetDesc).toMatch(/[Tt]hrows/);
+    expect(greetDesc).toMatch(/[Rr]eturns/);
+  });
+
+  it("generates NL descriptions for class methods", () => {
+    const source = [
+      "export class Calculator {",
+      "  add(a: number, b: number) {",
+      "    return a + b;",
+      "  }",
+      "  divide(a: number, b: number) {",
+      "    if (b === 0) {",
+      "      throw new Error('Division by zero');",
+      "    }",
+      "    return a / b;",
+      "  }",
+      "}",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/calc.ts", source);
+
+    expect(result.symbolDescriptions.get("mtd:Calculator.add")).toBeDefined();
+    const divideDesc = result.symbolDescriptions.get("mtd:Calculator.divide");
+    expect(divideDesc).toBeDefined();
+    expect(divideDesc).toMatch(/[Dd]ivision|zero/);
+  });
+
+  it("generates a file summary", () => {
+    const source = [
+      "export function greet(name: string) { return 'Hello ' + name; }",
+      "export function farewell(name: string) { return 'Bye ' + name; }",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/greetings.ts", source);
+    expect(result.fileSummary).toBeTruthy();
+    expect(result.fileSummary).toMatch(/greet|farewell/i);
+  });
+
   it("extracts symbols from empty file", () => {
     const result = describer.extractFileGraph("/tmp/test/empty.ts", "/* empty */");
     expect(result.symbols).toHaveLength(0);
