@@ -1,13 +1,33 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeAll } from "vitest";
 import { describeStatements } from "../src/ast/nlDescriber";
-import { Project } from "ts-morph";
+import { ParserPool } from "../src/ast/parserPool";
+import { Parser } from "web-tree-sitter";
+
+let tsParser: InstanceType<typeof Parser>;
+
+beforeAll(async () => {
+  await ParserPool.init();
+  tsParser = await ParserPool.getParser("typescript");
+});
 
 function describeFunction(source: string, fnName: string): string {
-  const project = new Project({ compilerOptions: { allowJs: true } });
-  const sf = project.createSourceFile("/tmp/test.ts", source);
-  const fn = sf.getFunction(fnName);
-  if (!fn) throw new Error(`Function ${fnName} not found`);
-  return describeStatements(fn);
+  const tree = tsParser.parse(source);
+  if (!tree) throw new Error("Failed to parse source");
+  const root = tree.rootNode;
+
+  // Find function_declaration with matching name
+  for (const child of root.namedChildren) {
+    if (child.type === "function_declaration") {
+      const nameNode = child.childForFieldName("name");
+      if (nameNode?.text === fnName) {
+        const result = describeStatements(child);
+        tree.delete();
+        return result;
+      }
+    }
+  }
+  tree.delete();
+  throw new Error(`Function ${fnName} not found`);
 }
 
 describe("nlDescriber", () => {

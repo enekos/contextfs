@@ -1,8 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { TsxDescriber } from "../src/ast/tsxDescriber";
 
 describe("TsxDescriber", () => {
   const describer = new TsxDescriber();
+
+  beforeAll(async () => {
+    await describer.initParsers();
+  });
+
+  afterAll(() => {
+    describer.deleteParsers();
+  });
 
   it("extracts script symbols AND template symbols from TSX", () => {
     const source = [

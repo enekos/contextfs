@@ -73,6 +73,11 @@ export class CodebaseDaemon {
     this.describer = new TypeScriptDescriber();
   }
 
+  /** Initialize tree-sitter parsers. Must be called before start(). */
+  public async initParsers(): Promise<void> {
+    await this.describer.initParsers();
+  }
+
   public loadCache(): void {
     const cachePath = path.join(this.watchDir, CACHE_FILENAME);
     try {
@@ -112,6 +117,9 @@ export class CodebaseDaemon {
   public async start() {
     console.log(`[Daemon] Starting codebase monitor for project '${this.project}' in ${this.watchDir}`);
 
+    // Initialize tree-sitter parsers
+    await this.initParsers();
+
     // Load persistent cache before initial scan
     this.loadCache();
 
@@ -149,6 +157,7 @@ export class CodebaseDaemon {
     if (this.isProcessing || this.pendingFiles.size > 0) {
       await this.processPendingFiles();
     }
+    this.describer.deleteParsers();
     console.log(`[Daemon] Stopped watching ${this.watchDir}`);
   }
 

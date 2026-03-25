@@ -1,8 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { TypeScriptDescriber } from "../src/ast/typescriptDescriber";
 
 describe("TypeScriptDescriber", () => {
   const describer = new TypeScriptDescriber();
+
+  beforeAll(async () => {
+    await describer.initParsers();
+  });
+
+  afterAll(() => {
+    describer.deleteParsers();
+  });
 
   it("extracts symbols and edges from TypeScript source", () => {
     const source = [

@@ -1,8 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { CodebaseDaemon } from "../src/daemon";
+import { ParserPool } from "../src/ast/parserPool";
+
+// Initialize tree-sitter WASM once for all daemon tests
+beforeAll(async () => {
+  await ParserPool.init();
+});
 
 type ManagerStub = {
   upsertFileContextNode: ReturnType<typeof vi.fn>;
@@ -60,6 +66,7 @@ describe("CodebaseDaemon", () => {
 
     const manager = createManagerStub();
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+    await daemon.initParsers();
 
     await (daemon as any).processFile(filePath);
 
@@ -111,6 +118,7 @@ describe("CodebaseDaemon", () => {
 
     const manager = createManagerStub();
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+    await daemon.initParsers();
 
     await (daemon as any).processFile(filePath);
 
@@ -146,6 +154,7 @@ describe("CodebaseDaemon", () => {
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir, {
       maxFileSizeBytes: 256,
     });
+    await daemon.initParsers();
 
     await (daemon as any).processFile(filePath);
 
@@ -160,6 +169,7 @@ describe("CodebaseDaemon", () => {
 
     const manager = createManagerStub();
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+    await daemon.initParsers();
 
     await (daemon as any).processFile(ignoredFile);
 
@@ -178,6 +188,7 @@ describe("CodebaseDaemon", () => {
 
     const manager = createManagerStub();
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+    await daemon.initParsers();
 
     await (daemon as any).processFile(filePath);
     expect((daemon as any).fileContentHashes.has(path.resolve(filePath))).toBe(true);
@@ -206,6 +217,7 @@ describe("CodebaseDaemon", () => {
 
     const manager = createManagerStub();
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+    await daemon.initParsers();
 
     await (daemon as any).processFile(filePath);
     fs.utimesSync(filePath, new Date(Date.now() + 1000), new Date(Date.now() + 1000));
@@ -229,6 +241,7 @@ describe("CodebaseDaemon", () => {
 
     const manager = createManagerStub();
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+    await daemon.initParsers();
 
     await (daemon as any).processFile(filePath);
     fs.writeFileSync(
@@ -258,6 +271,7 @@ describe("CodebaseDaemon", () => {
 
     const manager = createManagerStub();
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+    await daemon.initParsers();
 
     await (daemon as any).processFile(filePath);
 
@@ -303,6 +317,7 @@ describe("CodebaseDaemon", () => {
 
     const manager = createManagerStub();
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+    await daemon.initParsers();
     await (daemon as any).processFile(filePath);
 
     expect(manager.upsertFileContextNode).toHaveBeenCalledTimes(1);
@@ -370,6 +385,7 @@ describe("CodebaseDaemon", () => {
 
     const manager = createManagerStub();
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+    await daemon.initParsers();
     await (daemon as any).processFile(filePath);
 
     const [, , abstractText, overviewText, content] = manager.upsertFileContextNode.mock.calls[0];

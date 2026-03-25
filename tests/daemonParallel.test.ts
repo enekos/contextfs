@@ -1,8 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeAll } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { CodebaseDaemon } from "../src/daemon";
+import { ParserPool } from "../src/ast/parserPool";
+
+beforeAll(async () => {
+  await ParserPool.init();
+});
 
 function createManagerStub() {
   return {
@@ -31,6 +36,7 @@ describe("CodebaseDaemon parallel processing", () => {
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir, {
       concurrency: 4,
     });
+    await daemon.initParsers();
 
     await (daemon as any).processAllFiles();
 
@@ -50,6 +56,7 @@ describe("CodebaseDaemon parallel processing", () => {
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir, {
       concurrency: 4,
     });
+    await daemon.initParsers();
 
     for (const f of files) {
       (daemon as any).pendingFiles.add(path.resolve(f));

@@ -1,326 +1,281 @@
-import {
-  Node,
-  SyntaxKind,
-  type FunctionDeclaration,
-  type MethodDeclaration,
-} from "ts-morph";
+import type { Node as SyntaxNode } from "web-tree-sitter";
 
 /**
  * Describes the body of a function/method as numbered English sentences.
+ * Accepts a tree-sitter SyntaxNode for a function_declaration, method_definition,
+ * arrow_function, or similar.
  */
-export function describeStatements(
-  node: FunctionDeclaration | MethodDeclaration
-): string {
-  const body = node.getBody();
-  if (!body || !Node.isBlock(body)) {
-    return "Empty function body.";
+export function describeStatements(node: SyntaxNode): string {
+  const body = node.childForFieldName("body");
+  if (!body) return "Empty function body.";
+
+  // Block body — walk statements
+  if (body.type === "statement_block") {
+    const statements = body.namedChildren;
+    if (statements.length === 0) return "Empty function body.";
+    return statements
+      .map((stmt, i) => `${i + 1}. ${describeStatement(stmt)}`)
+      .join("\n");
   }
-  const statements = body.getStatements();
-  if (statements.length === 0) {
-    return "Empty function body.";
-  }
-  return statements
-    .map((stmt, i) => `${i + 1}. ${describeStatement(stmt)}`)
-    .join("\n");
+
+  // Expression body (arrow function with implicit return)
+  return `1. Returns ${describeExpression(body)}`;
 }
 
-function describeStatement(node: Node): string {
-  const kind = node.getKind();
-
-  switch (kind) {
-    case SyntaxKind.VariableStatement:
+function describeStatement(node: SyntaxNode): string {
+  switch (node.type) {
+    case "variable_declaration":
+    case "lexical_declaration":
       return describeVariableStatement(node);
-    case SyntaxKind.ReturnStatement:
+    case "return_statement":
       return describeReturnStatement(node);
-    case SyntaxKind.IfStatement:
+    case "if_statement":
       return describeIfStatement(node);
-    case SyntaxKind.ForOfStatement:
-      return describeForOfStatement(node);
-    case SyntaxKind.ForInStatement:
+    case "for_in_statement":
       return describeForInStatement(node);
-    case SyntaxKind.ForStatement:
+    case "for_statement":
       return describeForStatement(node);
-    case SyntaxKind.WhileStatement:
+    case "while_statement":
       return describeWhileStatement(node);
-    case SyntaxKind.DoStatement:
+    case "do_statement":
       return describeDoStatement(node);
-    case SyntaxKind.TryStatement:
+    case "try_statement":
       return describeTryStatement(node);
-    case SyntaxKind.ThrowStatement:
+    case "throw_statement":
       return describeThrowStatement(node);
-    case SyntaxKind.SwitchStatement:
+    case "switch_statement":
       return describeSwitchStatement(node);
-    case SyntaxKind.ExpressionStatement:
+    case "expression_statement":
       return describeExpressionStatement(node);
     default:
-      return `\`${node.getText().trim()}\``;
+      return `\`${node.text.trim()}\``;
   }
 }
 
-function describeVariableStatement(node: Node): string {
-  const declarations = node
-    .getChildrenOfKind(SyntaxKind.VariableDeclarationList)
-    .flatMap((list) => list.getChildrenOfKind(SyntaxKind.VariableDeclaration));
-
-  const parts = declarations.map((decl) => {
-    const name = decl.getName();
-    const initializer = decl.getInitializer();
-    if (initializer) {
-      return `Assigns ${describeExpression(initializer)} to \`${name}\``;
+function describeVariableStatement(node: SyntaxNode): string {
+  const declarators = node.namedChildren.filter(
+    (c) => c.type === "variable_declarator",
+  );
+  const parts = declarators.map((decl) => {
+    const nameNode = decl.childForFieldName("name");
+    const valueNode = decl.childForFieldName("value");
+    const name = nameNode?.text ?? "unknown";
+    if (valueNode) {
+      return `Assigns ${describeExpression(valueNode)} to \`${name}\``;
     }
     return `Declares \`${name}\``;
   });
   return parts.join(". ");
 }
 
-function describeReturnStatement(node: Node): string {
-  const children = node.getChildren();
-  // Find the expression (skip ReturnKeyword and possible whitespace)
-  for (const child of children) {
-    const ck = child.getKind();
-    if (
-      ck !== SyntaxKind.ReturnKeyword &&
-      ck !== SyntaxKind.SemicolonToken &&
-      ck !== SyntaxKind.WhitespaceTrivia
-    ) {
-      return `Returns ${describeExpression(child)}`;
-    }
+function describeReturnStatement(node: SyntaxNode): string {
+  // The return value is not a named field in tree-sitter-typescript;
+  // it's the first named child that isn't the "return" keyword
+  for (const child of node.namedChildren) {
+    return `Returns ${describeExpression(child)}`;
   }
   return "Returns";
 }
 
-function describeIfStatement(node: Node): string {
-  const ifNode = node as unknown as {
-    getExpression(): Node;
-    getThenStatement(): Node;
-    getElseStatement(): Node | undefined;
-  };
-  const condition = ifNode.getExpression();
-  const thenBlock = ifNode.getThenStatement();
-  const elseBlock = ifNode.getElseStatement();
+function describeIfStatement(node: SyntaxNode): string {
+  const condition = node.childForFieldName("condition");
+  const consequence = node.childForFieldName("consequence");
+  const alternative = node.childForFieldName("alternative");
 
-  let result = `If ${describeCondition(condition)}, ${describeBlockInline(thenBlock)}`;
-  if (elseBlock) {
-    if (elseBlock.getKind() === SyntaxKind.IfStatement) {
-      result += `. Otherwise, ${describeStatement(elseBlock)}`;
+  let result = `If ${describeCondition(unwrapParens(condition))}, ${describeBlockInline(consequence)}`;
+  if (alternative) {
+    if (alternative.type === "if_statement") {
+      result += `. Otherwise, ${describeStatement(alternative)}`;
+    } else if (alternative.type === "else_clause") {
+      const elseBody = alternative.namedChildren[0];
+      if (elseBody && elseBody.type === "if_statement") {
+        result += `. Otherwise, ${describeStatement(elseBody)}`;
+      } else if (elseBody) {
+        result += `. Otherwise, ${describeBlockInline(elseBody)}`;
+      }
     } else {
-      result += `. Otherwise, ${describeBlockInline(elseBlock)}`;
+      result += `. Otherwise, ${describeBlockInline(alternative)}`;
     }
   }
   return result;
 }
 
-function describeForOfStatement(node: Node): string {
-  const initializer = findChildOfKind(node, SyntaxKind.VariableDeclarationList);
-  const binding = initializer
-    ? initializer
-        .getChildrenOfKind(SyntaxKind.VariableDeclaration)
-        .map((d) => d.getName())
-        .join(", ")
-    : "element";
+function describeForInStatement(node: SyntaxNode): string {
+  const left = node.childForFieldName("left");
+  const right = node.childForFieldName("right");
+  const body = node.childForFieldName("body");
 
-  // The iterable expression is after 'of' keyword
-  const forOfNode = node as unknown as {
-    getExpression(): Node;
-    getInitializer(): Node;
-    getStatement(): Node;
-  };
-  const iterable = forOfNode.getExpression();
-  const body = forOfNode.getStatement();
+  const binding = extractBindingName(left);
+  const iterable = right?.text ?? "unknown";
 
-  return `Iterates over each \`${binding}\` in \`${iterable.getText()}\`, ${describeBlockInline(body)}`;
+  // tree-sitter uses for_in_statement for both for-in and for-of
+  // Check if there's an "of" or "in" keyword
+  const isForOf = node.children.some((c) => c.type === "of");
+
+  if (isForOf) {
+    return `Iterates over each \`${binding}\` in \`${iterable}\`, ${describeBlockInline(body)}`;
+  }
+  return `Iterates over each key \`${binding}\` in \`${iterable}\`, ${describeBlockInline(body)}`;
 }
 
-function describeForInStatement(node: Node): string {
-  const forInNode = node as unknown as {
-    getExpression(): Node;
-    getInitializer(): Node;
-    getStatement(): Node;
-  };
-  const initializer = findChildOfKind(node, SyntaxKind.VariableDeclarationList);
-  const binding = initializer
-    ? initializer
-        .getChildrenOfKind(SyntaxKind.VariableDeclaration)
-        .map((d) => d.getName())
-        .join(", ")
-    : "key";
-  const obj = forInNode.getExpression();
-  const body = forInNode.getStatement();
-  return `Iterates over each key \`${binding}\` in \`${obj.getText()}\`, ${describeBlockInline(body)}`;
-}
+function describeForStatement(node: SyntaxNode): string {
+  const initializer = node.childForFieldName("initializer");
+  const condition = node.childForFieldName("condition");
+  const increment = node.childForFieldName("increment");
+  const body = node.childForFieldName("body");
 
-function describeForStatement(node: Node): string {
-  const forNode = node as unknown as {
-    getInitializer(): Node | undefined;
-    getCondition(): Node | undefined;
-    getIncrementor(): Node | undefined;
-    getStatement(): Node;
-  };
-  const init = forNode.getInitializer();
-  const cond = forNode.getCondition();
-  const inc = forNode.getIncrementor();
-  const body = forNode.getStatement();
-
-  const initText = init ? init.getText() : "";
-  const condText = cond ? cond.getText() : "";
-  const incText = inc ? inc.getText() : "";
+  const initText = initializer?.text ?? "";
+  const condText = condition?.text ?? "";
+  const incText = increment?.text ?? "";
   return `Loops with ${initText}; while ${condText}; ${incText}: ${describeBlockInline(body)}`;
 }
 
-function describeWhileStatement(node: Node): string {
-  const whileNode = node as unknown as {
-    getExpression(): Node;
-    getStatement(): Node;
-  };
-  const condition = whileNode.getExpression();
-  const body = whileNode.getStatement();
-  return `Loops while \`${condition.getText()}\`: ${describeBlockInline(body)}`;
+function describeWhileStatement(node: SyntaxNode): string {
+  const condition = node.childForFieldName("condition");
+  const body = node.childForFieldName("body");
+  return `Loops while \`${unwrapParens(condition)?.text ?? ""}\`: ${describeBlockInline(body)}`;
 }
 
-function describeDoStatement(node: Node): string {
-  const doNode = node as unknown as {
-    getExpression(): Node;
-    getStatement(): Node;
-  };
-  const condition = doNode.getExpression();
-  const body = doNode.getStatement();
-  return `Loops (do-while \`${condition.getText()}\`): ${describeBlockInline(body)}`;
+function describeDoStatement(node: SyntaxNode): string {
+  const condition = node.childForFieldName("condition");
+  const body = node.childForFieldName("body");
+  return `Loops (do-while \`${unwrapParens(condition)?.text ?? ""}\`): ${describeBlockInline(body)}`;
 }
 
-function describeTryStatement(node: Node): string {
-  const tryNode = node as unknown as {
-    getTryBlock(): Node;
-    getCatchClause(): Node | undefined;
-    getFinallyBlock(): Node | undefined;
-  };
-  const tryBlock = tryNode.getTryBlock();
-  const catchClause = tryNode.getCatchClause();
-  const finallyBlock = tryNode.getFinallyBlock();
+function describeTryStatement(node: SyntaxNode): string {
+  const body = node.childForFieldName("body");
+  const handler = node.childForFieldName("handler");
+  const finalizer = node.childForFieldName("finalizer");
 
-  let result = `Attempts to ${describeBlockInline(tryBlock)}`;
-  if (catchClause) {
-    const catchClauseTyped = catchClause as unknown as {
-      getVariableDeclaration(): { getName(): string } | undefined;
-      getBlock(): Node;
-    };
-    const catchVar = catchClauseTyped.getVariableDeclaration();
-    const catchParam = catchVar ? catchVar.getName() : "error";
-    const catchBlock = catchClauseTyped.getBlock();
-    result += `. If an error occurs (${catchParam}), ${describeBlockInline(catchBlock)}`;
+  let result = `Attempts to ${describeBlockInline(body)}`;
+  if (handler) {
+    // catch_clause has parameter and body
+    const catchParam = handler.childForFieldName("parameter");
+    const catchBody = handler.childForFieldName("body");
+    const paramName = catchParam?.text ?? "error";
+    result += `. If an error occurs (${paramName}), ${describeBlockInline(catchBody)}`;
   }
-  if (finallyBlock) {
-    result += `. Finally, ${describeBlockInline(finallyBlock)}`;
+  if (finalizer) {
+    const finallyBody = finalizer.childForFieldName("body") ?? finalizer;
+    result += `. Finally, ${describeBlockInline(finallyBody)}`;
   }
   return result;
 }
 
-function describeThrowStatement(node: Node): string {
-  const children = node.getChildren();
-  for (const child of children) {
-    const ck = child.getKind();
-    if (
-      ck !== SyntaxKind.ThrowKeyword &&
-      ck !== SyntaxKind.SemicolonToken
-    ) {
-      // Check for `new X(msg)` pattern
-      if (ck === SyntaxKind.NewExpression) {
-        const newExpr = child as unknown as {
-          getExpression(): Node;
-          getArguments(): Node[];
-        };
-        const className = newExpr.getExpression().getText();
-        const args = newExpr.getArguments();
-        if (args.length > 0) {
-          return `Throws a \`${className}\` with message ${describeExpression(args[0])}`;
-        }
-        return `Throws a new \`${className}\``;
+function describeThrowStatement(node: SyntaxNode): string {
+  for (const child of node.namedChildren) {
+    if (child.type === "new_expression") {
+      const constructor = child.childForFieldName("constructor");
+      const args = child.childForFieldName("arguments");
+      const className = constructor?.text ?? "Error";
+      const argNodes = args?.namedChildren ?? [];
+      if (argNodes.length > 0) {
+        return `Throws a \`${className}\` with message ${describeExpression(argNodes[0])}`;
       }
-      return `Throws ${describeExpression(child)}`;
+      return `Throws a new \`${className}\``;
     }
+    return `Throws ${describeExpression(child)}`;
   }
   return "Throws";
 }
 
-function describeSwitchStatement(node: Node): string {
-  const switchNode = node as unknown as {
-    getExpression(): Node;
-    getClauses(): Node[];
-  };
-  const discriminant = switchNode.getExpression();
-  const clauses = switchNode.getClauses();
+function describeSwitchStatement(node: SyntaxNode): string {
+  const value = node.childForFieldName("value");
+  const body = node.childForFieldName("body");
+  const cases: string[] = [];
 
-  const cases = clauses.map((clause) => {
-    const isDefault = clause.getKind() === SyntaxKind.DefaultClause;
-    if (isDefault) {
-      const stmts = (clause as unknown as { getStatements(): Node[] }).getStatements();
-      return `default: ${stmts.map((s) => describeStatement(s)).join("; ")}`;
-    }
-    const caseClause = clause as unknown as {
-      getExpression(): Node;
-      getStatements(): Node[];
-    };
-    const val = caseClause.getExpression().getText();
-    const stmts = caseClause.getStatements();
-    return `case ${val}: ${stmts.map((s) => describeStatement(s)).join("; ")}`;
-  });
-
-  return `Based on \`${discriminant.getText()}\`: ${cases.join(", ")}`;
-}
-
-function describeExpressionStatement(node: Node): string {
-  const children = node.getChildren();
-  for (const child of children) {
-    if (child.getKind() !== SyntaxKind.SemicolonToken) {
-      return describeExpression(child);
+  if (body) {
+    for (const clause of body.namedChildren) {
+      if (clause.type === "switch_case") {
+        const caseValue = clause.childForFieldName("value");
+        const stmts = clause.namedChildren.filter(
+          (c) => c !== caseValue && c.type !== "comment",
+        );
+        const desc = stmts.map((s) => describeStatement(s)).join("; ");
+        cases.push(`case ${caseValue?.text ?? "?"}: ${desc}`);
+      } else if (clause.type === "switch_default") {
+        const stmts = clause.namedChildren.filter(
+          (c) => c.type !== "comment",
+        );
+        const desc = stmts.map((s) => describeStatement(s)).join("; ");
+        cases.push(`default: ${desc}`);
+      }
     }
   }
-  return node.getText().trim();
+
+  return `Based on \`${unwrapParens(value)?.text ?? ""}\`: ${cases.join(", ")}`;
+}
+
+function describeExpressionStatement(node: SyntaxNode): string {
+  for (const child of node.namedChildren) {
+    return describeExpression(child);
+  }
+  return node.text.trim();
 }
 
 // ---- Helpers ----
 
-function describeBlockInline(node: Node): string {
-  if (Node.isBlock(node)) {
-    const stmts = node.getStatements();
+function describeBlockInline(node: SyntaxNode | null): string {
+  if (!node) return "does nothing";
+  if (node.type === "statement_block") {
+    const stmts = node.namedChildren;
     if (stmts.length === 0) return "does nothing";
-    if (stmts.length === 1) return describeStatement(stmts[0]).replace(/^\d+\.\s*/, "");
+    if (stmts.length === 1)
+      return describeStatement(stmts[0]).replace(/^\d+\.\s*/, "");
     return stmts.map((s) => describeStatement(s)).join("; ");
   }
-  // Single statement (no braces)
   return describeStatement(node);
 }
 
-export function describeCondition(node: Node): string {
-  const kind = node.getKind();
+/** Unwrap parenthesized expressions to get the inner node. */
+function unwrapParens(node: SyntaxNode | null): SyntaxNode | null {
+  if (!node) return null;
+  if (node.type === "parenthesized_expression") {
+    const inner = node.namedChildren[0];
+    return inner ? unwrapParens(inner) : node;
+  }
+  return node;
+}
+
+function extractBindingName(node: SyntaxNode | null): string {
+  if (!node) return "element";
+  // lexical_declaration or variable_declaration wrapping a variable_declarator
+  if (
+    node.type === "lexical_declaration" ||
+    node.type === "variable_declaration"
+  ) {
+    const declarator = node.namedChildren.find(
+      (c) => c.type === "variable_declarator",
+    );
+    const nameNode = declarator?.childForFieldName("name");
+    return nameNode?.text ?? "element";
+  }
+  return node.text;
+}
+
+export function describeCondition(node: SyntaxNode | null): string {
+  if (!node) return "unknown";
 
   // !x -> `x` is falsy
-  if (kind === SyntaxKind.PrefixUnaryExpression) {
-    const prefix = node as unknown as {
-      getOperatorToken(): number;
-      getOperand(): Node;
-    };
-    if (prefix.getOperatorToken() === SyntaxKind.ExclamationToken) {
-      const operand = prefix.getOperand();
-      return `\`${operand.getText()}\` is falsy`;
+  if (node.type === "unary_expression") {
+    const operator = node.childForFieldName("operator");
+    const operand = node.childForFieldName("argument");
+    if (operator?.text === "!") {
+      return `\`${operand?.text ?? ""}\` is falsy`;
     }
   }
 
   // Binary expressions
-  if (kind === SyntaxKind.BinaryExpression) {
-    const binary = node as unknown as {
-      getLeft(): Node;
-      getRight(): Node;
-      getOperatorToken(): Node;
-    };
-    const left = binary.getLeft();
-    const right = binary.getRight();
-    const op = binary.getOperatorToken().getText();
+  if (node.type === "binary_expression") {
+    const left = node.childForFieldName("left");
+    const right = node.childForFieldName("right");
+    const op = node.childForFieldName("operator")?.text ?? "";
 
     // typeof x === "string"
-    if (left.getKind() === SyntaxKind.TypeOfExpression) {
-      const typeofExpr = left as unknown as { getExpression(): Node };
-      const varName = typeofExpr.getExpression().getText();
-      const typeName = right.getText().replace(/['"]/g, "");
+    if (left?.type === "unary_expression" && left.children.some((c: SyntaxNode) => c.type === "typeof")) {
+      const typeofArg = left.namedChildren[0];
+      const varName = typeofArg?.text ?? "";
+      const typeName = right?.text?.replace(/['"]/g, "") ?? "";
       if (op === "===" || op === "==") {
         return `\`${varName}\` is a ${typeName}`;
       }
@@ -330,26 +285,32 @@ export function describeCondition(node: Node): string {
     }
 
     // x === null / x === undefined
-    if ((op === "===" || op === "==") && (right.getText() === "null" || right.getText() === "undefined")) {
-      return `\`${left.getText()}\` is ${right.getText()}`;
+    if (
+      (op === "===" || op === "==") &&
+      (right?.text === "null" || right?.text === "undefined")
+    ) {
+      return `\`${left?.text ?? ""}\` is ${right.text}`;
     }
-    if ((op === "!==" || op === "!=") && (right.getText() === "null" || right.getText() === "undefined")) {
-      return `\`${left.getText()}\` is not ${right.getText()}`;
+    if (
+      (op === "!==" || op === "!=") &&
+      (right?.text === "null" || right?.text === "undefined")
+    ) {
+      return `\`${left?.text ?? ""}\` is not ${right.text}`;
     }
 
     // x instanceof Y
     if (op === "instanceof") {
-      return `\`${left.getText()}\` is an instance of \`${right.getText()}\``;
+      return `\`${left?.text ?? ""}\` is an instance of \`${right?.text ?? ""}\``;
     }
 
     // x.length > 0 -> `x` is non-empty
     if (
-      left.getKind() === SyntaxKind.PropertyAccessExpression &&
-      left.getText().endsWith(".length") &&
+      left?.type === "member_expression" &&
+      left.text.endsWith(".length") &&
       op === ">" &&
-      right.getText() === "0"
+      right?.text === "0"
     ) {
-      const obj = left.getText().replace(/\.length$/, "");
+      const obj = left.text.replace(/\.length$/, "");
       return `\`${obj}\` is non-empty`;
     }
 
@@ -365,76 +326,67 @@ export function describeCondition(node: Node): string {
       "!=": "does not equal",
     };
     if (opMap[op]) {
-      return `\`${left.getText()}\` ${opMap[op]} ${right.getText()}`;
+      return `\`${left?.text ?? ""}\` ${opMap[op]} ${right?.text ?? ""}`;
     }
 
-    return `\`${node.getText()}\``;
+    return `\`${node.text}\``;
   }
 
   // Parenthesized expression - unwrap
-  if (kind === SyntaxKind.ParenthesizedExpression) {
-    const inner = (node as unknown as { getExpression(): Node }).getExpression();
-    return describeCondition(inner);
+  if (node.type === "parenthesized_expression") {
+    const inner = node.namedChildren[0];
+    return inner ? describeCondition(inner) : `\`${node.text}\``;
   }
 
-  return `\`${node.getText()}\``;
+  return `\`${node.text}\``;
 }
 
-export function describeExpression(node: Node): string {
-  const kind = node.getKind();
-
+export function describeExpression(node: SyntaxNode): string {
   // Await expression
-  if (kind === SyntaxKind.AwaitExpression) {
-    const awaitExpr = node as unknown as { getExpression(): Node };
-    return `awaits ${describeExpression(awaitExpr.getExpression())}`;
+  if (node.type === "await_expression") {
+    const inner = node.namedChildren[0];
+    return inner ? `awaits ${describeExpression(inner)}` : `awaits \`${node.text}\``;
   }
 
   // Call expression
-  if (kind === SyntaxKind.CallExpression) {
-    const callExpr = node as unknown as {
-      getExpression(): Node;
-      getArguments(): Node[];
-    };
-    const callee = callExpr.getExpression();
-    const args = callExpr.getArguments();
-    const calleeText = callee.getText();
-    if (args.length > 0) {
-      const argTexts = args.map((a) => `\`${a.getText()}\``).join(", ");
+  if (node.type === "call_expression") {
+    const fn = node.childForFieldName("function");
+    const args = node.childForFieldName("arguments");
+    const calleeText = fn?.text ?? "";
+    const argNodes = args?.namedChildren ?? [];
+    if (argNodes.length > 0) {
+      const argTexts = argNodes.map((a) => `\`${a.text}\``).join(", ");
       return `calling \`${calleeText}\` with ${argTexts}`;
     }
     return `calling \`${calleeText}\`()`;
   }
 
   // New expression
-  if (kind === SyntaxKind.NewExpression) {
-    const newExpr = node as unknown as {
-      getExpression(): Node;
-      getArguments(): Node[];
-    };
-    const className = newExpr.getExpression().getText();
-    const args = newExpr.getArguments();
-    if (args.length > 0) {
-      const argTexts = args.map((a) => `\`${a.getText()}\``).join(", ");
+  if (node.type === "new_expression") {
+    const constructor = node.childForFieldName("constructor");
+    const args = node.childForFieldName("arguments");
+    const className = constructor?.text ?? "";
+    const argNodes = args?.namedChildren ?? [];
+    if (argNodes.length > 0) {
+      const argTexts = argNodes.map((a) => `\`${a.text}\``).join(", ");
       return `a new \`${className}\` with ${argTexts}`;
     }
     return `a new \`${className}\``;
   }
 
-  // Property access
-  if (kind === SyntaxKind.PropertyAccessExpression) {
-    return `\`${node.getText()}\``;
+  // Member expression (property access)
+  if (node.type === "member_expression") {
+    return `\`${node.text}\``;
   }
 
   // Binary expression
-  if (kind === SyntaxKind.BinaryExpression) {
-    const binary = node as unknown as {
-      getLeft(): Node;
-      getRight(): Node;
-      getOperatorToken(): Node;
-    };
-    const left = binary.getLeft();
-    const right = binary.getRight();
-    const op = binary.getOperatorToken().getText();
+  if (
+    node.type === "binary_expression" ||
+    node.type === "augmented_assignment_expression"
+  ) {
+    const left = node.childForFieldName("left");
+    const right = node.childForFieldName("right");
+    const op = node.childForFieldName("operator")?.text ?? "";
 
     const opMap: Record<string, string> = {
       "+": "concatenated with",
@@ -447,32 +399,28 @@ export function describeExpression(node: Node): string {
       "!==": "does not equal",
     };
     const opWord = opMap[op] || op;
-    return `${describeExpression(left)} ${opWord} ${describeExpression(right)}`;
+    return `${describeExpression(left!)} ${opWord} ${describeExpression(right!)}`;
   }
 
   // Template literal
-  if (kind === SyntaxKind.TemplateExpression) {
-    return `a template string \`${node.getText()}\``;
+  if (node.type === "template_string") {
+    return `a template string \`${node.text}\``;
   }
 
   // String literal
-  if (kind === SyntaxKind.StringLiteral) {
-    return `\`${node.getText()}\``;
+  if (node.type === "string") {
+    return `\`${node.text}\``;
   }
 
   // Identifier
-  if (kind === SyntaxKind.Identifier) {
-    return `\`${node.getText()}\``;
+  if (node.type === "identifier" || node.type === "property_identifier") {
+    return `\`${node.text}\``;
   }
 
   // Null keyword
-  if (kind === SyntaxKind.NullKeyword) {
+  if (node.type === "null") {
     return "`null`";
   }
 
-  return `\`${node.getText()}\``;
-}
-
-function findChildOfKind(node: Node, kind: SyntaxKind): Node | undefined {
-  return node.getChildren().find((c) => c.getKind() === kind);
+  return `\`${node.text}\``;
 }

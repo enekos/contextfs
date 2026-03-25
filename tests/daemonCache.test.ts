@@ -1,8 +1,13 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { CodebaseDaemon } from "../src/daemon";
+import { ParserPool } from "../src/ast/parserPool";
+
+beforeAll(async () => {
+  await ParserPool.init();
+});
 
 function createManagerStub() {
   return {
@@ -30,6 +35,7 @@ describe("Persistent hash cache", () => {
 
     const manager = createManagerStub();
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+    await daemon.initParsers();
 
     await (daemon as any).processAllFiles();
     (daemon as any).saveCache();
@@ -49,12 +55,14 @@ describe("Persistent hash cache", () => {
 
     const manager1 = createManagerStub();
     const daemon1 = new CodebaseDaemon(manager1 as any, "proj", tempDir);
+    await daemon1.initParsers();
     await (daemon1 as any).processAllFiles();
     (daemon1 as any).saveCache();
     expect(manager1.upsertFileContextNode).toHaveBeenCalledTimes(1);
 
     const manager2 = createManagerStub();
     const daemon2 = new CodebaseDaemon(manager2 as any, "proj", tempDir);
+    await daemon2.initParsers();
     (daemon2 as any).loadCache();
     await (daemon2 as any).processAllFiles();
 
@@ -68,6 +76,7 @@ describe("Persistent hash cache", () => {
 
     const manager1 = createManagerStub();
     const daemon1 = new CodebaseDaemon(manager1 as any, "proj", tempDir);
+    await daemon1.initParsers();
     await (daemon1 as any).processAllFiles();
     (daemon1 as any).saveCache();
 
@@ -75,6 +84,7 @@ describe("Persistent hash cache", () => {
 
     const manager2 = createManagerStub();
     const daemon2 = new CodebaseDaemon(manager2 as any, "proj", tempDir);
+    await daemon2.initParsers();
     (daemon2 as any).loadCache();
     await (daemon2 as any).processAllFiles();
 
@@ -91,6 +101,7 @@ describe("Persistent hash cache", () => {
 
     const manager = createManagerStub();
     const daemon = new CodebaseDaemon(manager as any, "proj", tempDir);
+    await daemon.initParsers();
     (daemon as any).loadCache();
     await (daemon as any).processAllFiles();
 
