@@ -283,6 +283,10 @@ export class CodebaseDaemon {
       iface: "Interface",
       enum: "Enum",
       type: "Type",
+      tpl: "Template",
+      "tpl-slot": "Template Slot",
+      "tpl-branch": "Template Branch",
+      "tpl-loop": "Template Loop",
     };
 
     for (const kind of kindGroupOrder) {
@@ -473,7 +477,7 @@ export class CodebaseDaemon {
   }
 
   private symbolScore(symbol: LogicSymbol, outgoingCounts: Map<string, number>): number {
-    const kindBoost = {
+    const kindBoost: number = ({
       cls: 80,
       fn: 70,
       mtd: 60,
@@ -481,7 +485,11 @@ export class CodebaseDaemon {
       iface: 35,
       enum: 35,
       type: 30,
-    }[symbol.kind];
+      tpl: 75,
+      "tpl-slot": 50,
+      "tpl-branch": 45,
+      "tpl-loop": 45,
+    } satisfies Record<LogicSymbolKind, number>)[symbol.kind];
     const complexityBoost = symbol.complexity === "high" ? 12 : symbol.complexity === "medium" ? 6 : 0;
     const controlBoost = (symbol.control.branch ? 3 : 0)
       + (symbol.control.await ? 3 : 0)

@@ -1,5 +1,7 @@
-export type LogicSymbolKind = "cls" | "fn" | "mtd" | "var" | "iface" | "enum" | "type";
-export type LogicEdgeKind = "call" | "import" | "read" | "write" | "extends" | "implements";
+export type LogicSymbolKind = "cls" | "fn" | "mtd" | "var" | "iface" | "enum" | "type"
+  | "tpl" | "tpl-slot" | "tpl-branch" | "tpl-loop";
+export type LogicEdgeKind = "call" | "import" | "read" | "write" | "extends" | "implements"
+  | "render" | "slot";
 export type ComplexityBucket = "low" | "medium" | "high";
 
 export interface LogicSymbol {
@@ -47,6 +49,10 @@ export const KIND_SORT_ORDER: Record<LogicSymbolKind, number> = {
   iface: 4,
   enum: 5,
   type: 6,
+  tpl: 7,
+  "tpl-branch": 8,
+  "tpl-loop": 9,
+  "tpl-slot": 10,
 };
 
 export function compareSymbols(a: LogicSymbol, b: LogicSymbol): number {
