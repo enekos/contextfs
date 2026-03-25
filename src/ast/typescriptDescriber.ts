@@ -18,14 +18,14 @@ import type {
 import { sortSymbols, sortEdges } from "./languageDescriber";
 import { describeStatements } from "./nlDescriber";
 
-interface RawLogicGraph {
+export interface RawLogicGraph {
   symbols: LogicSymbol[];
   edges: LogicEdge[];
   imports: string[];
   callableSymbols: CallableSymbolRef[];
 }
 
-interface CallableSymbolRef {
+export interface CallableSymbolRef {
   symbolId: string;
   className: string | null;
   node: FunctionDeclaration | MethodDeclaration;
@@ -89,7 +89,7 @@ export class TypeScriptDescriber implements LanguageDescriber {
     };
   }
 
-  private extractRawLogicGraph(sourceFile: SourceFile): RawLogicGraph {
+  protected extractRawLogicGraph(sourceFile: SourceFile): RawLogicGraph {
     const symbols: LogicSymbol[] = [];
     const edgesMap = new Map<string, LogicEdge>();
     const nameToSymbolIds = new Map<string, string[]>();
