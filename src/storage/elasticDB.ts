@@ -145,6 +145,48 @@ export class ElasticDB {
     };
   }
 
+  async countByProject(index: string, project: string): Promise<number> {
+    const result = await this.client.count({
+      index,
+      query: { term: { project } },
+    });
+    return result.count;
+  }
+
+  async bulkIndex(ops: Array<{ index: string; id: string; body: object }>): Promise<{
+    successful: number;
+    failed: number;
+    errors: Array<{ id: string; error: string }>;
+  }> {
+    if (ops.length === 0) return { successful: 0, failed: 0, errors: [] };
+
+    const body = ops.flatMap((op) => [
+      { index: { _index: op.index, _id: op.id } },
+      op.body,
+    ]);
+
+    const result = await this.client.bulk({ body, refresh: true });
+
+    let successful = 0;
+    let failed = 0;
+    const errors: Array<{ id: string; error: string }> = [];
+
+    for (const item of result.items) {
+      const action = item.index!;
+      if (action.status && action.status >= 200 && action.status < 300) {
+        successful++;
+      } else {
+        failed++;
+        errors.push({
+          id: action._id!,
+          error: action.error?.reason || "Unknown error",
+        });
+      }
+    }
+
+    return { successful, failed, errors };
+  }
+
   async initIndices() {
     const settings = buildIndexSettings();
 
