@@ -431,6 +431,28 @@ export class ContextManager {
   }
 
   // ---------------------------------------------------------------------------
+  // Search Across Stores
+  // ---------------------------------------------------------------------------
+
+  async multiSearch(
+    query: string,
+    stores: Array<"memory" | "skill" | "node"> = ["memory", "skill", "node"],
+    options?: any
+  ): Promise<Array<{ store: "memory" | "skill" | "node"; items: Record<string, any>[] }>> {
+    const results: Array<{ store: "memory" | "skill" | "node"; items: Record<string, any>[] }> = [];
+    await Promise.all(
+      stores.map(async (store) => {
+        let items: Record<string, any>[] = [];
+        if (store === "memory") items = await this.searchMemories(query, options);
+        else if (store === "skill") items = await this.searchSkills(query, options);
+        else if (store === "node") items = await this.searchContext(query, options);
+        results.push({ store, items });
+      })
+    );
+    return results;
+  }
+
+  // ---------------------------------------------------------------------------
   // Ingest
   // ---------------------------------------------------------------------------
 

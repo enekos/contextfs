@@ -322,25 +322,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse<IncomingM
       const stores: string[] = body.stores ?? ["memory", "skill", "node"];
       const searchOpts = { topK, project: body.project };
 
-      const results: Array<{ store: string; items: Record<string, any>[] }> = [];
-      const searches = stores.map(async (store: string) => {
-        let items: Record<string, any>[];
-        switch (store) {
-          case "memory":
-            items = await cm.searchMemories(query, searchOpts);
-            break;
-          case "skill":
-            items = await cm.searchSkills(query, searchOpts);
-            break;
-          case "node":
-            items = await cm.searchContext(query, searchOpts);
-            break;
-          default:
-            items = [];
-        }
-        results.push({ store, items });
-      });
-      await Promise.all(searches);
+      const results = await cm.multiSearch(query, stores as any, searchOpts);
 
       const summary = await summarizeSearchResults(query, results);
       sendJson(res, 200, summary);

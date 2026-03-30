@@ -57,10 +57,21 @@ export class BatchWriter {
       this.flush().catch((err) =>
         console.error("[BatchWriter] auto-flush error:", err)
       );
+    } else if (!this.flushTimer) {
+      this.flushTimer = setInterval(() => {
+        this.flush().catch((err) =>
+          console.error("[BatchWriter] auto-flush error:", err)
+        );
+      }, this.flushIntervalMs);
     }
   }
 
   async flush(): Promise<BatchResult> {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
+
     if (this.queue.length === 0) {
       return { successful: 0, failed: 0, errors: [] };
     }

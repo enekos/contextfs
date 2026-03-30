@@ -188,8 +188,31 @@ export async function executeVibeQuery(
   return { reasoning: plan.reasoning, results };
 }
 
+async function gatherBoundedContext(
+  cm: ContextManager,
+  searchPrompt: string,
+  project?: string,
+  topK = 10
+): Promise<string> {
+  const queryResult = await executeVibeQuery(cm, searchPrompt, project, topK);
+
+  const existingContext = queryResult.results
+    .flatMap((r) => r.items.map((item) => ({ store: r.store, ...item })));
+
+  const seen = new Set<string>();
+  const deduped = existingContext.filter((item) => {
+    const rec = item as Record<string, any>;
+    const key = (rec.id || rec.uri) as string | undefined;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return buildBoundedContext(deduped);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Vibe Mutation
+// Execution
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function planVibeMutation(
@@ -205,27 +228,7 @@ export async function planVibeMutation(
   const mutationPrompt = truncateForLlm(normalizedPrompt, MAX_MUTATION_PROMPT_CHARS);
 
   // Step 1: search existing data for context
-  const queryResult = await executeVibeQuery(cm, searchPrompt, project, topK);
-
-  // Flatten all results for the LLM to see
-  const existingContext: Array<Record<string, any>> = queryResult.results
-    .flatMap((r) =>
-      r.items.map((item) => ({
-        store: r.store,
-        ...item,
-      }))
-    );
-
-  // Deduplicate by id/uri
-  const seen = new Set<string>();
-  const deduped = existingContext.filter((item) => {
-    const key = (item.id || item.uri) as string | undefined;
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  const contextStr = buildBoundedContext(deduped);
+  const contextStr = await gatherBoundedContext(cm, searchPrompt, project, topK);
 
   const systemPrompt = `You are a mutation planner for a context/memory database. Based on the user's intent, plan what entries to create, update, or delete.
 
@@ -417,21 +420,7 @@ export async function planFlush(
   const searchPrompt = truncateForLlm(normalizedTranscript, MAX_SEARCH_PROMPT_CHARS);
   const flushPrompt = truncateForLlm(normalizedTranscript, MAX_MUTATION_PROMPT_CHARS);
 
-  const queryResult = await executeVibeQuery(cm, searchPrompt, project, topK);
-
-  const existingContext = queryResult.results
-    .flatMap((r) => r.items.map((item) => ({ store: r.store, ...item })));
-
-  const seen = new Set<string>();
-  const deduped = existingContext.filter((item) => {
-    const rec = item as Record<string, any>;
-    const key = (rec.id || rec.uri) as string | undefined;
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  const contextStr = buildBoundedContext(deduped);
+  const contextStr = await gatherBoundedContext(cm, searchPrompt, project, topK);
 
   const systemPrompt = `You are a memory extraction agent. Your job is to read a conversation transcript and identify facts worth persisting long-term in a knowledge database.
 

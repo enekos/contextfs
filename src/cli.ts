@@ -20,6 +20,22 @@ function parseFuzziness(val?: string): "auto" | 0 | 1 | 2 | undefined {
   return "auto";
 }
 
+function resolvePrompt(userPrompt: string | undefined, opts: { file?: string, text?: string }): string {
+  let finalPrompt = userPrompt || "";
+  if (opts.file) {
+    const fileContent = fs.readFileSync(opts.file, "utf8");
+    finalPrompt = finalPrompt ? `${finalPrompt}\n\n${fileContent}` : fileContent;
+  }
+  if (opts.text) {
+    finalPrompt = finalPrompt ? `${finalPrompt}\n\n${opts.text}` : opts.text;
+  }
+  if (!finalPrompt.trim()) {
+    console.error("Error: Must provide a prompt argument, --text <text>, or --file <path>");
+    process.exit(1);
+  }
+  return finalPrompt;
+}
+
 program
   .name("context-cli")
   .description("contextfs CLI — manage agent memory, skills, and context nodes")
@@ -539,16 +555,7 @@ program
   .option("-y, --yes", "Skip interactive review and apply all operations")
   .action(async (userPrompt, opts) => {
     try {
-      let finalPrompt = userPrompt || "";
-      if (opts.file) {
-        const fileContent = fs.readFileSync(opts.file, "utf8");
-        finalPrompt = finalPrompt ? `${finalPrompt}\n\n${fileContent}` : fileContent;
-      }
-      
-      if (!finalPrompt.trim()) {
-        console.error("Error: Must provide a prompt argument or use --file <path>");
-        process.exit(1);
-      }
+      const finalPrompt = resolvePrompt(userPrompt, opts);
 
       console.log("\nAnalyzing existing data and planning mutations...\n");
       const plan = await planVibeMutation(cm, finalPrompt, opts.project, parseInt(opts.topK));
@@ -644,19 +651,7 @@ program
   .option("-k, --topK <n>", "Context search depth", "10")
   .action(async (userPrompt, opts) => {
     try {
-      let transcript = userPrompt || "";
-      if (opts.file) {
-        transcript = transcript
-          ? `${transcript}\n\n${fs.readFileSync(opts.file, "utf8")}`
-          : fs.readFileSync(opts.file, "utf8");
-      }
-      if (opts.text) {
-        transcript = transcript ? `${transcript}\n\n${opts.text}` : opts.text;
-      }
-      if (!transcript.trim()) {
-        console.error("Error: Provide a prompt, --file, or --text");
-        process.exit(1);
-      }
+      const transcript = resolvePrompt(userPrompt, opts);
 
       console.log("\nAnalyzing transcript for durable facts...\n");
       const plan = await planFlush(cm, transcript, opts.project, parseInt(opts.topK));
@@ -699,20 +694,7 @@ program
   .option("-k, --topK <n>", "Context search depth", "10")
   .action(async (userPrompt, opts) => {
     try {
-      let transcript = userPrompt || "";
-      if (opts.file) {
-        transcript = transcript
-          ? `${transcript}\n\n${fs.readFileSync(opts.file, "utf8")}`
-          : fs.readFileSync(opts.file, "utf8");
-      }
-      if (opts.text) {
-        transcript = transcript ? `${transcript}\n\n${opts.text}` : opts.text;
-      }
-      if (!transcript.trim()) {
-        console.error("Error: Provide a prompt, --file, or --text");
-        process.exit(1);
-      }
-
+      const transcript = resolvePrompt(userPrompt, opts);
       const plan = await planFlush(cm, transcript, opts.project, parseInt(opts.topK));
       console.log(JSON.stringify(plan, null, 2));
     } catch (e) { console.error("Error:", e); process.exit(1); }
@@ -743,25 +725,7 @@ program
 
       console.log("\nSearching...\n");
 
-      const results: Array<{ store: string; items: Record<string, any>[] }> = [];
-      const searches = stores.map(async (store: string) => {
-        let items: Record<string, any>[];
-        switch (store) {
-          case "memory":
-            items = await cm.searchMemories(query, searchOpts);
-            break;
-          case "skill":
-            items = await cm.searchSkills(query, searchOpts);
-            break;
-          case "node":
-            items = await cm.searchContext(query, searchOpts);
-            break;
-          default:
-            items = [];
-        }
-        results.push({ store, items });
-      });
-      await Promise.all(searches);
+      const results = await cm.multiSearch(query, stores as any, searchOpts);
 
       console.log("Synthesizing summary...\n");
       const summary = await summarizeSearchResults(query, results);
