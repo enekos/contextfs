@@ -21,6 +21,7 @@ import { config } from "../core/config";
 import { logOutcome } from "../rl/rewardTracker";
 import { chooseArm, recordArmReward, weightsForArm, MEMORY_WEIGHT_ARMS } from "../rl/weightBandit";
 import { getPolicy, policyFromPreset, resetPolicy, upsertPolicy } from "../rl/policyStore";
+import { scanContent } from "../core/contentSecurity";
 
 export type { ProposedContextNode };
 
@@ -78,6 +79,7 @@ export class ContextManager {
   ): Promise<AgentSkill | BudgetExceeded> {
     const budgetCheck = await this.checkBudget("skill", project);
     if (budgetCheck) return budgetCheck;
+    this.warnIfUnsafe(`${name}: ${description}`, "skill");
 
     const embedding = await Embedder.getEmbedding(`${name}: ${description}`);
     const skill = {
@@ -183,6 +185,7 @@ export class ContextManager {
       }
     }
 
+    this.warnIfUnsafe(content, "memory");
     // Budget check — only for new creates
     const budgetCheck = await this.checkBudget("memory", project);
     if (budgetCheck) return budgetCheck;
@@ -395,6 +398,7 @@ export class ContextManager {
       }
     }
 
+    this.warnIfUnsafe(`${name}: ${abstract}`, "node");
     // Budget check — only for new creates
     const budgetCheck = await this.checkBudget("node", project);
     if (budgetCheck) return budgetCheck;
@@ -550,6 +554,15 @@ export class ContextManager {
   // ---------------------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------------------
+
+  private warnIfUnsafe(content: string, label: string): void {
+    const scan = scanContent(content);
+    if (!scan.safe) {
+      for (const w of scan.warnings) {
+        console.warn(`[security] ${label}: ${w}`);
+      }
+    }
+  }
 
   private normalizeOptions<T extends { topK?: number; threshold?: number }>(
     topKOrOptions?: number | T,
