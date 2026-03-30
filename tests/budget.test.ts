@@ -7,7 +7,7 @@ vi.mock("@elastic/elasticsearch", () => ({
   Client: vi.fn().mockImplementation(() => ({
     count: mockCount,
     bulk: mockBulk,
-    indices: { exists: vi.fn().mockResolvedValue(true), create: vi.fn(), delete: vi.fn() },
+    indices: { exists: vi.fn().mockResolvedValue(true), create: vi.fn(), delete: vi.fn(), putMapping: vi.fn() },
     index: vi.fn(),
     get: vi.fn(),
     update: vi.fn(),
@@ -18,7 +18,39 @@ vi.mock("@elastic/elasticsearch", () => ({
   HttpConnection: vi.fn(),
 }));
 
+vi.mock("../src/storage/embedder", () => ({
+  Embedder: {
+    getEmbedding: vi.fn().mockResolvedValue(Array(3072).fill(0)),
+    getEmbeddings: vi.fn().mockResolvedValue([Array(3072).fill(0)]),
+  },
+}));
+
+vi.mock("../src/llm/llmRouter", () => ({
+  decideMemoryAction: vi.fn().mockResolvedValue({ action: "create" }),
+  decideContextAction: vi.fn().mockResolvedValue({ action: "create" }),
+}));
+
+vi.mock("../src/core/config", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../src/core/config")>();
+  return {
+    ...original,
+    config: {
+      ...original.config,
+      embedding: { model: "test", dimension: 3072, allowZeroEmbeddings: true },
+      geminiApiKey: "test",
+      budget: {
+        memoryPerProject: 2,
+        skillPerProject: 1,
+        nodePerProject: 2,
+      },
+    },
+    assertEmbeddingDimension: vi.fn(),
+  };
+});
+
 import { ElasticDB, MEMORIES_INDEX } from "../src/storage/elasticDB";
+import { ContextManager } from "../src/storage/contextManager";
+import type { BudgetExceeded } from "../src/core/types";
 
 describe("countByProject", () => {
   let db: ElasticDB;
@@ -96,5 +128,50 @@ describe("bulkIndex", () => {
     expect(result.successful).toBe(0);
     expect(result.failed).toBe(0);
     expect(mockBulk).not.toHaveBeenCalled();
+  });
+});
+
+describe("budget enforcement", () => {
+  let cm: ContextManager;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cm = new ContextManager("http://localhost:9200");
+  });
+
+  it("allows memory creation when under budget", async () => {
+    mockCount.mockResolvedValue({ count: 1 });
+    const mockAddMemory = vi.fn().mockResolvedValue({ _id: "test" });
+    (cm as any).db.addMemory = mockAddMemory;
+
+    const result = await cm.addMemory("test content", "observation", "agent", 5, "my-project", {}, false);
+    expect("budgetExceeded" in result).toBe(false);
+  });
+
+  it("rejects memory creation when at budget", async () => {
+    mockCount.mockResolvedValue({ count: 2 });
+
+    const result = await cm.addMemory("test content", "observation", "agent", 5, "my-project", {}, false);
+    expect((result as BudgetExceeded).budgetExceeded).toBe(true);
+    expect((result as BudgetExceeded).current).toBe(2);
+    expect((result as BudgetExceeded).limit).toBe(2);
+    expect((result as BudgetExceeded).store).toBe("memory");
+  });
+
+  it("skips budget check when no project is specified", async () => {
+    const mockAddMemory = vi.fn().mockResolvedValue({ _id: "test" });
+    (cm as any).db.addMemory = mockAddMemory;
+
+    const result = await cm.addMemory("test content", "observation", "agent", 5, undefined, {}, false);
+    expect("budgetExceeded" in result).toBe(false);
+    expect(mockCount).not.toHaveBeenCalled();
+  });
+
+  it("rejects skill creation when at budget", async () => {
+    mockCount.mockResolvedValue({ count: 1 });
+
+    const result = await cm.addSkill("test", "description", "my-project");
+    expect((result as BudgetExceeded).budgetExceeded).toBe(true);
+    expect((result as BudgetExceeded).store).toBe("skill");
   });
 });

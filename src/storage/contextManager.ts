@@ -1,10 +1,11 @@
 import { randomUUID } from "crypto";
-import { ElasticDB } from "./elasticDB";
+import { ElasticDB, MEMORIES_INDEX, SKILLS_INDEX, CONTEXT_INDEX } from "./elasticDB";
 import { Embedder } from "./embedder";
 import {
   AgentContextNode,
   AgentMemory,
   AgentSkill,
+  BudgetExceeded,
   ContextSearchOptions,
   MemoryCategory,
   MemoryOwner,
@@ -15,6 +16,7 @@ import {
 } from "../core/types";
 import { decideMemoryAction, decideContextAction, RouterCandidate } from "../llm/llmRouter";
 import { parseTextIntoContextNodes, ProposedContextNode } from "../llm/ingestor";
+import { config } from "../core/config";
 
 export type { ProposedContextNode };
 
@@ -31,13 +33,48 @@ export class ContextManager {
   // Skills
   // ---------------------------------------------------------------------------
 
+  private async checkBudget(
+    store: "memory" | "skill" | "node",
+    project?: string
+  ): Promise<BudgetExceeded | null> {
+    if (!project) return null;
+
+    const limits: Record<string, number> = {
+      memory: config.budget.memoryPerProject,
+      skill: config.budget.skillPerProject,
+      node: config.budget.nodePerProject,
+    };
+    const indices: Record<string, string> = {
+      memory: MEMORIES_INDEX,
+      skill: SKILLS_INDEX,
+      node: CONTEXT_INDEX,
+    };
+    const limit = limits[store];
+    if (limit === 0) return null;
+
+    const current = await this.db.countByProject(indices[store], project);
+    if (current >= limit) {
+      return {
+        budgetExceeded: true,
+        current,
+        limit,
+        store,
+        message: `Budget full (${current}/${limit} ${store}s). Delete existing entries to free space.`,
+      };
+    }
+    return null;
+  }
+
   async addSkill(
     name: string,
     description: string,
     project?: string,
     metadata: Record<string, any> = {},
     aiMetadata: Pick<AgentSkill, "ai_intent" | "ai_topics" | "ai_quality_score"> = {}
-  ) {
+  ): Promise<AgentSkill | BudgetExceeded> {
+    const budgetCheck = await this.checkBudget("skill", project);
+    if (budgetCheck) return budgetCheck;
+
     const embedding = await Embedder.getEmbedding(`${name}: ${description}`);
     const skill = {
       id: `skill_${randomUUID().replace(/-/g, "")}`,
@@ -110,7 +147,7 @@ export class ContextManager {
     metadata: Record<string, any> = {},
     useRouter = true,
     aiMetadata: AiMetadataUpdates = {}
-  ): Promise<AgentMemory | SkippedWrite | UpdatedWrite> {
+  ): Promise<AgentMemory | SkippedWrite | UpdatedWrite | BudgetExceeded> {
     const embedding = await Embedder.getEmbedding(content);
 
     if (useRouter) {
@@ -139,6 +176,10 @@ export class ContextManager {
         return { updated: true, id: decision.targetId };
       }
     }
+
+    // Budget check — only for new creates
+    const budgetCheck = await this.checkBudget("memory", project);
+    if (budgetCheck) return budgetCheck;
 
     // Create
     const memory = {
@@ -211,7 +252,7 @@ export class ContextManager {
     metadata: Record<string, any> = {},
     useRouter = true,
     aiMetadata: Pick<AgentContextNode, "ai_intent" | "ai_topics" | "ai_quality_score"> = {}
-  ): Promise<AgentContextNode | SkippedWrite | UpdatedWrite> {
+  ): Promise<AgentContextNode | SkippedWrite | UpdatedWrite | BudgetExceeded> {
     const embedding = await Embedder.getEmbedding(`${name}: ${abstract}`);
 
     if (useRouter) {
@@ -239,6 +280,10 @@ export class ContextManager {
         return { updated: true, id: decision.targetId };
       }
     }
+
+    // Budget check — only for new creates
+    const budgetCheck = await this.checkBudget("node", project);
+    if (budgetCheck) return budgetCheck;
 
     // Create
     const node = {
