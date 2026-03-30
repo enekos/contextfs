@@ -133,3 +133,12 @@ export interface UpdatedWrite {
   updated: true;
   id: string;
 }
+
+/** Result type when a write exceeds the per-project budget */
+export interface BudgetExceeded {
+  budgetExceeded: true;
+  current: number;
+  limit: number;
+  store: "memory" | "skill" | "node";
+  message: string;
+}

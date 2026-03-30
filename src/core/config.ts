@@ -1,6 +1,6 @@
 import * as dotenv from "dotenv";
 import * as path from "path";
-import { parsePositiveInt, parseBoolean } from "./configParsing";
+import { parsePositiveInt, parseBoolean, parseNonNegativeInt } from "./configParsing";
 
 dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
@@ -57,7 +57,13 @@ export const config = {
     get model() { return process.env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL; },
     get dimension() { return getEmbeddingDimension(); },
     get allowZeroEmbeddings() { return parseBoolean(process.env.ALLOW_ZERO_EMBEDDINGS, true); },
-  }
+  },
+
+  budget: {
+    get memoryPerProject() { return parseNonNegativeInt(process.env.MEMORY_BUDGET_PER_PROJECT) ?? 500; },
+    get skillPerProject() { return parseNonNegativeInt(process.env.SKILL_BUDGET_PER_PROJECT) ?? 100; },
+    get nodePerProject() { return parseNonNegativeInt(process.env.NODE_BUDGET_PER_PROJECT) ?? 1000; },
+  },
 };
 
 export function assertEmbeddingDimension(vector: number[], context: string): void {

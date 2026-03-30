@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parsePositiveInt, parseBoolean } from "../src/core/configParsing";
+import { parsePositiveInt, parseBoolean, parseNonNegativeInt } from "../src/core/configParsing";
 
 describe("parsePositiveInt", () => {
   it("returns undefined for undefined", () => {
@@ -65,5 +65,26 @@ describe("parseBoolean", () => {
   it("throws for invalid values", () => {
     expect(() => parseBoolean("maybe", true)).toThrow("Invalid boolean value: maybe");
     expect(() => parseBoolean("1.0", true)).toThrow("Invalid boolean value: 1.0");
+  });
+});
+
+describe("parseNonNegativeInt", () => {
+  it("returns undefined for undefined", () => {
+    expect(parseNonNegativeInt(undefined)).toBeUndefined();
+  });
+  it("returns undefined for empty string", () => {
+    expect(parseNonNegativeInt("")).toBeUndefined();
+  });
+  it("parses zero", () => {
+    expect(parseNonNegativeInt("0")).toBe(0);
+  });
+  it("parses positive integers", () => {
+    expect(parseNonNegativeInt("500")).toBe(500);
+  });
+  it("throws for negative numbers", () => {
+    expect(() => parseNonNegativeInt("-1")).toThrow();
+  });
+  it("throws for non-numeric strings", () => {
+    expect(() => parseNonNegativeInt("abc")).toThrow();
   });
 });

@@ -16,3 +16,12 @@ export function parseBoolean(value: string | undefined, fallback: boolean): bool
   if (["0", "false", "no", "off"].includes(normalized)) return false;
   throw new Error(`Invalid boolean value: ${value}`);
 }
+
+export function parseNonNegativeInt(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`Invalid non-negative integer: ${value}`);
+  }
+  return parsed;
+}
