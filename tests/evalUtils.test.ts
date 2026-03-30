@@ -58,8 +58,6 @@ describe("parseArgs", () => {
     expect(result.outputPath).toBeNull();
     expect(result.failBelowMrr).toBeNull();
     expect(result.failBelowRecall).toBeNull();
-    expect(result.adaptiveCompare).toBe(false);
-    expect(result.replayEventsPath).toBeNull();
   });
 
   it("parses --dataset", () => {
@@ -94,11 +92,6 @@ describe("parseArgs", () => {
     expect(parseArgs(["--fail-below-recall", "0.9"]).failBelowRecall).toBeCloseTo(0.9);
   });
 
-  it("parses adaptive and replay flags", () => {
-    const out = parseArgs(["--adaptive-compare", "true", "--replay-events", "tmp/events.jsonl"]);
-    expect(out.adaptiveCompare).toBe(true);
-    expect(out.replayEventsPath).toBe("tmp/events.jsonl");
-  });
 });
 
 // ---------------------------------------------------------------------------

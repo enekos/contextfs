@@ -79,7 +79,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse<IncomingM
       const q = parsed.searchParams.get("q") || "";
       const type = parsed.searchParams.get("type") || "all";
       const topK = Number(parsed.searchParams.get("topK") || "10");
-      const memoryMode = parsed.searchParams.get("memoryMode") || "surface";
 
       if (!q) { sendJson(res, 400, { error: "q parameter required" }); return; }
 
@@ -116,10 +115,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse<IncomingM
         results.skills = await cm.searchSkills(q, opts);
       }
       if (type === "all" || type === "memories") {
-        results.memories = await cm.searchMemories(q, {
-          ...opts,
-          retrievalMode: memoryMode === "deep" ? "deep" : "surface",
-        });
+        results.memories = await cm.searchMemories(q, opts);
       }
       if (type === "all" || type === "context") {
         results.contextNodes = await cm.searchContext(q, opts);
@@ -193,9 +189,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse<IncomingM
             ai_intent: body.ai_intent,
             ai_topics: body.ai_topics,
             ai_quality_score: body.ai_quality_score,
-          },
-          body.session_id,
-          body.peer_id
+          }
         );
         if ("budgetExceeded" in result) {
           sendJson(res, 409, result);
@@ -210,15 +204,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse<IncomingM
           content: body.content,
           category: body.category,
           importance: body.importance,
-          session_id: body.session_id,
-          peer_id: body.peer_id,
-          memory_state: body.memory_state,
-          source_memory_ids: body.source_memory_ids,
-          last_accessed_at: body.last_accessed_at,
-          access_count: body.access_count,
-          quality_score: body.quality_score,
-          confidence: body.confidence,
-          reward_stats: body.reward_stats,
           ai_intent: body.ai_intent,
           ai_topics: body.ai_topics,
           ai_quality_score: body.ai_quality_score,
@@ -233,97 +218,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse<IncomingM
         sendJson(res, 200, { ok: true });
         return;
       }
-    }
-
-    // Stateful Retrieval: session.context()
-    if (pathname.match(/^\/api\/sessions\/[^\/]+\/context$/) && req.method === "GET") {
-      const sessionId = pathname.split("/")[3];
-      const project = parsed.searchParams.get("project") || undefined;
-      const historyLimit = Number(parsed.searchParams.get("historyLimit") || "10");
-
-      // 1. Fetch recent history for this session
-      const history = await cm.listMemories({ session_id: sessionId, category: "message", project }, historyLimit);
-
-      // 2. Generate a compact reasoning prompt from recent history to drive retrieval
-      const historyText = history.reverse().map(m => `[${m.owner}]: ${m.content}`).join("\n");
-      
-      // 3. Search long-term memory using the recent context as the query
-      // If history is empty, return empty context
-      if (!historyText.trim()) {
-        sendJson(res, 200, { history: [], context: [] });
-        return;
-      }
-      
-      const searchRes = await executeVibeQuery(cm, historyText, project, 5);
-
-      // Extract just the memories for the agent
-      const contextItems = searchRes.results.flatMap(r => r.items);
-      
-      sendJson(res, 200, {
-        history: historyText,
-        context: contextItems,
-        reasoning: searchRes.reasoning
-      });
-      return;
-    }
-
-    // Tiered On-Demand Reasoning: .chat()
-    if (pathname === "/api/reasoning/chat" && req.method === "POST") {
-      const body = await readBody(req);
-      const prompt = validateString(body.prompt, "prompt");
-      const tier = body.tier || "low"; // minimal, low, medium, high, max
-      const project = body.project;
-      
-      // For now, map everything to vibeQuery/vibeMutation for simplicity, 
-      // but in a full implementation we would vary the LLM passes and search fan-out based on tier.
-      if (tier === "minimal") {
-        // Direct search
-        const results = await cm.searchMemories(prompt, { topK: 5, project, retrievalMode: "surface" });
-        sendJson(res, 200, { reasoning: "Direct search", results });
-        return;
-      } else {
-        // Vibe query (Medium/High tier equivalent)
-        const result = await executeVibeQuery(cm, prompt, project, body.topK ?? 5);
-        sendJson(res, 200, result);
-        return;
-      }
-    }
-
-    // RL feedback + policy management
-    if (pathname === "/api/rl/feedback" && req.method === "POST") {
-      const body = await readBody(req);
-      const project = validateString(body.project, "project");
-      const armId = validateString(body.armId, "armId");
-      const outcome = (body.outcome || "feedback") as "accepted" | "ignored" | "feedback";
-      const reward = typeof body.reward === "number" ? body.reward : undefined;
-      const event = await cm.recordMemoryFeedback(project, armId, outcome, reward, {
-        query: body.query,
-        selectedRank: body.selectedRank,
-        topScore: body.topScore,
-        metadata: body.metadata,
-      });
-      sendJson(res, 200, event);
-      return;
-    }
-
-    if (pathname === "/api/rl/policy" && req.method === "GET") {
-      const project = parsed.searchParams.get("project");
-      if (!project) {
-        sendJson(res, 400, { error: "project parameter required" });
-        return;
-      }
-      sendJson(res, 200, cm.getMemoryPolicy(project));
-      return;
-    }
-
-    if (pathname === "/api/rl/policy" && req.method === "DELETE") {
-      const project = parsed.searchParams.get("project");
-      if (!project) {
-        sendJson(res, 400, { error: "project parameter required" });
-        return;
-      }
-      sendJson(res, 200, { ok: cm.resetMemoryPolicy(project) });
-      return;
     }
 
     // Context nodes CRUD

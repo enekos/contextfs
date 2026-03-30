@@ -8,7 +8,6 @@ import {
   BudgetExceeded,
   ContextSearchOptions,
   MemoryCategory,
-  MemoryRewardStats,
   MemoryOwner,
   MemorySearchOptions,
   SkillSearchOptions,
@@ -18,9 +17,6 @@ import {
 import { decideMemoryAction, decideContextAction, RouterCandidate } from "../llm/llmRouter";
 import { parseTextIntoContextNodes, ProposedContextNode } from "../llm/ingestor";
 import { config } from "../core/config";
-import { logOutcome } from "../rl/rewardTracker";
-import { chooseArm, recordArmReward, weightsForArm, MEMORY_WEIGHT_ARMS } from "../rl/weightBandit";
-import { getPolicy, policyFromPreset, resetPolicy, upsertPolicy } from "../rl/policyStore";
 import { scanContent } from "../core/contentSecurity";
 
 export type { ProposedContextNode };
@@ -152,15 +148,13 @@ export class ContextManager {
     project?: string,
     metadata: Record<string, any> = {},
     useRouter = true,
-    aiMetadata: AiMetadataUpdates = {},
-    session_id?: string,
-    peer_id?: string
+    aiMetadata: AiMetadataUpdates = {}
   ): Promise<AgentMemory | SkippedWrite | UpdatedWrite | BudgetExceeded> {
     const embedding = await Embedder.getEmbedding(content);
 
     if (useRouter) {
       // Use vector-only search for dedup — scores are pure cosine similarity in [0, 1]
-      const candidates = await this.db.searchMemoriesByVector(embedding, { topK: 5, project, session_id, peer_id });
+      const candidates = await this.db.searchMemoriesByVector(embedding, { topK: 5, project });
 
       const routerCandidates: RouterCandidate[] = candidates.slice(0, 5).map((r) => ({
         id: r.id as string,
@@ -194,19 +188,10 @@ export class ContextManager {
     const memory = {
       id: `mem_${randomUUID().replace(/-/g, "")}`,
       project,
-      session_id,
-      peer_id,
       content,
       category,
       owner,
       importance,
-      memory_state: metadata.memory_state ?? "raw",
-      source_memory_ids: Array.isArray(metadata.source_memory_ids) ? metadata.source_memory_ids : undefined,
-      last_accessed_at: metadata.last_accessed_at,
-      access_count: typeof metadata.access_count === "number" ? metadata.access_count : 0,
-      quality_score: typeof metadata.quality_score === "number" ? metadata.quality_score : undefined,
-      confidence: typeof metadata.confidence === "number" ? metadata.confidence : undefined,
-      reward_stats: (metadata.reward_stats as MemoryRewardStats | undefined) ?? null,
       metadata,
       ai_intent: aiMetadata.ai_intent ?? null,
       ai_topics: aiMetadata.ai_topics ?? null,
@@ -225,15 +210,6 @@ export class ContextManager {
       category?: MemoryCategory;
       importance?: number;
       project?: string;
-      session_id?: string;
-      peer_id?: string;
-      memory_state?: AgentMemory["memory_state"];
-      source_memory_ids?: AgentMemory["source_memory_ids"];
-      last_accessed_at?: AgentMemory["last_accessed_at"];
-      access_count?: AgentMemory["access_count"];
-      quality_score?: AgentMemory["quality_score"];
-      confidence?: AgentMemory["confidence"];
-      reward_stats?: AgentMemory["reward_stats"];
       ai_intent?: AgentMemory["ai_intent"];
       ai_topics?: AgentMemory["ai_topics"];
       ai_quality_score?: AgentMemory["ai_quality_score"];
@@ -254,96 +230,7 @@ export class ContextManager {
     const opts = this.normalizeOptions<MemorySearchOptions>(topKOrOptions, threshold);
     const topK = opts.topK ?? 10;
     const embedding = await Embedder.getEmbedding(query);
-    const policyProject = opts.project && this.isAdaptiveProject(opts.project) ? opts.project : undefined;
-    let selectedArmId: string | undefined;
-    let adaptiveWeights = opts.weights;
-    if (policyProject && config.rl.adaptiveEnabled && !opts.weights) {
-      const policy = upsertPolicy(policyProject, () =>
-        policyFromPreset(policyProject, "balanced", MEMORY_WEIGHT_ARMS)
-      );
-      selectedArmId = chooseArm(policy);
-      adaptiveWeights = weightsForArm(selectedArmId);
-    }
-    const requestedMode = opts.retrievalMode;
-    const retrievalMode = requestedMode ?? "surface";
-    let results = await this.db.searchMemories(embedding, query, {
-      ...opts,
-      topK,
-      retrievalMode,
-      ...(adaptiveWeights ? { weights: adaptiveWeights } : {}),
-    });
-    if (selectedArmId) {
-      logOutcome({
-        action: "retrieve",
-        project: policyProject,
-        query,
-        armId: selectedArmId,
-        topScore: results[0]?._score,
-      });
-    }
-    const lowConfidenceThreshold = 0.35;
-    const shouldFallbackToDeep = retrievalMode === "surface" && !requestedMode &&
-      (results.length === 0 || (results[0]?._score ?? 0) < lowConfidenceThreshold);
-    if (shouldFallbackToDeep) {
-      results = await this.db.searchMemories(embedding, query, {
-        ...opts,
-        topK,
-        retrievalMode: "deep",
-        ...(adaptiveWeights ? { weights: adaptiveWeights } : {}),
-      });
-      if (selectedArmId) {
-        logOutcome({
-          action: "fallback_deep",
-          project: policyProject,
-          query,
-          armId: selectedArmId,
-          topScore: results[0]?._score,
-        });
-      }
-    }
-    if (opts.trackAccess && results.length > 0) {
-      const now = new Date().toISOString();
-      await Promise.all(results.map((m) => this.updateMemory(m.id, {
-        last_accessed_at: now,
-        access_count: (m.access_count ?? 0) + 1,
-      })));
-    }
-    if (selectedArmId) {
-      return results.map((r) => ({ ...r, _policy_arm: selectedArmId }));
-    }
-    return results;
-  }
-
-  async recordMemoryFeedback(
-    project: string,
-    armId: string,
-    outcome: "accepted" | "ignored" | "feedback",
-    reward?: number,
-    details: { query?: string; selectedRank?: number; topScore?: number; metadata?: Record<string, any> } = {}
-  ) {
-    const event = logOutcome({
-      action: outcome,
-      project,
-      armId,
-      query: details.query,
-      selectedRank: details.selectedRank,
-      topScore: details.topScore,
-      reward,
-      metadata: details.metadata,
-    });
-    const policy = getPolicy(project);
-    if (policy) {
-      recordArmReward(policy, armId, event.reward ?? 0);
-    }
-    return event;
-  }
-
-  getMemoryPolicy(project: string) {
-    return getPolicy(project);
-  }
-
-  resetMemoryPolicy(project: string) {
-    return resetPolicy(project);
+    return this.db.searchMemories(embedding, query, { ...opts, topK });
   }
 
   async listMemories(options?: MemorySearchOptions, limit = 100) {
@@ -574,8 +461,4 @@ export class ContextManager {
     return (topKOrOptions ?? {}) as T;
   }
 
-  private isAdaptiveProject(project: string): boolean {
-    const allowlist = config.rl.projectAllowlist;
-    return allowlist.length === 0 || allowlist.includes(project);
-  }
 }

@@ -47,34 +47,17 @@ export type MemoryCategory =
   | "reflection"
   | "decision"
   | "constraint"
-  | "architecture"
-  | "message"; // Turn-by-turn history
+  | "architecture";
 
 export type MemoryOwner = "user" | "agent" | "system";
-export type MemoryState = "raw" | "curated" | "archived";
-
-export interface MemoryRewardStats {
-  total: number;
-  count: number;
-  avg: number;
-}
 
 export interface AgentMemory {
   project?: string;
   id: string;
-  session_id?: string; // Session isolation
-  peer_id?: string;    // Cross-session peer entity identity
   content: string;
   category: MemoryCategory;
   owner: MemoryOwner;
   importance: number;
-  memory_state?: MemoryState;
-  source_memory_ids?: string[];
-  last_accessed_at?: string;
-  access_count?: number;
-  quality_score?: number;
-  confidence?: number;
-  reward_stats?: MemoryRewardStats | null;
   ai_intent?: "fact" | "decision" | "how_to" | "todo" | "warning" | null;
   ai_topics?: string[] | null;
   ai_quality_score?: number | null;
@@ -111,17 +94,12 @@ export interface AgentContextNode {
 
 export interface MemorySearchOptions extends ElasticSearchTuning {
   project?: string;
-  session_id?: string;
-  peer_id?: string;
   topK?: number;
   threshold?: number;
   owner?: MemoryOwner;
   category?: MemoryCategory;
   minImportance?: number;
   maxAgeDays?: number;
-  memoryState?: MemoryState | MemoryState[];
-  retrievalMode?: "surface" | "deep";
-  trackAccess?: boolean;
   weights?: HybridSearchWeights;
 }
 
