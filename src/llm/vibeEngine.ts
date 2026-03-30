@@ -424,7 +424,8 @@ export async function planFlush(
 
   const seen = new Set<string>();
   const deduped = existingContext.filter((item) => {
-    const key = (item.id || item.uri) as string | undefined;
+    const rec = item as Record<string, any>;
+    const key = (rec.id || rec.uri) as string | undefined;
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;

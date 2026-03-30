@@ -2,7 +2,8 @@
 import { Command } from "commander";
 import { createContextManager } from "./storage/client";
 import { AgentContextNode, SkippedWrite, UpdatedWrite } from "./core/types";
-import { executeVibeQuery, planVibeMutation, executeMutationOp, VibeMutationOp } from "./llm/vibeEngine";
+import { executeVibeQuery, planVibeMutation, executeMutationOp, VibeMutationOp, planFlush, summarizeSearchResults } from "./llm/vibeEngine";
+import { scanContent } from "./core/contentSecurity";
 import * as fs from "fs";
 import * as readline from "readline";
 import { CodebaseDaemon } from "./daemon";
@@ -649,6 +650,151 @@ program
       }
 
       console.log("\nDone.");
+    } catch (e) { console.error("Error:", e); process.exit(1); }
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Flush & Nudge (persist observations from conversation transcripts)
+// ─────────────────────────────────────────────────────────────────────────────
+
+program
+  .command("flush [prompt]")
+  .description("Extract and persist durable facts from a conversation transcript")
+  .option("-f, --file <path>", "Read transcript from file")
+  .option("--text <text>", "Inline transcript text")
+  .option("-P, --project <project>", "Project namespace")
+  .option("-k, --topK <n>", "Context search depth", "10")
+  .action(async (userPrompt, opts) => {
+    try {
+      let transcript = userPrompt || "";
+      if (opts.file) {
+        transcript = transcript
+          ? `${transcript}\n\n${fs.readFileSync(opts.file, "utf8")}`
+          : fs.readFileSync(opts.file, "utf8");
+      }
+      if (opts.text) {
+        transcript = transcript ? `${transcript}\n\n${opts.text}` : opts.text;
+      }
+      if (!transcript.trim()) {
+        console.error("Error: Provide a prompt, --file, or --text");
+        process.exit(1);
+      }
+
+      console.log("\nAnalyzing transcript for durable facts...\n");
+      const plan = await planFlush(cm, transcript, opts.project, parseInt(opts.topK));
+
+      if (plan.operations.length === 0) {
+        console.log("Nothing worth persisting found.");
+        process.exit(0);
+      }
+
+      console.log(`Reasoning: ${plan.reasoning}\n`);
+      console.log(`Executing ${plan.operations.length} operation(s)...\n`);
+
+      for (const op of plan.operations) {
+        const textToScan = op.data.content || op.data.abstract || op.data.description || "";
+        if (textToScan) {
+          const scan = scanContent(textToScan);
+          if (!scan.safe) {
+            for (const w of scan.warnings) console.error(`  \x1b[33m⚠ ${w}\x1b[0m`);
+          }
+        }
+
+        try {
+          const result = await executeMutationOp(cm, op, opts.project);
+          console.log(`  \x1b[32m✓\x1b[0m ${result}`);
+        } catch (err) {
+          console.error(`  \x1b[31m✗\x1b[0m ${op.op} failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
+      console.log("\nDone.");
+    } catch (e) { console.error("Error:", e); process.exit(1); }
+  });
+
+program
+  .command("nudge [prompt]")
+  .description("Suggest mutations from a transcript without executing (returns JSON)")
+  .option("-f, --file <path>", "Read transcript from file")
+  .option("--text <text>", "Inline transcript text")
+  .option("-P, --project <project>", "Project namespace")
+  .option("-k, --topK <n>", "Context search depth", "10")
+  .action(async (userPrompt, opts) => {
+    try {
+      let transcript = userPrompt || "";
+      if (opts.file) {
+        transcript = transcript
+          ? `${transcript}\n\n${fs.readFileSync(opts.file, "utf8")}`
+          : fs.readFileSync(opts.file, "utf8");
+      }
+      if (opts.text) {
+        transcript = transcript ? `${transcript}\n\n${opts.text}` : opts.text;
+      }
+      if (!transcript.trim()) {
+        console.error("Error: Provide a prompt, --file, or --text");
+        process.exit(1);
+      }
+
+      const plan = await planFlush(cm, transcript, opts.project, parseInt(opts.topK));
+      console.log(JSON.stringify(plan, null, 2));
+    } catch (e) { console.error("Error:", e); process.exit(1); }
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Summarize (search + LLM synthesis)
+// ─────────────────────────────────────────────────────────────────────────────
+
+program
+  .command("summarize <query>")
+  .description("Search across stores and synthesize a summary via LLM")
+  .option("-P, --project <project>", "Project namespace")
+  .option("-k, --topK <n>", "Results per store", "5")
+  .option("--stores <list>", "Comma-separated stores: memory,skill,node", "memory,skill,node")
+  .option("--fuzziness <f>", "Typo tolerance: auto, 0, 1, 2")
+  .option("--phraseBoost <n>", "Boost for exact phrase matches (0=off)")
+  .action(async (query, opts) => {
+    try {
+      const topK = parseInt(opts.topK);
+      const stores = opts.stores.split(",").map((s: string) => s.trim());
+      const searchOpts = {
+        topK,
+        project: opts.project,
+        fuzziness: parseFuzziness(opts.fuzziness),
+        phraseBoost: opts.phraseBoost !== undefined ? parseFloat(opts.phraseBoost) : undefined,
+      };
+
+      console.log("\nSearching...\n");
+
+      const results: Array<{ store: string; items: Record<string, any>[] }> = [];
+      const searches = stores.map(async (store: string) => {
+        let items: Record<string, any>[];
+        switch (store) {
+          case "memory":
+            items = await cm.searchMemories(query, searchOpts);
+            break;
+          case "skill":
+            items = await cm.searchSkills(query, searchOpts);
+            break;
+          case "node":
+            items = await cm.searchContext(query, searchOpts);
+            break;
+          default:
+            items = [];
+        }
+        results.push({ store, items });
+      });
+      await Promise.all(searches);
+
+      console.log("Synthesizing summary...\n");
+      const summary = await summarizeSearchResults(query, results);
+
+      console.log(summary.summary);
+      if (summary.sources.length > 0) {
+        console.log("\nSources:");
+        for (const s of summary.sources) {
+          console.log(`  [${s.store}] ${s.id}: ${s.snippet}`);
+        }
+      }
     } catch (e) { console.error("Error:", e); process.exit(1); }
   });
 
