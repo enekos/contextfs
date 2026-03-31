@@ -6,7 +6,12 @@ services:
       - discovery.type=single-node
       - bootstrap.memory_lock=true
       - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - xpack.ml.enabled=false
+      - xpack.watcher.enabled=false
+      - xpack.monitoring.enabled=false
+      - xpack.graph.enabled=false
+      - action.destructive_requires_name=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     ports:
       - "9201:9200"
     volumes:
@@ -20,18 +25,6 @@ services:
       memlock:
         soft: -1
         hard: -1
-
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.17.0
-    container_name: contextfs-kibana
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - LOGGING_LOGGERS=[{"name":"plugins.enterpriseSearch","level":"fatal"}]
-    ports:
-      - "5602:5601"
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
 
 volumes:
   esdata:
