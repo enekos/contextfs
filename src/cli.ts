@@ -8,6 +8,7 @@ import * as fs from "fs";
 import * as readline from "readline";
 import { CodebaseDaemon } from "./daemon";
 import { runMcpServer } from "./mcp/mcpServer";
+import { scrapeAndIngest } from "./scraper/scrapeManager";
 
 const cm = createContextManager();
 const program = new Command();
@@ -779,6 +780,57 @@ program
       await runMcpServer(opts.project);
     } catch (e) {
       console.error(e);
+      process.exit(1);
+    }
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scrape
+// ─────────────────────────────────────────────────────────────────────────────
+
+program
+  .command("scrape <url>")
+  .description("Crawl a website and store pages as context nodes")
+  .option("-P, --project <project>", "Project namespace", "default")
+  .option("-d, --depth <n>", "Max crawl depth", "3")
+  .option("-m, --max-pages <n>", "Max pages to crawl", "50")
+  .option("-c, --concurrency <n>", "Parallel browser pages", "3")
+  .option("--delay <ms>", "Delay between requests in ms", "500")
+  .option("--pattern <regex>", "URL pattern filter (regex on pathname)")
+  .option("--selector <css>", "CSS selector to scope content extraction")
+  .option("--split-sections", "Split pages into section child nodes by h2/h3", false)
+  .option("--wait-until <event>", "Page load event (networkidle|domcontentloaded|load)", "networkidle")
+  .option("--dry-run", "Show crawl plan without storing", false)
+  .option("--no-router", "Skip LLM dedup (always create)")
+  .action(async (url: string, opts) => {
+    console.log(`Scraping ${url} ...`);
+    try {
+      const result = await scrapeAndIngest({
+        seedUrl: url,
+        maxDepth: parseInt(String(opts.depth), 10),
+        maxPages: parseInt(String(opts.maxPages), 10),
+        concurrency: parseInt(String(opts.concurrency), 10),
+        delayMs: parseInt(String(opts.delay), 10),
+        urlPattern: opts.pattern as string | undefined,
+        selector: opts.selector as string | undefined,
+        waitUntil: (opts.waitUntil as "networkidle" | "domcontentloaded" | "load") ?? "networkidle",
+        splitSections: Boolean(opts.splitSections),
+        dryRun: Boolean(opts.dryRun),
+        useRouter: opts.router !== false,
+        project: String(opts.project),
+      });
+      console.log(
+        `\nDone: ${result.pagesTotal} pages crawled, ${result.pagesStored} stored, ${result.pagesUpdated} updated, ${result.pagesSkipped} skipped, ${result.errors.length} errors`
+      );
+      if (result.sectionsStored > 0) {
+        console.log(`      ${result.sectionsStored} sections stored as child nodes`);
+      }
+      if (result.errors.length > 0) {
+        console.error("\nErrors:");
+        for (const e of result.errors) console.error(`  ${e.url}: ${e.error}`);
+      }
+    } catch (err) {
+      console.error("Error:", err instanceof Error ? err.message : err);
       process.exit(1);
     }
   });
