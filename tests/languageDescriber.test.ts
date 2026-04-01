@@ -32,3 +32,29 @@ describe("LanguageDescriber interface", () => {
     expect(sorted[1].kind).toBe("tpl");
   });
 });
+
+describe("LogicSymbol type", () => {
+  it("supports docstring, byteStart, byteEnd, and contentHash fields", () => {
+    const symbol: LogicSymbol = {
+      id: "fn:test",
+      kind: "fn",
+      name: "test",
+      exported: true,
+      parentId: null,
+      params: [],
+      complexity: "low",
+      control: { async: false, branch: false, await: false, throw: false },
+      line: 1,
+      byteStart: 0,
+      byteEnd: 42,
+      contentHash: "abc123",
+    };
+    expect(symbol.byteStart).toBe(0);
+    expect(symbol.byteEnd).toBe(42);
+    expect(symbol.contentHash).toBe("abc123");
+    expect(symbol.docstring).toBeUndefined();
+
+    const withDoc: LogicSymbol = { ...symbol, docstring: "Does something useful." };
+    expect(withDoc.docstring).toBe("Does something useful.");
+  });
+});

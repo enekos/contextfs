@@ -19,6 +19,10 @@ export interface LogicSymbol {
     throw: boolean;
   };
   line: number;
+  byteStart: number;
+  byteEnd: number;
+  contentHash: string;
+  docstring?: string;
 }
 
 export interface LogicEdge {
