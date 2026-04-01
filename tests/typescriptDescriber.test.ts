@@ -162,4 +162,113 @@ describe("TypeScriptDescriber", () => {
     expect(result.edges).toHaveLength(0);
     expect(typeof result.fileSummary).toBe("string");
   });
+
+  it("extracts JSDoc docstring from preceding comment", () => {
+    const source = [
+      "/** Validates an email address against RFC 5322 rules. */",
+      "export function validate(email: string) {",
+      "  return email.includes('@');",
+      "}",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/jsdoc.ts", source);
+    const validate = result.symbols.find(s => s.id === "fn:validate")!;
+
+    expect(validate.docstring).toBe("Validates an email address against RFC 5322 rules.");
+  });
+
+  it("extracts first sentence from multi-line JSDoc", () => {
+    const source = [
+      "/**",
+      " * Fetches user data from the API. This function handles",
+      " * retries and timeout logic internally.",
+      " * @param userId - The user ID to fetch",
+      " */",
+      "export function fetchUser(userId: string) {",
+      "  return fetch(`/api/users/${userId}`);",
+      "}",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/multiline.ts", source);
+    const fetchUser = result.symbols.find(s => s.id === "fn:fetchUser")!;
+
+    expect(fetchUser.docstring).toBe("Fetches user data from the API.");
+  });
+
+  it("extracts JSDoc for class methods", () => {
+    const source = [
+      "export class Service {",
+      "  /** Starts the service and binds to the given port. */",
+      "  start(port: number) {",
+      "    return this.listen(port);",
+      "  }",
+      "  listen(port: number) {}",
+      "}",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/method-jsdoc.ts", source);
+    const start = result.symbols.find(s => s.id === "mtd:Service.start")!;
+    const listen = result.symbols.find(s => s.id === "mtd:Service.listen")!;
+
+    expect(start.docstring).toBe("Starts the service and binds to the given port.");
+    expect(listen.docstring).toBeUndefined();
+  });
+
+  it("extracts JSDoc for class declarations", () => {
+    const source = [
+      "/** Manages user sessions and authentication state. */",
+      "export class SessionManager {",
+      "  clear() {}",
+      "}",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/class-jsdoc.ts", source);
+    const cls = result.symbols.find(s => s.id === "cls:SessionManager")!;
+
+    expect(cls.docstring).toBe("Manages user sessions and authentication state.");
+  });
+
+  it("skips non-JSDoc comments", () => {
+    const source = [
+      "// This is a regular comment",
+      "export function noDoc() { return 1; }",
+      "",
+      "/* Block comment but not JSDoc */",
+      "export function alsoNoDoc() { return 2; }",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/no-jsdoc.ts", source);
+    const noDoc = result.symbols.find(s => s.id === "fn:noDoc")!;
+    const alsoNoDoc = result.symbols.find(s => s.id === "fn:alsoNoDoc")!;
+
+    expect(noDoc.docstring).toBeUndefined();
+    expect(alsoNoDoc.docstring).toBeUndefined();
+  });
+
+  it("handles JSDoc with decorator between comment and declaration", () => {
+    const source = [
+      "/** Handles incoming HTTP requests. */",
+      "@Controller('/api')",
+      "export class ApiController {",
+      "  handle() {}",
+      "}",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/decorator-jsdoc.ts", source);
+    const cls = result.symbols.find(s => s.id === "cls:ApiController")!;
+
+    expect(cls.docstring).toBe("Handles incoming HTTP requests.");
+  });
+
+  it("returns undefined docstring for empty JSDoc", () => {
+    const source = [
+      "/** */",
+      "export function empty() { return 1; }",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/empty-jsdoc.ts", source);
+    const empty = result.symbols.find(s => s.id === "fn:empty")!;
+
+    expect(empty.docstring).toBeUndefined();
+  });
 });

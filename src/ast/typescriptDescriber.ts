@@ -187,7 +187,8 @@ export class TypeScriptDescriber implements LanguageDescriber {
         case "class_declaration": {
           const className = declNode.childForFieldName("name")?.text ?? `anonymous_class_${declNode.startPosition.row + 1}`;
           const classId = `cls:${className}`;
-          pushSymbol(this.makeSymbol(classId, "cls", className, isExport, null, [], declNode));
+          const docstring = this.extractJsDoc(child);
+          pushSymbol(this.makeSymbol(classId, "cls", className, isExport, null, [], declNode, docstring));
 
           const superClass = this.getExtendsClause(declNode);
           if (superClass) {
@@ -201,7 +202,8 @@ export class TypeScriptDescriber implements LanguageDescriber {
             const methodName = method.childForFieldName("name")?.text ?? "";
             const methodId = `mtd:${className}.${methodName}`;
             const params = this.extractParams(method);
-            pushSymbol(this.makeSymbol(methodId, "mtd", methodName, isExport, classId, params, method));
+            const methodDoc = this.extractJsDoc(method);
+            pushSymbol(this.makeSymbol(methodId, "mtd", methodName, isExport, classId, params, method, methodDoc));
             methodByClassAndName.set(`${className}.${methodName}`, methodId);
             const existingMethodIds = methodIdsByName.get(methodName) ?? [];
             existingMethodIds.push(methodId);
@@ -215,18 +217,20 @@ export class TypeScriptDescriber implements LanguageDescriber {
           const fnName = declNode.childForFieldName("name")?.text ?? `anonymous_fn_${declNode.startPosition.row + 1}`;
           const fnId = `fn:${fnName}`;
           const params = this.extractParams(declNode);
-          pushSymbol(this.makeSymbol(fnId, "fn", fnName, isExport, null, params, declNode));
+          const docstring = this.extractJsDoc(child);
+          pushSymbol(this.makeSymbol(fnId, "fn", fnName, isExport, null, params, declNode, docstring));
           callableNodes.push({ symbolId: fnId, className: null, node: declNode });
           break;
         }
 
         case "lexical_declaration":
         case "variable_declaration": {
+          const docstring = this.extractJsDoc(child);
           for (const declarator of declNode.namedChildren) {
             if (declarator.type !== "variable_declarator") continue;
             const variableName = declarator.childForFieldName("name")?.text ?? "";
             const symbolId = `var:${variableName}`;
-            pushSymbol(this.makeSymbol(symbolId, "var", variableName, isExport, null, [], declarator));
+            pushSymbol(this.makeSymbol(symbolId, "var", variableName, isExport, null, [], declarator, docstring));
             moduleVariableByName.set(variableName, symbolId);
           }
           break;
@@ -235,21 +239,24 @@ export class TypeScriptDescriber implements LanguageDescriber {
         case "interface_declaration": {
           const name = declNode.childForFieldName("name")?.text ?? "";
           const symbolId = `iface:${name}`;
-          pushSymbol(this.makeSymbol(symbolId, "iface", name, isExport, null, [], declNode));
+          const docstring = this.extractJsDoc(child);
+          pushSymbol(this.makeSymbol(symbolId, "iface", name, isExport, null, [], declNode, docstring));
           break;
         }
 
         case "enum_declaration": {
           const name = declNode.childForFieldName("name")?.text ?? "";
           const symbolId = `enum:${name}`;
-          pushSymbol(this.makeSymbol(symbolId, "enum", name, isExport, null, [], declNode));
+          const docstring = this.extractJsDoc(child);
+          pushSymbol(this.makeSymbol(symbolId, "enum", name, isExport, null, [], declNode, docstring));
           break;
         }
 
         case "type_alias_declaration": {
           const name = declNode.childForFieldName("name")?.text ?? "";
           const symbolId = `type:${name}`;
-          pushSymbol(this.makeSymbol(symbolId, "type", name, isExport, null, [], declNode));
+          const docstring = this.extractJsDoc(child);
+          pushSymbol(this.makeSymbol(symbolId, "type", name, isExport, null, [], declNode, docstring));
           break;
         }
       }
@@ -323,6 +330,44 @@ export class TypeScriptDescriber implements LanguageDescriber {
       .filter((n) => n.length > 0);
   }
 
+  /**
+   * Extract JSDoc from the comment node preceding a declaration.
+   * Returns the first sentence, or undefined if no JSDoc is found.
+   */
+  private extractJsDoc(node: SyntaxNode): string | undefined {
+    // Walk backwards through siblings to find a preceding comment,
+    // skipping decorator nodes.
+    let candidate = node.previousNamedSibling;
+    while (candidate && candidate.type === "decorator") {
+      candidate = candidate.previousNamedSibling;
+    }
+
+    if (!candidate || candidate.type !== "comment") return undefined;
+
+    const text = candidate.text;
+    if (!text.startsWith("/**")) return undefined;
+
+    // Strip comment markers: /** ... */
+    const stripped = text
+      .replace(/^\/\*\*\s*/, "")
+      .replace(/\s*\*\/$/, "")
+      .split("\n")
+      .map(line => line.replace(/^\s*\*\s?/, ""))
+      .join(" ")
+      .trim();
+
+    if (!stripped) return undefined;
+
+    // Take first sentence: up to first ". " or ".\n" or end of string before @tag
+    const beforeTags = stripped.split(/\s@/)[0]!.trim();
+    const sentenceMatch = beforeTags.match(/^(.+?\.)\s/);
+    const firstSentence = sentenceMatch ? sentenceMatch[1]! : beforeTags;
+
+    // Truncate to 200 chars
+    const result = firstSentence.length > 200 ? firstSentence.slice(0, 200) + "..." : firstSentence;
+    return result || undefined;
+  }
+
   private makeSymbol(
     id: string,
     kind: LogicSymbolKind,
@@ -331,6 +376,7 @@ export class TypeScriptDescriber implements LanguageDescriber {
     parentId: string | null,
     params: string[],
     node: SyntaxNode,
+    docstring?: string,
   ): LogicSymbol {
     const isFnLike = this.isFunctionLikeNode(node);
     const control = {
@@ -353,6 +399,7 @@ export class TypeScriptDescriber implements LanguageDescriber {
       byteStart: node.startIndex,
       byteEnd: node.endIndex,
       contentHash: createHash("sha1").update(node.text).digest("hex"),
+      ...(docstring ? { docstring } : {}),
     };
   }
 
