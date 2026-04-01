@@ -805,12 +805,20 @@ program
   .action(async (url: string, opts) => {
     console.log(`Scraping ${url} ...`);
     try {
+      const maxDepth = parseInt(String(opts.depth), 10);
+      const maxPages = parseInt(String(opts.maxPages), 10);
+      const concurrency = parseInt(String(opts.concurrency), 10);
+      const delayMs = parseInt(String(opts.delay), 10);
+      if ([maxDepth, maxPages, concurrency, delayMs].some(Number.isNaN)) {
+        console.error("Error: --depth, --max-pages, --concurrency, and --delay must be integers");
+        process.exit(1);
+      }
       const result = await scrapeAndIngest({
         seedUrl: url,
-        maxDepth: parseInt(String(opts.depth), 10),
-        maxPages: parseInt(String(opts.maxPages), 10),
-        concurrency: parseInt(String(opts.concurrency), 10),
-        delayMs: parseInt(String(opts.delay), 10),
+        maxDepth,
+        maxPages,
+        concurrency,
+        delayMs,
         urlPattern: opts.pattern as string | undefined,
         selector: opts.selector as string | undefined,
         waitUntil: (opts.waitUntil as "networkidle" | "domcontentloaded" | "load") ?? "networkidle",
