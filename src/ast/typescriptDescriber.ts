@@ -358,14 +358,15 @@ export class TypeScriptDescriber implements LanguageDescriber {
 
     if (!stripped) return undefined;
 
-    // Take first sentence: up to first ". " or ".\n" or end of string before @tag
+    // Strip @tag annotations (regex matches ". " or ".\n"). Fallback (beforeTags) handles end of string.
+    // WARNING: This will incorrectly split on inline @mention-style references; we only intend @tag annotations.
     const beforeTags = stripped.split(/\s@/)[0]!.trim();
     const sentenceMatch = beforeTags.match(/^(.+?\.)\s/);
     const firstSentence = sentenceMatch ? sentenceMatch[1]! : beforeTags;
 
     // Truncate to 200 chars
     const result = firstSentence.length > 200 ? firstSentence.slice(0, 200) + "..." : firstSentence;
-    return result || undefined;
+    return result;
   }
 
   private makeSymbol(
