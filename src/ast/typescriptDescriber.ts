@@ -1,5 +1,6 @@
 import type { Node as SyntaxNode, Tree } from "web-tree-sitter";
 import { Parser } from "web-tree-sitter";
+import { createHash } from "crypto";
 import type {
   LanguageDescriber,
   FileGraphResult,
@@ -349,6 +350,9 @@ export class TypeScriptDescriber implements LanguageDescriber {
       complexity: this.computeComplexityBucket(isFnLike ? node : null),
       control,
       line: node.startPosition.row + 1,
+      byteStart: node.startIndex,
+      byteEnd: node.endIndex,
+      contentHash: createHash("sha1").update(node.text).digest("hex"),
     };
   }
 

@@ -98,6 +98,53 @@ describe("TypeScriptDescriber", () => {
     expect(divideDesc).toMatch(/[Dd]ivision|zero/);
   });
 
+  it("populates byteStart, byteEnd, and contentHash on symbols", () => {
+    const source = [
+      "export function hello() {",
+      "  return 'world';",
+      "}",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/offsets.ts", source);
+    const hello = result.symbols.find(s => s.id === "fn:hello")!;
+
+    expect(hello.byteStart).toBeGreaterThanOrEqual(0);
+    expect(hello.byteEnd).toBeGreaterThan(hello.byteStart);
+    expect(hello.contentHash).toMatch(/^[0-9a-f]{40}$/);
+
+    // Verify offsets match actual source text
+    const sliced = source.slice(hello.byteStart, hello.byteEnd);
+    expect(sliced).toContain("function hello");
+    expect(sliced).toContain("return 'world'");
+  });
+
+  it("gives different contentHash for different function bodies", () => {
+    const source = [
+      "function a() { return 1; }",
+      "function b() { return 2; }",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/hashes.ts", source);
+    const a = result.symbols.find(s => s.id === "fn:a")!;
+    const b = result.symbols.find(s => s.id === "fn:b")!;
+
+    expect(a.contentHash).not.toBe(b.contentHash);
+  });
+
+  it("gives different contentHash for functions with different names but same body", () => {
+    const source = [
+      "function a() { return 1; }",
+      "function b() { return 1; }",
+    ].join("\n");
+
+    const result = describer.extractFileGraph("/tmp/test/same.ts", source);
+    const a = result.symbols.find(s => s.id === "fn:a")!;
+    const b = result.symbols.find(s => s.id === "fn:b")!;
+
+    // Different names but same body — hash covers full node text so they differ
+    expect(a.contentHash).not.toBe(b.contentHash);
+  });
+
   it("generates a file summary", () => {
     const source = [
       "export function greet(name: string) { return 'Hello ' + name; }",
