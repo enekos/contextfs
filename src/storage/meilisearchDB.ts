@@ -527,8 +527,7 @@ export class MeilisearchDB {
 
   async listMemories(options?: MemorySearchOptions, limit = 100, offset = 0): Promise<AgentMemory[]> {
     await this.ensureInitialized();
-    const filters: string[] = [];
-    if (options?.project) filters.push(`project = "${this.escapeFilterValue(options.project)}"`);
+    const filters = options ? this.buildMemoryFilters(options) : [];
 
     const index = this.client.index(MEMORIES_INDEX);
     const res = await index.getDocuments({
