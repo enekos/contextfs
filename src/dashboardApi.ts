@@ -82,12 +82,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse<IncomingM
 
       if (!q) { sendJson(res, 400, { error: "q parameter required" }); return; }
 
-      // ES tuning params from query string
+      // Search tuning params from query string
       const tuning: Record<string, any> = {};
-      const fz = parsed.searchParams.get("fuzziness");
-      if (fz) tuning.fuzziness = fz === "auto" ? "auto" : Number(fz);
-      const pb = parsed.searchParams.get("phraseBoost");
-      if (pb) tuning.phraseBoost = Number(pb);
       const ms = parsed.searchParams.get("minScore");
       if (ms) tuning.minScore = Number(ms);
       if (parsed.searchParams.get("highlight") === "true") tuning.highlight = true;

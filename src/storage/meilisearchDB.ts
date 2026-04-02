@@ -578,6 +578,394 @@ export class MeilisearchDB {
   }
 
   // ---------------------------------------------------------------------------
+  // Context Nodes
+  // ---------------------------------------------------------------------------
+
+  async addContextNode(node: AgentContextNode, embedding: number[]) {
+    await this.ensureInitialized();
+    assertEmbeddingDimension(embedding, "MeilisearchDB.addContextNode");
+    const ts = new Date().toISOString();
+    const ancestors = await this.computeAncestors(node.parent_uri);
+
+    const index = this.client.index(CONTEXT_INDEX);
+    const doc = {
+      uri: node.uri,
+      project: node.project || null,
+      parent_uri: node.parent_uri,
+      ancestors,
+      name: node.name,
+      abstract: node.abstract,
+      overview: node.overview || null,
+      content: node.content || null,
+      ai_intent: node.ai_intent ?? null,
+      ai_topics: node.ai_topics ?? null,
+      ai_quality_score: node.ai_quality_score ?? null,
+      _vectors: { default: embedding },
+      metadata: node.metadata || null,
+      created_at: node.created_at || ts,
+      updated_at: node.updated_at || ts,
+      is_deleted: false,
+      deleted_at: null,
+      version_history: [],
+    };
+    const task = await index.addDocuments([doc]);
+    await this.client.tasks.waitForTask(task.taskUid);
+  }
+
+  async updateContextNode(
+    uri: string,
+    updates: {
+      name?: string;
+      abstract?: string;
+      overview?: string;
+      content?: string;
+      ai_intent?: AgentContextNode["ai_intent"];
+      ai_topics?: AgentContextNode["ai_topics"];
+      ai_quality_score?: AgentContextNode["ai_quality_score"];
+      metadata?: Record<string, any>;
+    },
+    embedding?: number[]
+  ) {
+    await this.ensureInitialized();
+
+    // Read-modify-write for version history
+    const existingNode = await this.getContextNodeRaw(uri);
+
+    if (existingNode) {
+      const historyEntry = {
+        updated_at: existingNode.updated_at || existingNode.created_at,
+        name: existingNode.name,
+        abstract: existingNode.abstract,
+        overview: existingNode.overview || null,
+        content: existingNode.content || null,
+      };
+
+      let versionHistory: any[] = existingNode.version_history || [];
+      versionHistory.push(historyEntry);
+      if (versionHistory.length > 10) {
+        versionHistory = versionHistory.slice(-10);
+      }
+
+      const doc: Record<string, any> = {
+        uri,
+        updated_at: new Date().toISOString(),
+        version_history: versionHistory,
+      };
+      if (updates.name !== undefined) doc.name = updates.name;
+      if (updates.abstract !== undefined) doc.abstract = updates.abstract;
+      if (updates.overview !== undefined) doc.overview = updates.overview;
+      if (updates.content !== undefined) doc.content = updates.content;
+      if (updates.ai_intent !== undefined) doc.ai_intent = updates.ai_intent;
+      if (updates.ai_topics !== undefined) doc.ai_topics = updates.ai_topics;
+      if (updates.ai_quality_score !== undefined) doc.ai_quality_score = updates.ai_quality_score;
+      if (updates.metadata !== undefined) doc.metadata = updates.metadata;
+      if (embedding) {
+        assertEmbeddingDimension(embedding, "MeilisearchDB.updateContextNode");
+        doc._vectors = { default: embedding };
+      }
+
+      const index = this.client.index(CONTEXT_INDEX);
+      const task = await index.updateDocuments([doc]);
+      await this.client.tasks.waitForTask(task.taskUid);
+    } else {
+      // Node doesn't exist yet — partial update
+      const doc: Record<string, any> = { uri, updated_at: new Date().toISOString() };
+      if (updates.name !== undefined) doc.name = updates.name;
+      if (updates.abstract !== undefined) doc.abstract = updates.abstract;
+      if (updates.overview !== undefined) doc.overview = updates.overview;
+      if (updates.content !== undefined) doc.content = updates.content;
+      if (updates.ai_intent !== undefined) doc.ai_intent = updates.ai_intent;
+      if (updates.ai_topics !== undefined) doc.ai_topics = updates.ai_topics;
+      if (updates.ai_quality_score !== undefined) doc.ai_quality_score = updates.ai_quality_score;
+      if (updates.metadata !== undefined) doc.metadata = updates.metadata;
+      if (embedding) {
+        assertEmbeddingDimension(embedding, "MeilisearchDB.updateContextNode");
+        doc._vectors = { default: embedding };
+      }
+      const index = this.client.index(CONTEXT_INDEX);
+      const task = await index.updateDocuments([doc]);
+      await this.client.tasks.waitForTask(task.taskUid);
+    }
+  }
+
+  async searchContextNodes(
+    queryEmbedding: number[],
+    queryText: string,
+    options: ContextSearchOptions = {}
+  ): Promise<(AgentContextNode & { _score: number; _highlight?: Record<string, string[]> })[]> {
+    await this.ensureInitialized();
+    assertEmbeddingDimension(queryEmbedding, "MeilisearchDB.searchContextNodes");
+    const topK = options.topK ?? 10;
+    const ow = options.weights ?? DEFAULT_CONTEXT_WEIGHTS;
+    const w = normalizeWeights({
+      vector: ow.vector, keyword: ow.keyword,
+      recency: ow.recency ?? 0, importance: 0,
+    });
+
+    const filters = this.buildContextFilters(options);
+    const vectorKeywordSum = w.vector + w.keyword;
+    const semanticRatio = vectorKeywordSum > 0 ? w.vector / vectorKeywordSum : 0.5;
+    const fetchLimit = topK * CANDIDATE_MULTIPLIER;
+
+    const searchParams: any = {
+      vector: queryEmbedding,
+      hybrid: { semanticRatio, embedder: "default" },
+      filter: filters.length > 0 ? filters.join(" AND ") : undefined,
+      limit: fetchLimit,
+      showRankingScore: true,
+    };
+
+    if (options.highlight) {
+      searchParams.attributesToHighlight = ["name", "abstract", "overview", "content"];
+      searchParams.highlightPreTag = "<mark>";
+      searchParams.highlightPostTag = "</mark>";
+    }
+
+    if (options.minScore != null) {
+      searchParams.rankingScoreThreshold = options.minScore;
+    }
+
+    const index = this.client.index(CONTEXT_INDEX);
+    const res = await index.search(queryText, searchParams);
+
+    return this.rerankAndMap<AgentContextNode>(res.hits, w, topK, options);
+  }
+
+  async searchContextNodesByVector(
+    queryEmbedding: number[],
+    options: { topK?: number; project?: string; includeDeleted?: boolean } = {}
+  ): Promise<(AgentContextNode & { _score: number })[]> {
+    await this.ensureInitialized();
+    assertEmbeddingDimension(queryEmbedding, "MeilisearchDB.searchContextNodesByVector");
+    const topK = options.topK ?? 10;
+    const filters: string[] = [];
+    if (options.project) filters.push(`project = "${this.escapeFilterValue(options.project)}"`);
+    if (!options.includeDeleted) filters.push(`is_deleted != true`);
+
+    const index = this.client.index(CONTEXT_INDEX);
+    const res = await index.search("", {
+      vector: queryEmbedding,
+      hybrid: { semanticRatio: 1.0, embedder: "default" },
+      filter: filters.length > 0 ? filters.join(" AND ") : undefined,
+      limit: topK,
+      showRankingScore: true,
+    } as any);
+
+    return res.hits.map((hit: any) => ({
+      ...this.stripVectors(hit),
+      _score: hit._rankingScore ?? 0,
+    }));
+  }
+
+  async listContextNodes(parentUri?: string, options?: ContextSearchOptions, limit = 100, offset = 0): Promise<AgentContextNode[]> {
+    await this.ensureInitialized();
+    const filters: string[] = [];
+    if (options?.project) filters.push(`project = "${this.escapeFilterValue(options.project)}"`);
+    if (parentUri) filters.push(`parent_uri = "${this.escapeFilterValue(parentUri)}"`);
+    if (!options?.includeDeleted) filters.push(`is_deleted != true`);
+
+    const index = this.client.index(CONTEXT_INDEX);
+    const res = await index.getDocuments({
+      filter: filters.length > 0 ? filters.join(" AND ") : undefined,
+      limit,
+      offset,
+    });
+    return res.results.map((doc: any) => this.stripVectors(doc));
+  }
+
+  async getContextNode(uri: string): Promise<AgentContextNode | null> {
+    await this.ensureInitialized();
+    try {
+      const index = this.client.index(CONTEXT_INDEX);
+      const doc = await index.getDocument(uri);
+      const { _vectors, ancestors, ...rest } = doc as any;
+      return rest as AgentContextNode;
+    } catch (e: any) {
+      if (e?.code === "document_not_found") return null;
+      throw e;
+    }
+  }
+
+  async deleteContextNode(uri: string) {
+    await this.ensureInitialized();
+    const ts = new Date().toISOString();
+
+    // Soft delete descendants
+    const descendants = await this.getDescendants(uri);
+    if (descendants.length > 0) {
+      const updates = descendants.map((d: any) => ({
+        uri: d.uri,
+        is_deleted: true,
+        deleted_at: ts,
+      }));
+      const index = this.client.index(CONTEXT_INDEX);
+      const task = await index.updateDocuments(updates);
+      await this.client.tasks.waitForTask(task.taskUid);
+    }
+
+    // Soft delete the node itself
+    try {
+      const index = this.client.index(CONTEXT_INDEX);
+      const task = await index.updateDocuments([{ uri, is_deleted: true, deleted_at: ts }]);
+      await this.client.tasks.waitForTask(task.taskUid);
+    } catch (e: any) {
+      if (e?.code !== "document_not_found") throw e;
+    }
+  }
+
+  async restoreContextNode(uri: string) {
+    await this.ensureInitialized();
+
+    // Restore descendants
+    const descendants = await this.getDescendants(uri);
+    if (descendants.length > 0) {
+      const updates = descendants.map((d: any) => ({
+        uri: d.uri,
+        is_deleted: false,
+        deleted_at: null,
+      }));
+      const index = this.client.index(CONTEXT_INDEX);
+      const task = await index.updateDocuments(updates);
+      await this.client.tasks.waitForTask(task.taskUid);
+    }
+
+    // Restore the node itself
+    try {
+      const index = this.client.index(CONTEXT_INDEX);
+      const task = await index.updateDocuments([{ uri, is_deleted: false, deleted_at: null }]);
+      await this.client.tasks.waitForTask(task.taskUid);
+    } catch (e: any) {
+      if (e?.code !== "document_not_found") throw e;
+    }
+  }
+
+  async getContextSubtree(nodeUri: string, includeDeleted = false): Promise<(AgentContextNode & { depth: number })[]> {
+    await this.ensureInitialized();
+    const filters: string[] = [`ancestors = "${this.escapeFilterValue(nodeUri)}"`];
+    if (!includeDeleted) filters.push(`is_deleted != true`);
+
+    const index = this.client.index(CONTEXT_INDEX);
+
+    // Fetch root node
+    let rootNode: any = null;
+    try {
+      rootNode = await index.getDocument(nodeUri);
+    } catch (e: any) {
+      if (e?.code === "document_not_found") return [];
+      throw e;
+    }
+
+    if (!includeDeleted && rootNode.is_deleted) return [];
+
+    // Fetch descendants
+    const res = await index.search("", {
+      filter: filters.join(" AND "),
+      limit: 1000,
+    } as any);
+
+    const rootDepth = rootNode.ancestors?.length ?? 0;
+    const allNodes = [rootNode, ...res.hits];
+
+    return allNodes
+      .map((n: any) => {
+        const nodeAncestors: string[] = n.ancestors || [];
+        const depth = nodeAncestors.length - rootDepth;
+        const { _vectors, ancestors, _rankingScore, _formatted, _matchesPosition, ...rest } = n;
+        return { ...rest, depth } as AgentContextNode & { depth: number };
+      })
+      .sort((a: any, b: any) => a.depth - b.depth);
+  }
+
+  async getContextPath(nodeUri: string, includeDeleted = false): Promise<(AgentContextNode & { depth: number })[]> {
+    await this.ensureInitialized();
+    const node = await this.getContextNodeWithAncestors(nodeUri);
+    if (!node) return [];
+
+    const ancestorUris: string[] = (node as any).ancestors || [];
+    if (ancestorUris.length === 0) {
+      if (!includeDeleted && node.is_deleted) return [];
+      const { ancestors: _, _vectors: _v, ...rest } = node as any;
+      return [{ ...rest, depth: 0 }];
+    }
+
+    // Fetch all ancestor nodes by URI
+    const index = this.client.index(CONTEXT_INDEX);
+    const allUris = [...ancestorUris, nodeUri];
+
+    const filters: string[] = [
+      allUris.map((u) => `uri = "${this.escapeFilterValue(u)}"`).join(" OR "),
+    ];
+    if (!includeDeleted) filters.push(`is_deleted != true`);
+
+    const res = await index.search("", {
+      filter: filters.join(" AND "),
+      limit: allUris.length,
+    } as any);
+
+    const allNodes = res.hits as any[];
+    return allNodes
+      .map((n: any) => {
+        const nodeAncestors: string[] = n.ancestors || [];
+        const depth = nodeAncestors.length;
+        const { ancestors: _, _vectors, _rankingScore, _formatted, _matchesPosition, ...rest } = n;
+        return { ...rest, depth } as AgentContextNode & { depth: number };
+      })
+      .sort((a: any, b: any) => a.depth - b.depth);
+  }
+
+  private async getDescendants(uri: string): Promise<any[]> {
+    const index = this.client.index(CONTEXT_INDEX);
+    const res = await index.search("", {
+      filter: `ancestors = "${this.escapeFilterValue(uri)}"`,
+      limit: 1000,
+    } as any);
+    return res.hits;
+  }
+
+  private async computeAncestors(parentUri: string | null): Promise<string[]> {
+    if (!parentUri) return [];
+    const parent = await this.getContextNodeWithAncestors(parentUri);
+    if (!parent) return [parentUri];
+    const parentAncestors: string[] = (parent as any).ancestors || [];
+    return [...parentAncestors, parentUri];
+  }
+
+  private async getContextNodeWithAncestors(uri: string): Promise<(AgentContextNode & { ancestors?: string[] }) | null> {
+    try {
+      const index = this.client.index(CONTEXT_INDEX);
+      const doc = await index.getDocument(uri);
+      const { _vectors, ...rest } = doc as any;
+      return rest as AgentContextNode & { ancestors?: string[] };
+    } catch (e: any) {
+      if (e?.code === "document_not_found") return null;
+      throw e;
+    }
+  }
+
+  /** Internal: get context node with all fields including ancestors and version_history */
+  private async getContextNodeRaw(uri: string): Promise<any | null> {
+    try {
+      const index = this.client.index(CONTEXT_INDEX);
+      return await index.getDocument(uri);
+    } catch (e: any) {
+      if (e?.code === "document_not_found") return null;
+      throw e;
+    }
+  }
+
+  private buildContextFilters(options: ContextSearchOptions): string[] {
+    const filters: string[] = [];
+    if (options.project) filters.push(`project = "${this.escapeFilterValue(options.project)}"`);
+    if (options.parentUri) filters.push(`parent_uri = "${this.escapeFilterValue(options.parentUri)}"`);
+    if (options.maxAgeDays) {
+      const cutoff = new Date(Date.now() - options.maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
+      filters.push(`created_at >= "${cutoff}"`);
+    }
+    if (!options.includeDeleted) filters.push(`is_deleted != true`);
+    return filters;
+  }
+
+  // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
 
