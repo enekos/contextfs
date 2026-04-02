@@ -10,7 +10,7 @@ import { MeilisearchDB } from "./storage/meilisearchDB";
 import { Embedder } from "./storage/embedder";
 import { config } from "./core/config";
 import { extractJsonObject } from "./core/jsonUtils";
-import { GoogleGenAI } from "@google/genai";
+import { llmGenerate } from "./llm/llmUtils";
 import type { AgentMemory, AgentContextNode } from "./core/types";
 
 const DEDUP_SIMILARITY_THRESHOLD = 0.85;
@@ -23,31 +23,6 @@ function getDB(): MeilisearchDB {
   return new MeilisearchDB(config.meili.url, config.meili.apiKey || undefined);
 }
 
-function getAI(): GoogleGenAI | null {
-  return config.geminiApiKey ? new GoogleGenAI({ apiKey: config.geminiApiKey }) : null;
-}
-
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 1000;
-
-async function llmGenerate(prompt: string, attempt = 1): Promise<string> {
-  const ai = getAI();
-  if (!ai) throw new Error("Gemini API key not configured");
-  try {
-    const response = await ai.models.generateContent({ model: config.llmModel, contents: prompt });
-    return response.text?.trim() || "";
-  } catch (error: unknown) {
-    const status = (error as { status?: number })?.status;
-    const msg = (error as { message?: string })?.message;
-    if (attempt < MAX_RETRIES && (status === 429 || (status ?? 0) >= 500 || msg?.includes("fetch failed"))) {
-      const delay = RETRY_DELAY_MS * Math.pow(2, attempt - 1);
-      console.warn(`[dreamer] LLM error (${msg}), retrying in ${delay}ms (${attempt + 1}/${MAX_RETRIES})`);
-      await new Promise((r) => setTimeout(r, delay));
-      return llmGenerate(prompt, attempt + 1);
-    }
-    throw error;
-  }
-}
 
 async function fetchAllMemories(db: MeilisearchDB, project: string): Promise<AgentMemory[]> {
   const all: AgentMemory[] = [];
@@ -123,12 +98,10 @@ Respond with ONLY a JSON object:
           const mergedEmbedding = await Embedder.getEmbedding(decision.mergedContent);
           await db.updateMemory(newer.id, { content: decision.mergedContent }, mergedEmbedding);
           await db.deleteMemory(older.id);
-          processed.add(candidate.id);
         } else if (decision.action === "CONTRADICTION") {
           await db.deleteMemory(older.id);
-          processed.add(candidate.id);
         }
-        // KEEP_BOTH: no action, but mark as processed to avoid re-comparing
+        // Always mark candidate as processed regardless of action
         processed.add(candidate.id);
       }
     } catch (e) {
