@@ -1,21 +1,17 @@
-import { ElasticDB } from "../storage/elasticDB";
+import { MeilisearchDB } from "../storage/meilisearchDB";
 import { config } from "../core/config";
 
-const node = config.elasticUrl;
+const url = config.meili.url;
 
-if (!node) {
-  console.error("Please set ELASTIC_URL in your .env file");
+if (!url) {
+  console.error("Please set MEILI_URL in your .env file");
   process.exit(1);
 }
 
-const auth = config.elasticUsername && config.elasticPassword
-  ? { username: config.elasticUsername, password: config.elasticPassword }
-  : undefined;
-
-const db = new ElasticDB(node, auth);
+const db = new MeilisearchDB(url, config.meili.apiKey || undefined);
 
 async function main() {
-  console.log("Resetting and initializing Elasticsearch indices for Agent Context...");
+  console.log("Resetting and initializing Meilisearch indices for Agent Context...");
   try {
     await db.resetIndices();
     await db.initIndices();

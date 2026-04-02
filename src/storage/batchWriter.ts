@@ -1,5 +1,5 @@
 import { Embedder } from "./embedder";
-import { ElasticDB, MEMORIES_INDEX, SKILLS_INDEX, CONTEXT_INDEX } from "./elasticDB";
+import { MeilisearchDB, MEMORIES_INDEX, SKILLS_INDEX, CONTEXT_INDEX } from "./meilisearchDB";
 
 export interface BatchWriterOptions {
   batchSize?: number;
@@ -39,13 +39,13 @@ function getId(op: BatchOp): string {
 }
 
 export class BatchWriter {
-  private db: ElasticDB;
+  private db: MeilisearchDB;
   private queue: BatchOp[] = [];
   private readonly batchSize: number;
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private readonly flushIntervalMs: number;
 
-  constructor(db: ElasticDB, options: BatchWriterOptions = {}) {
+  constructor(db: MeilisearchDB, options: BatchWriterOptions = {}) {
     this.db = db;
     this.batchSize = options.batchSize ?? 10;
     this.flushIntervalMs = options.flushIntervalMs ?? 2000;

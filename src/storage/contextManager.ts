@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { ElasticDB, MEMORIES_INDEX, SKILLS_INDEX, CONTEXT_INDEX } from "./elasticDB";
+import { MeilisearchDB, MEMORIES_INDEX, SKILLS_INDEX, CONTEXT_INDEX } from "./meilisearchDB";
 import { Embedder } from "./embedder";
 import {
   AgentContextNode,
@@ -24,10 +24,10 @@ export type { ProposedContextNode };
 type AiMetadataUpdates = Pick<AgentMemory, "ai_intent" | "ai_topics" | "ai_quality_score">;
 
 export class ContextManager {
-  private db: ElasticDB;
+  private db: MeilisearchDB;
 
-  constructor(node: string, auth?: { username: string; password: string }) {
-    this.db = new ElasticDB(node, auth);
+  constructor(url: string, apiKey?: string) {
+    this.db = new MeilisearchDB(url, apiKey);
   }
 
   // ---------------------------------------------------------------------------
