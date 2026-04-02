@@ -12,6 +12,16 @@ const KNOWN_MODEL_DIMENSIONS: Record<string, number> = {
   "text-embedding-004": 768,
 };
 
+function parseDurationMs(value: string | undefined, defaultMs: number): number {
+  if (!value) return defaultMs;
+  const match = value.match(/^(\d+)(ms|s|m|h|d)$/);
+  if (!match) return defaultMs;
+  const num = parseInt(match[1], 10);
+  const unit = match[2];
+  const multipliers: Record<string, number> = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+  return num * (multipliers[unit] ?? 1);
+}
+
 function getEmbeddingDimension(): number {
   const configuredDimension = parsePositiveInt(process.env.EMBEDDING_DIM);
   const model = process.env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL;
@@ -57,6 +67,13 @@ export const config = {
     get memoryPerProject() { return parseNonNegativeInt(process.env.MEMORY_BUDGET_PER_PROJECT) ?? 500; },
     get skillPerProject() { return parseNonNegativeInt(process.env.SKILL_BUDGET_PER_PROJECT) ?? 100; },
     get nodePerProject() { return parseNonNegativeInt(process.env.NODE_BUDGET_PER_PROJECT) ?? 1000; },
+  },
+
+  dream: {
+    get threshold() { return parsePositiveInt(process.env.DREAM_THRESHOLD) ?? 25; },
+    get cooldownMs() { return parseDurationMs(process.env.DREAM_COOLDOWN, 4 * 3_600_000); },
+    get idleTimeoutMs() { return parseDurationMs(process.env.DREAM_IDLE_TIMEOUT, 30 * 60_000); },
+    get enabled() { return parseBoolean(process.env.DREAM_ENABLED, true); },
   },
 };
 
