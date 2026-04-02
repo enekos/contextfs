@@ -5,9 +5,11 @@ import type { PageSummary } from "./types";
 const MAX_INPUT_TOKENS = 8000; // ~6000 words
 const SHORT_PAGE_THRESHOLD = 5; // words
 
-const ai = config.geminiApiKey
-  ? new GoogleGenAI({ apiKey: config.geminiApiKey })
-  : null;
+function getAI(): GoogleGenAI | null {
+  return config.geminiApiKey
+    ? new GoogleGenAI({ apiKey: config.geminiApiKey })
+    : null;
+}
 
 function truncateMarkdown(markdown: string): string {
   // Rough estimate: 1 token ≈ 4 chars
@@ -57,6 +59,7 @@ export async function summarizePage(
     return fallbackSummary(title, markdown, url);
   }
 
+  const ai = getAI();
   if (!ai) {
     return fallbackSummary(title, markdown, url);
   }

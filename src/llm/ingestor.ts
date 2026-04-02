@@ -9,9 +9,11 @@ import { config } from "../core/config";
 
 const LLM_MODEL = config.llmModel;
 
-const ai = config.geminiApiKey
-  ? new GoogleGenAI({ apiKey: config.geminiApiKey })
-  : null;
+function getAI(): GoogleGenAI | null {
+  return config.geminiApiKey
+    ? new GoogleGenAI({ apiKey: config.geminiApiKey })
+    : null;
+}
 
 export interface ProposedContextNode {
   uri: string;
@@ -27,6 +29,7 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
 async function generateWithRetry(model: string, contents: string, attempt = 1): Promise<any> {
+  const ai = getAI();
   if (!ai) throw new Error("GoogleGenAI not initialized");
   try {
     return await ai.models.generateContent({ model, contents });
@@ -53,7 +56,7 @@ export async function parseTextIntoContextNodes(
   text: string,
   baseUri = "contextfs://ingested"
 ): Promise<ProposedContextNode[]> {
-  if (!ai) {
+  if (!getAI()) {
     throw new Error("GEMINI_API_KEY is not set — cannot parse text into context nodes.");
   }
 

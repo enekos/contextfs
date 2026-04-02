@@ -25,7 +25,10 @@ vi.mock("../../src/core/config", () => ({
 
 describe("summarizePage", () => {
   beforeEach(() => {
-    vi.resetModules();
+    if (typeof vi.resetModules === "function") {
+      vi.resetModules();
+    }
+    vi.clearAllMocks();
   });
 
   it("returns structured summary from LLM", async () => {

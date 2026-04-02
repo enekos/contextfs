@@ -1,15 +1,18 @@
 import { GoogleGenAI } from "@google/genai";
 import { assertEmbeddingDimension, config } from "../core/config";
 
-const ai = config.geminiApiKey
-  ? new GoogleGenAI({ apiKey: config.geminiApiKey })
-  : null;
+function getAI(): GoogleGenAI | null {
+  return config.geminiApiKey
+    ? new GoogleGenAI({ apiKey: config.geminiApiKey })
+    : null;
+}
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
 export class Embedder {
   static async getEmbedding(text: string, attempt = 1): Promise<number[]> {
+    const ai = getAI();
     if (!ai) {
       if (!config.embedding.allowZeroEmbeddings) {
         throw new Error(
