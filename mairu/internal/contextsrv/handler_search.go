@@ -1,8 +1,9 @@
 package contextsrv
 
 import (
-	"github.com/gin-gonic/gin"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 func (h *Handler) search(c *gin.Context) {
