@@ -3,6 +3,8 @@ package contextsrv
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/meilisearch/meilisearch-go"
 )
@@ -11,6 +13,7 @@ const (
 	meiliMemoriesIndex = "contextfs_memories"
 	meiliSkillsIndex   = "contextfs_skills"
 	meiliNodesIndex    = "contextfs_context_nodes"
+	meiliSymbolsIndex  = "contextfs_symbols"
 )
 
 type MeiliIndexer struct {
@@ -27,9 +30,12 @@ func NewMeiliIndexer(host, apiKey string) *MeiliIndexer {
 }
 
 func (m *MeiliIndexer) EnsureIndexes() error {
-	indexes := []string{meiliMemoriesIndex, meiliSkillsIndex, meiliNodesIndex}
+	indexes := []string{meiliMemoriesIndex, meiliSkillsIndex, meiliNodesIndex, meiliSymbolsIndex}
 	for _, idx := range indexes {
-		_, _ = m.client.CreateIndex(&meilisearch.IndexConfig{Uid: idx})
+		_, _ = m.client.CreateIndex(&meilisearch.IndexConfig{
+			Uid:        idx,
+			PrimaryKey: "id",
+		})
 	}
 	return nil
 }
@@ -38,6 +44,14 @@ func (m *MeiliIndexer) Upsert(entityType string, payload map[string]any) error {
 	idx, err := indexFromEntity(entityType)
 	if err != nil {
 		return err
+	}
+	switch entityType {
+	case "context_node":
+		if _, ok := payload["id"]; !ok {
+			if uri, ok := payload["uri"].(string); ok && uri != "" {
+				payload["id"] = uri
+			}
+		}
 	}
 	_, err = m.client.Index(idx).AddDocuments([]map[string]any{payload})
 	return err
@@ -68,7 +82,151 @@ func indexFromEntity(entityType string) (string, error) {
 		return meiliSkillsIndex, nil
 	case "context_node":
 		return meiliNodesIndex, nil
+	case "symbol":
+		return meiliSymbolsIndex, nil
 	default:
 		return "", fmt.Errorf("unsupported entity type %q", entityType)
 	}
+}
+
+func (m *MeiliIndexer) Search(opts SearchOptions) (map[string]any, error) {
+	topK := opts.TopK
+	if topK <= 0 {
+		topK = 10
+	}
+	store := normalizeStoreName(opts.Store)
+	out := map[string]any{
+		"memories":     []map[string]any{},
+		"skills":       []map[string]any{},
+		"contextNodes": []map[string]any{},
+	}
+	if strings.TrimSpace(opts.Query) == "" {
+		return out, nil
+	}
+
+	if store == "all" || store == "memories" {
+		res, err := m.searchIndex(meiliMemoriesIndex, opts, []string{"content"}, topK)
+		if err != nil {
+			return nil, err
+		}
+		out["memories"] = res
+	}
+	if store == "all" || store == "skills" {
+		res, err := m.searchIndex(meiliSkillsIndex, opts, []string{"name", "description"}, topK)
+		if err != nil {
+			return nil, err
+		}
+		out["skills"] = res
+	}
+	if store == "all" || store == "context" {
+		res, err := m.searchIndex(meiliNodesIndex, opts, []string{"name", "abstract", "content"}, topK)
+		if err != nil {
+			return nil, err
+		}
+		out["contextNodes"] = res
+	}
+	return out, nil
+}
+
+func (m *MeiliIndexer) searchIndex(index string, opts SearchOptions, fields []string, limit int) ([]map[string]any, error) {
+	req := &meilisearch.SearchRequest{
+		Limit: int64(limit),
+	}
+	if opts.Project != "" {
+		req.Filter = fmt.Sprintf(`project = "%s"`, escapeFilterValue(opts.Project))
+	}
+	resp, err := m.client.Index(index).Search(opts.Query, req)
+	if err != nil {
+		return nil, err
+	}
+	queryTokens := tokenizeForSearch(opts.Query)
+	items := []scoredDoc{}
+	for _, hit := range resp.Hits {
+		raw, _ := json.Marshal(hit)
+		doc := map[string]any{}
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			continue
+		}
+		createdAt := parseDocTime(doc["created_at"])
+		importance := parseDocInt(doc["importance"])
+		fieldValues := map[string]string{}
+		for _, field := range fields {
+			if v, ok := doc[field].(string); ok {
+				fieldValues[field] = v
+			}
+		}
+		score := scoreHybrid(fieldValues, queryTokens, createdAt, importance, opts, defaultsForIndex(index))
+		doc["_score"] = score
+		if opts.Highlight {
+			if h := highlightsForFields(fieldValues, queryTokens); len(h) > 0 {
+				doc["_highlight"] = h
+			}
+		}
+		items = append(items, scoredDoc{score: score, doc: doc})
+	}
+	return finalizeScoredDocs(items, limit, opts.MinScore), nil
+}
+
+func defaultsForIndex(index string) hybridWeights {
+	switch index {
+	case meiliMemoriesIndex:
+		return defaultMemoryWeights()
+	case meiliSkillsIndex:
+		return defaultSkillWeights()
+	default:
+		return defaultContextWeights()
+	}
+}
+
+func (m *MeiliIndexer) ClusterStats() map[string]any {
+	stats, err := m.client.GetStats()
+	if err != nil {
+		return map[string]any{
+			"ok":      false,
+			"service": "contextsrv",
+			"error":   err.Error(),
+		}
+	}
+	indexes := map[string]any{}
+	for _, uid := range []string{meiliMemoriesIndex, meiliSkillsIndex, meiliNodesIndex, meiliSymbolsIndex} {
+		docCount := 0
+		if idx, ok := stats.Indexes[uid]; ok {
+			docCount = int(idx.NumberOfDocuments)
+		}
+		indexes[uid] = map[string]any{
+			"docs": docCount,
+		}
+	}
+	return map[string]any{
+		"ok":      true,
+		"service": "contextsrv",
+		"indexes": indexes,
+	}
+}
+
+func parseDocTime(raw any) (outTimeValue time.Time) {
+	str, ok := raw.(string)
+	if !ok || strings.TrimSpace(str) == "" {
+		return outTimeValue
+	}
+	t, err := time.Parse(time.RFC3339, str)
+	if err != nil {
+		return outTimeValue
+	}
+	return t
+}
+
+func parseDocInt(raw any) int {
+	switch n := raw.(type) {
+	case int:
+		return n
+	case float64:
+		return int(n)
+	default:
+		return 0
+	}
+}
+
+func escapeFilterValue(v string) string {
+	return strings.ReplaceAll(v, `"`, `\"`)
 }

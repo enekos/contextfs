@@ -55,11 +55,21 @@ type Repository interface {
 }
 
 type AppService struct {
-	repo Repository
+	repo          Repository
+	searchBackend SearchBackend
 }
 
 func NewService(repo Repository) *AppService {
 	return &AppService{repo: repo}
+}
+
+type SearchBackend interface {
+	Search(opts SearchOptions) (map[string]any, error)
+	ClusterStats() map[string]any
+}
+
+func NewServiceWithSearch(repo Repository, backend SearchBackend) *AppService {
+	return &AppService{repo: repo, searchBackend: backend}
 }
 
 func (s *AppService) Health() map[string]any {
@@ -187,6 +197,11 @@ func (s *AppService) DeleteContextNode(uri string) error {
 }
 
 func (s *AppService) Search(opts SearchOptions) (map[string]any, error) {
+	if s.searchBackend != nil {
+		if out, err := s.searchBackend.Search(opts); err == nil {
+			return out, nil
+		}
+	}
 	return s.repo.SearchText(context.Background(), opts)
 }
 
@@ -216,6 +231,9 @@ func (s *AppService) Dashboard(limit int, project string) (map[string]any, error
 }
 
 func (s *AppService) ClusterStats() map[string]any {
+	if s.searchBackend != nil {
+		return s.searchBackend.ClusterStats()
+	}
 	return map[string]any{
 		"ok":      true,
 		"service": "contextsrv",

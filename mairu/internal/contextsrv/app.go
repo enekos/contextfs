@@ -53,16 +53,15 @@ func NewApp(cfg Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	svc := NewService(repo)
+	indexer := NewMeiliIndexer(cfg.MeiliURL, cfg.MeiliAPIKey)
+	_ = indexer.EnsureIndexes()
+	svc := NewServiceWithSearch(repo, indexer)
 	handler := NewHandler(svc, cfg.AuthToken)
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-
-	indexer := NewMeiliIndexer(cfg.MeiliURL, cfg.MeiliAPIKey)
-	_ = indexer.EnsureIndexes()
 	return &App{
 		cfg:       cfg,
 		repo:      repo,
