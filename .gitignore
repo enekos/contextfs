@@ -10,6 +10,9 @@ coverage/
 mairu/bin/
 mairu/*.exe
 mairu/mairu-agent
+llmeval/bin/
+llmeval/*.exe
+llmeval/llmeval
 **/.gomodcache/
 **/.gocache/
 *.test
@@ -21,6 +24,8 @@ mairu/mairu-agent
 .env.*.local
 
 # Logs
+*.log
+*.log.*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

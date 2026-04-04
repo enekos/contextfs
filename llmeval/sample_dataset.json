@@ -1,0 +1,32 @@
+[
+  {
+    "id": "math_addition",
+    "prompt": "What is 2 + 2? Reply with just the number.",
+    "expected": "4",
+    "eval_type": "exact"
+  },
+  {
+    "id": "capital_france",
+    "prompt": "What is the capital of France?",
+    "expected": "paris",
+    "eval_type": "includes"
+  },
+  {
+    "id": "summarize_apple",
+    "prompt": "Explain what an apple is in one sentence.",
+    "expected": "A description of an apple mentioning it is a fruit.",
+    "eval_type": "llm_judge"
+  },
+  {
+    "id": "valid_json_output",
+    "prompt": "Give me a JSON object with two keys: name and age.",
+    "expected": "",
+    "eval_type": "valid_json"
+  },
+  {
+    "id": "json_schema_validation",
+    "prompt": "Generate a JSON response for a user profile containing 'username' (string) and 'isActive' (boolean).",
+    "expected": "{\"type\": \"object\", \"properties\": {\"username\": {\"type\": \"string\"}, \"isActive\": {\"type\": \"boolean\"}}, \"required\": [\"username\", \"isActive\"]}",
+    "eval_type": "json_schema"
+  }
+]

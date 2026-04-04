@@ -1,0 +1,62 @@
+[
+  {
+    "id": "go_concurrent_fetcher",
+    "prompt": "Write a Go function `FetchAll(urls []string) map[string]string` that fetches URLs concurrently. It must use goroutines, a sync.WaitGroup, and safely write to the map without race conditions.",
+    "expected": "The response must contain a valid Go function named FetchAll. It must use sync.WaitGroup to wait for all goroutines, use the 'go' keyword, and safely write to the map using either a sync.Mutex or a channel.",
+    "eval_type": "llm_judge"
+  },
+  {
+    "id": "python_mutable_default_bug",
+    "prompt": "Find and fix the bug in this Python code:\n```python\ndef append_to(element, target_list=[]):\n    target_list.append(element)\n    return target_list\n```\nProvide the fixed code.",
+    "expected": "target_list=None",
+    "eval_type": "includes"
+  },
+  {
+    "id": "sql_top_users_query",
+    "prompt": "Write a PostgreSQL query to find the names of the top 3 users by total order amount in the year 2023. Tables: `users(id, name)`, `orders(id, user_id, amount, created_at)`.",
+    "expected": "The query must JOIN users and orders, filter created_at for 2023, GROUP BY user id/name, SUM the amount, ORDER BY the sum descending, and LIMIT 3.",
+    "eval_type": "llm_judge"
+  },
+  {
+    "id": "react_counter_state",
+    "prompt": "Create a React functional component `Counter` that renders a button. When clicked, it increments a counter. The initial count should be 0.",
+    "expected": "useState(0)",
+    "eval_type": "includes"
+  },
+  {
+    "id": "typescript_interface",
+    "prompt": "Write a TypeScript interface named 'UserProfile' with a required string 'id', an optional string 'email', and a required array of strings 'roles'.",
+    "expected": "email?: string",
+    "eval_type": "includes"
+  },
+  {
+    "id": "docker_multistage_node",
+    "prompt": "Write a multi-stage Dockerfile for a production Node.js application. It should have a 'builder' stage that installs all dependencies and builds the app, and a final stage that only installs production dependencies.",
+    "expected": "The Dockerfile must use multiple FROM statements (e.g., 'FROM node AS builder' or similar). The final stage must copy artifacts from the builder stage using 'COPY --from='.",
+    "eval_type": "llm_judge"
+  },
+  {
+    "id": "rust_borrow_checker_explanation",
+    "prompt": "Explain the core rules of the Rust borrow checker regarding references.",
+    "expected": "The explanation must explicitly state that at any given time, you can have EITHER one mutable reference OR any number of immutable references, but not both. It must also mention that references must always be valid (no dangling references).",
+    "eval_type": "llm_judge"
+  },
+  {
+    "id": "regex_extract_domain",
+    "prompt": "Write a regular expression pattern that extracts the domain name (e.g., 'example.com') from an email address. Provide just the regex.",
+    "expected": "@",
+    "eval_type": "includes"
+  },
+  {
+    "id": "json_schema_package_json",
+    "prompt": "Generate a valid package.json file for a Node.js project named 'my-app' with version '1.0.0'.",
+    "expected": "{\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\", \"pattern\": \"^my-app$\"}, \"version\": {\"type\": \"string\", \"pattern\": \"^1\\\\.0\\\\.0$\"}}, \"required\": [\"name\", \"version\"]}",
+    "eval_type": "json_schema"
+  },
+  {
+    "id": "git_undo_commit",
+    "prompt": "What is the git command to completely remove the last commit and its changes from your local repository history? Return ONLY the command.",
+    "expected": "git reset --hard HEAD~1",
+    "eval_type": "exact"
+  }
+]
