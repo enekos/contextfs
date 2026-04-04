@@ -195,9 +195,6 @@ func (d *Daemon) HandleFileDelete(ctx context.Context, filePath string) error {
 }
 
 func (d *Daemon) ProcessFile(ctx context.Context, filePath string) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
 	abs := filepath.Clean(filePath)
 	if !d.shouldProcessFile(abs) {
 		return nil
@@ -210,16 +207,29 @@ func (d *Daemon) ProcessFile(ctx context.Context, filePath string) error {
 		return nil
 	}
 	fp := fmt.Sprintf("%d:%d", st.Size(), st.ModTime().UnixMilli())
-	if d.fileFingerprints[abs] == fp {
+	
+	d.mu.Lock()
+	existingFp := d.fileFingerprints[abs]
+	d.mu.Unlock()
+	
+	if existingFp == fp {
 		return nil
 	}
+	
 	raw, err := os.ReadFile(abs)
 	if err != nil {
 		return nil
 	}
 	contentHash := hashText(string(raw))
-	if d.fileContentHashes[abs] == contentHash {
+	
+	d.mu.Lock()
+	existingContentHash := d.fileContentHashes[abs]
+	d.mu.Unlock()
+	
+	if existingContentHash == contentHash {
+		d.mu.Lock()
 		d.fileFingerprints[abs] = fp
+		d.mu.Unlock()
 		return nil
 	}
 
@@ -231,11 +241,19 @@ func (d *Daemon) ProcessFile(ctx context.Context, filePath string) error {
 		"logic_graph": summary.LogicGraph,
 	}
 	payloadHash := hashText(summary.Abstract + "\n" + summary.Overview + "\n" + summary.Content + "\n" + mustJSON(metadata))
-	if d.nodePayloadHashes[abs] == payloadHash {
+	
+	d.mu.Lock()
+	existingPayloadHash := d.nodePayloadHashes[abs]
+	d.mu.Unlock()
+	
+	if existingPayloadHash == payloadHash {
+		d.mu.Lock()
 		d.fileFingerprints[abs] = fp
 		d.fileContentHashes[abs] = contentHash
+		d.mu.Unlock()
 		return nil
 	}
+	
 	if err := d.manager.UpsertFileContextNode(
 		ctx,
 		d.fileToURI(abs),
@@ -249,9 +267,13 @@ func (d *Daemon) ProcessFile(ctx context.Context, filePath string) error {
 	); err != nil {
 		return err
 	}
+	
+	d.mu.Lock()
 	d.fileFingerprints[abs] = fp
 	d.fileContentHashes[abs] = contentHash
 	d.nodePayloadHashes[abs] = payloadHash
+	d.mu.Unlock()
+	
 	return nil
 }
 
@@ -298,8 +320,8 @@ func (d *Daemon) runWithConcurrency(ctx context.Context, items []string, concurr
 	if concurrency < 1 {
 		concurrency = 1
 	}
-	ch := make(chan string)
-	errCh := make(chan error, concurrency)
+	ch := make(chan string, len(items))
+	errCh := make(chan error, len(items))
 	var wg sync.WaitGroup
 	worker := func() {
 		defer wg.Done()
@@ -313,14 +335,14 @@ func (d *Daemon) runWithConcurrency(ctx context.Context, items []string, concurr
 	if n > len(items) {
 		n = len(items)
 	}
-	for i := 0; i < n; i++ {
-		wg.Add(1)
-		go worker()
-	}
 	for _, item := range items {
 		ch <- item
 	}
 	close(ch)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go worker()
+	}
 	wg.Wait()
 	select {
 	case err := <-errCh:

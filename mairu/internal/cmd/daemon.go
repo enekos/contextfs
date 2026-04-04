@@ -49,6 +49,7 @@ func init() {
 				return err
 			}
 			d := daemon.New(remoteManager{}, project, dir, daemon.Options{})
+			d.LoadCache()
 			if err := d.ProcessAllFiles(context.Background()); err != nil {
 				return err
 			}
