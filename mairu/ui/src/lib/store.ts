@@ -1,7 +1,7 @@
 import { writable } from 'svelte/store';
 
 export type AgentEvent = {
-  Type: "text" | "status" | "error" | "done" | "tool_call" | "tool_result";
+  Type: "text" | "status" | "error" | "done" | "tool_call" | "tool_result" | "log";
   Content: string;
   ToolName?: string;
   ToolArgs?: any;
@@ -21,6 +21,7 @@ export type Message = {
   role: "user" | "assistant" | "system";
   content: string;
   statuses: string[];
+  logs: string[];
   toolCalls: ToolCall[];
 };
 
@@ -58,6 +59,7 @@ async function loadSessionMessages(sessionName: string) {
     role: mapSavedRole(msg.role),
     content: msg.content,
     statuses: [],
+    logs: [],
     toolCalls: []
   }));
   messages.set(loaded);
@@ -197,10 +199,19 @@ export async function connectWs(sessionName?: string, forceReconnect = false) {
     } else if (data.Type === "error") {
       messages.update(msgs => [
         ...msgs, 
-        { id: crypto.randomUUID(), role: "system", content: `Error: ${data.Content}`, statuses: [], toolCalls: [] }
+        { id: crypto.randomUUID(), role: "system", content: `Error: ${data.Content}`, statuses: [], logs: [], toolCalls: [] }
       ]);
       isGenerating.set(false);
       currentMessageId = null;
+    } else if (data.Type === "log") {
+      messages.update(msgs => {
+        const lastMsg = msgs[msgs.length - 1];
+        if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
+          lastMsg.logs = [...lastMsg.logs, data.Content];
+          return [...msgs];
+        }
+        return msgs;
+      });
     }
   };
 }
@@ -209,13 +220,13 @@ export function sendMessage(content: string) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     messages.update(msgs => [
       ...msgs, 
-      { id: crypto.randomUUID(), role: "user", content, statuses: [], toolCalls: [] }
+      { id: crypto.randomUUID(), role: "user", content, statuses: [], logs: [], toolCalls: [] }
     ]);
     
     currentMessageId = crypto.randomUUID();
     messages.update(msgs => [
       ...msgs, 
-      { id: currentMessageId!, role: "assistant", content: "", statuses: [], toolCalls: [] }
+      { id: currentMessageId!, role: "assistant", content: "", statuses: [], logs: [], toolCalls: [] }
     ]);
     
     isGenerating.set(true);

@@ -106,6 +106,11 @@
                 <span class="text-indigo-400">[{new Date().toLocaleTimeString()}]</span> {status}
               </div>
             {/each}
+            {#each msg.logs as log}
+              <div class="text-slate-400 border-l-2 border-amber-500 pl-3 py-1 bg-slate-950/50 rounded-r">
+                <span class="text-amber-400">[{new Date().toLocaleTimeString()}]</span> {log}
+              </div>
+            {/each}
             {#each msg.toolCalls as tc}
               <div class="text-slate-400 border-l-2 border-emerald-500 pl-3 py-1 bg-slate-950/50 rounded-r">
                 <span class="text-emerald-400">[{new Date().toLocaleTimeString()}]</span> 
@@ -119,7 +124,7 @@
               </div>
             {/each}
           {/each}
-          {#if $messages.length === 0 || ($messages.every(m => m.statuses.length === 0 && m.toolCalls.length === 0))}
+          {#if $messages.length === 0 || ($messages.every(m => m.statuses.length === 0 && m.toolCalls.length === 0 && m.logs.length === 0))}
             <div class="text-slate-500 text-center py-8 font-sans">No recent activity logs available.</div>
           {/if}
         </div>

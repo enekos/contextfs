@@ -136,7 +136,7 @@ export class CodebaseDaemon {
     await this.processAllFiles();
 
     // Watch for changes
-    this.watcher = chokidar.watch(`${this.watchDir}/**/*.{ts,tsx,js,jsx,mjs,cjs,py,go}`, {
+    this.watcher = chokidar.watch(this.watchDir, {
       ignored: /(^|[/\\])\..|node_modules|dist|build/, // ignore dotfiles and generated folders
       persistent: true,
       ignoreInitial: true,

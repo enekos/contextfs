@@ -35,7 +35,7 @@ func sessionNameFromQuery(c *gin.Context) string {
 	return name
 }
 
-func StartServer(port int, apiKey, meiliURL, meiliAPIKey string) error {
+func SetupRouter(apiKey, meiliURL, meiliAPIKey string) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	contextServerURL := strings.TrimSpace(os.Getenv("MAIRU_CONTEXT_SERVER_URL"))
@@ -43,7 +43,7 @@ func StartServer(port int, apiKey, meiliURL, meiliAPIKey string) error {
 
 	projectRoot, err := os.Getwd()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// API routes
@@ -226,7 +226,7 @@ func StartServer(port int, apiKey, meiliURL, meiliAPIKey string) error {
 	// Serve the embedded Svelte UI
 	distFS, err := fs.Sub(ui.FS, "dist")
 	if err != nil {
-		return fmt.Errorf("failed to load ui assets: %w", err)
+		return nil, fmt.Errorf("failed to load ui assets: %w", err)
 	}
 
 	r.NoRoute(func(c *gin.Context) {
@@ -245,6 +245,14 @@ func StartServer(port int, apiKey, meiliURL, meiliAPIKey string) error {
 		c.FileFromFS(path, http.FS(distFS))
 	})
 
+	return r, nil
+}
+
+func StartServer(port int, apiKey, meiliURL, meiliAPIKey string) error {
+	r, err := SetupRouter(apiKey, meiliURL, meiliAPIKey)
+	if err != nil {
+		return err
+	}
 	addr := fmt.Sprintf(":%d", port)
 	return r.Run(addr)
 }

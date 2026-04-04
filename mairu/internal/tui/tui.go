@@ -925,6 +925,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.renderMessages()
 			m.autoScroll()
 			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "log" {
+			// Print to toolLog so it shows up in "Tool Drilldown" inside explore sidebar
+			m.pushToolLog("log", msg.Content)
+			// Don't show log events in main chat, just background sidebar
+			cmds = append(cmds, waitForStream(m.activeStream))
 		} else if msg.Type == "status" {
 			m.toolEvents = append(m.toolEvents, msg.Content)
 			m.pushToolLog("status", msg.Content)
