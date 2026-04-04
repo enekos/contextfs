@@ -19,8 +19,12 @@ type CallableNodeRef struct {
 
 func parseTypeScript(source string) FileGraph {
 	parser := sitter.NewParser()
+	defer parser.Close()
 	parser.SetLanguage(typescript.GetLanguage())
 	tree, _ := parser.ParseCtx(context.Background(), nil, []byte(source))
+	if tree != nil {
+		defer tree.Close()
+	}
 	root := tree.RootNode()
 
 	symbols := []LogicSymbol{}

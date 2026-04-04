@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -617,4 +619,79 @@ func TestContextCommandsEndToEnd(t *testing.T) {
 	if len(api.nodes) < 3 {
 		t.Fatalf("expected nodes to include root, restored child, and ingest/scrape nodes, got %d", len(api.nodes))
 	}
+}
+
+// TestDaemonASTIngestionEndToEnd runs the real AST daemon against a temp TypeScript file,
+// upserts via the same /api/context path as production, then queries /api/search (node search).
+func TestDaemonASTIngestionEndToEnd(t *testing.T) {
+	api := newE2EContextAPI()
+	ctxSrv := httptest.NewServer(api)
+	defer ctxSrv.Close()
+
+	t.Setenv("MAIRU_CONTEXT_SERVER_URL", ctxSrv.URL)
+	t.Setenv("MAIRU_CONTEXT_SERVER_TOKEN", "")
+	project := "e2e-ast"
+
+	dir := t.TempDir()
+	const tsFile = "ingest_probe.ts"
+	src := "export function e2eAstCanary() { return 1; }\n"
+	if err := os.WriteFile(filepath.Join(dir, tsFile), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rootCmd.SetOut(io.Discard)
+	rootCmd.SetErr(io.Discard)
+	rootCmd.SetArgs([]string{"daemon", dir, "-P", project})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("daemon scan: %v", err)
+	}
+
+	wantURI := "contextfs://" + project + "/" + tsFile
+	api.mu.Lock()
+	n, ok := api.nodes[wantURI]
+	api.mu.Unlock()
+	if !ok {
+		t.Fatalf("expected node %q after daemon ingest, got %d nodes", wantURI, len(api.nodes))
+	}
+	combined := strings.ToLower(n.Abstract + n.Overview + n.Content)
+	if !strings.Contains(combined, "e2eastcanary") {
+		t.Fatalf("expected AST output to mention e2eAstCanary; abstract=%q overview=%.120q content=%.200q",
+			n.Abstract, n.Overview, n.Content)
+	}
+
+	searchRaw, err := contextGet("/api/search", map[string]string{
+		"q":       "e2eastcanary",
+		"type":    "context",
+		"topK":    "10",
+		"project": project,
+	})
+	if err != nil {
+		t.Fatalf("context search: %v", err)
+	}
+	var searchOut struct {
+		ContextNodes []map[string]any `json:"contextNodes"`
+	}
+	if err := json.Unmarshal(searchRaw, &searchOut); err != nil {
+		t.Fatalf("search JSON: %v body=%s", err, string(searchRaw))
+	}
+	var saw bool
+	for _, cn := range searchOut.ContextNodes {
+		u, _ := cn["uri"].(string)
+		if u == wantURI {
+			saw = true
+			break
+		}
+	}
+	if !saw {
+		t.Fatalf("search results missing %q: %s", wantURI, string(searchRaw))
+	}
+
+	execCommand(t, func() interface {
+		SetOut(io.Writer)
+		SetErr(io.Writer)
+		SetArgs([]string)
+		Execute() error
+	} {
+		return newNodeCmd()
+	}, "-P", project, "search", "e2eastcanary", "-k", "5")
 }

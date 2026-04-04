@@ -321,7 +321,7 @@ func (d *Daemon) runWithConcurrency(ctx context.Context, items []string, concurr
 	if concurrency < 1 {
 		concurrency = 1
 	}
-	ch := make(chan string, len(items))
+	ch := make(chan string)
 	errCh := make(chan error, len(items))
 	var wg sync.WaitGroup
 	worker := func() {
@@ -336,21 +336,28 @@ func (d *Daemon) runWithConcurrency(ctx context.Context, items []string, concurr
 	if n > len(items) {
 		n = len(items)
 	}
-	for _, item := range items {
-		ch <- item
-	}
-	close(ch)
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go worker()
 	}
+
+	go func() {
+		for _, item := range items {
+			ch <- item
+		}
+		close(ch)
+	}()
+
 	wg.Wait()
-	select {
-	case err := <-errCh:
-		return err
-	default:
-		return nil
+	close(errCh)
+
+	var firstErr error
+	for err := range errCh {
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
+	return firstErr
 }
 
 func (d *Daemon) fileToURI(filePath string) string {

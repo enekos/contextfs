@@ -17,9 +17,9 @@ A dynamic context and memory storage system for coding agents. Provides native h
 ```bash
 docker compose up -d    # start Meilisearch
 bun install
-bun --cwd mairu/dashboard install
+bun --cwd mairu/ui install
 cp .env.example .env    # fill in MEILI_URL, GEMINI_API_KEY
-bun run setup           # create Meilisearch indexes (destructive — drops and recreates)
+make setup              # create Meilisearch indexes (destructive — drops and recreates)
 ```
 
 ## Commands
@@ -28,12 +28,12 @@ bun run setup           # create Meilisearch indexes (destructive — drops and 
 |---|---|
 | `docker compose up -d` | Start Meilisearch container |
 | `docker compose down` | Stop Meilisearch container |
-| `make build` | Compile Go binary to `mairu/bin/` |
+| `make build` | Compile Go binary to `bin/mairu-agent` |
 | `make test` | Run Go tests |
 | `make lint` | Run go vet |
 | `make clean` | Remove `mairu/bin/` |
-| `bun run setup` | Init/reset Meilisearch indexes |
-| `bun run dashboard:api` | Start REST API on port 8787 |
+| `make setup` | Init/reset Meilisearch indexes |
+| `make dashboard` | Start context server (API) + Svelte dev UI |
 | `bun run dashboard:dev` | Start Svelte dev server on port 5173 |
 | `bun run dashboard:build` | Build Svelte UI |
 
@@ -170,7 +170,7 @@ RECENCY_DECAY=0.5            # Decay factor at scale distance
 
 # Agent Integration Instructions
 
-To integrate OpenContextFS into Claude or Opencode using the CLI, refer to this section. You must use the terminal (`bash` tool) to invoke `mairu-context` (or compatibility alias `context-cli`).
+To integrate OpenContextFS into Claude or Opencode using the CLI, refer to this section. You must use the terminal (`bash` tool) to invoke `mairu-agent` (or compatibility alias `context-cli`).
 
 **IMPORTANT**: Always use the `-P, --project <project>` flag when managing or searching memories/context so that information is correctly isolated by project.
 
@@ -179,9 +179,9 @@ When starting a new session or debugging an issue, you MUST search memories and 
 Prefer direct retrieval commands first so the agent can control scope and ranking behavior explicitly:
 
 ```bash
-mairu-context memory search "authentication token validation rules" -k 5 -P my-project
-mairu-context node search "authentication architecture" -k 5 -P my-project
-mairu-context node ls "contextfs://my-project/backend/auth" -P my-project
+mairu-agent memory search "authentication token validation rules" -k 5 -P my-project
+mairu-agent node search "authentication architecture" -k 5 -P my-project
+mairu-agent node ls "contextfs://my-project/backend/auth" -P my-project
 ```
 
 ### 2. Natural Language Storage (Recommended)
@@ -189,14 +189,14 @@ When you successfully complete a complex task, summarize the structural decision
 **Note:** Always pass `-y` to auto-approve mutations.
 
 ```bash
-mairu-context vibe-mutation "remember that we switched from REST to gRPC for internal service calls" -P my-project -y
+mairu-agent vibe-mutation "remember that we switched from REST to gRPC for internal service calls" -P my-project -y
 ```
 
 ### 3. Natural-Language Retrieval (Optional Fallback)
 Use `vibe-query` only when direct memory/node searches are not sufficient (for example, broad or ambiguous questions that need multi-step planning).
 
 ```bash
-mairu-context vibe-query "how does the authentication system work?" -P my-project
+mairu-agent vibe-query "how does the authentication system work?" -P my-project
 ```
 
 ### 4. Advanced/Precise Operations
@@ -204,21 +204,21 @@ Use direct commands when you need exact control over what is stored or retrieved
 
 **Memory Store:**
 ```bash
-mairu-context memory store "In project X, we use Vitest instead of Jest for unit testing." -c observation -o agent -i 5 -P my-project
+mairu-agent memory store "In project X, we use Vitest instead of Jest for unit testing." -c observation -o agent -i 5 -P my-project
 ```
 
 **Memory Search:**
 ```bash
-mairu-context memory search "testing framework" -k 5 -P my-project
+mairu-agent memory search "testing framework" -k 5 -P my-project
 
 # With highlights
-mairu-context memory search "authentication setup" -k 5 -P my-project --highlight
+mairu-agent memory search "authentication setup" -k 5 -P my-project --highlight
 ```
 
 **Managing Context Nodes (Hierarchical Knowledge):**
 ```bash
-mairu-context node store "contextfs://my-project/backend/auth" "Auth Module" "Uses JWT with RSA signatures." -P my-project
-mairu-context node ls "contextfs://my-project/backend" -P my-project
+mairu-agent node store "contextfs://my-project/backend/auth" "Auth Module" "Uses JWT with RSA signatures." -P my-project
+mairu-agent node ls "contextfs://my-project/backend" -P my-project
 ```
 
 Agents should proactively search memories and context nodes when beginning a task, and store important discoveries or user preferences as they work.

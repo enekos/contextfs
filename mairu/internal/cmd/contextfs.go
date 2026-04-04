@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"mairu/internal/contextsrv"
 	"mairu/internal/scraper"
 
 	"github.com/spf13/cobra"
@@ -21,6 +23,7 @@ func init() {
 	rootCmd.AddCommand(newMemoryCmd())
 	rootCmd.AddCommand(newSkillCmd())
 	rootCmd.AddCommand(newNodeCmd())
+	rootCmd.AddCommand(newCodeCmd())
 	rootCmd.AddCommand(newVibeCmd())
 	rootCmd.AddCommand(newVibeQueryAliasCmd())
 	rootCmd.AddCommand(newVibeMutationAliasCmd())
@@ -427,6 +430,105 @@ func newSkillCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(addCmd, searchCmd, listCmd, deleteCmd)
+	return cmd
+}
+
+func newCodeCmd() *cobra.Command {
+	var project string
+	cmd := &cobra.Command{
+		Use:   "code",
+		Short: "Semantic code search (bypasses LLM vibe query)",
+	}
+	cmd.PersistentFlags().StringVarP(&project, "project", "P", "", "Project name")
+
+	searchCmd := &cobra.Command{
+		Use:   "search <query>",
+		Short: "Search code files natively via AST daemon context nodes",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, _ := cmd.Flags().GetString("format")
+			out, err := contextGet("/api/search", searchParamsFromFlags(cmd, args[0], "context", project))
+			if err != nil {
+				return err
+			}
+
+			if format == "json" {
+				printJSON(out)
+				return nil
+			}
+
+			// Parse response to extract paths
+			var resp struct {
+				ContextNodes []struct {
+					URI      string  `json:"uri"`
+					Name     string  `json:"name"`
+					Abstract string  `json:"abstract"`
+					Score    float64 `json:"_score"` // Meilisearch score if available
+				} `json:"contextNodes"`
+			}
+			if err := json.Unmarshal(out, &resp); err != nil {
+				// Fallback to raw if parsing fails
+				printJSON(out)
+				return nil
+			}
+
+			var validNodes []struct {
+				URI      string  `json:"uri"`
+				Name     string  `json:"name"`
+				Abstract string  `json:"abstract"`
+				Score    float64 `json:"_score"`
+			}
+
+			for _, node := range resp.ContextNodes {
+				// strictly scope to daemon-generated files (or project files)
+				// file URIs look like: contextfs://<project>/path/to/file.ext
+				prefix := "contextfs://"
+				if project != "" {
+					prefix += project + "/"
+				}
+				if project != "" && !strings.HasPrefix(node.URI, prefix) {
+					continue
+				}
+				validNodes = append(validNodes, node)
+			}
+
+			if len(validNodes) == 0 {
+				fmt.Println("No matching code files found.")
+				return nil
+			}
+
+			for _, node := range validNodes {
+				// Convert contextfs://my-project/src/file.ts -> src/file.ts
+				path := strings.TrimPrefix(node.URI, "contextfs://")
+				if project != "" {
+					path = strings.TrimPrefix(path, project+"/")
+				} else {
+					// If no project specified, extract it from URI
+					parts := strings.SplitN(path, "/", 2)
+					if len(parts) == 2 {
+						path = parts[1]
+					}
+				}
+
+				if format == "paths" {
+					fmt.Println(path)
+				} else {
+					// Default format: path + abstract
+					fmt.Printf("%s\n", path)
+					if node.Abstract != "" {
+						fmt.Printf("  %s\n", strings.TrimSpace(node.Abstract))
+					}
+					fmt.Println()
+				}
+			}
+
+			return nil
+		},
+	}
+	addCommonSearchFlags(searchCmd)
+	searchCmd.Flags().String("format", "default", "Output format: default, paths, or json")
+
+	cmd.AddCommand(searchCmd)
 	return cmd
 }
 
@@ -898,40 +1000,55 @@ func newIngestCmd() *cobra.Command {
 
 func newScrapeCmd() *cobra.Command {
 	var project string
+	var maxPages int
+	var maxDepth int
+	var concurrency int
+
 	cmd := &cobra.Command{
 		Use:   "scrape <url>",
-		Short: "Fetch a URL, extract content, and store as a context node",
+		Short: "Fetch a URL, extract content, summarize, and store as a context node",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			urlStr := args[0]
-			fmt.Printf("Fetching %s...\n", urlStr)
+			fmt.Printf("Crawling %s...\n", urlStr)
 
-			resp, err := http.Get(urlStr)
+			opts := scraper.ScrapeOptions{
+				Project: project,
+				CrawlOptions: scraper.CrawlOptions{
+					SeedURL:     urlStr,
+					MaxPages:    maxPages,
+					MaxDepth:    maxDepth,
+					Concurrency: concurrency,
+				},
+			}
+
+			storeFn := func(ctx context.Context, input contextsrv.ContextCreateInput) error {
+				fmt.Printf("Storing node %s...\n", input.URI)
+				var parent string
+				if input.ParentURI != nil {
+					parent = *input.ParentURI
+				}
+				return runNodeStore(input.Project, input.URI, input.Name, input.Abstract, parent, input.Overview, input.Content)
+			}
+
+			apiKey := GetAPIKey()
+			res, err := scraper.ScrapeAndIngest(cmd.Context(), opts, storeFn, apiKey)
 			if err != nil {
-				return fmt.Errorf("failed to fetch URL: %w", err)
+				return err
 			}
-			defer resp.Body.Close()
 
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return fmt.Errorf("failed to read response: %w", err)
+			fmt.Printf("Scraping complete. Total pages: %d, Stored: %d, Skipped: %d\n", res.PagesTotal, res.PagesStored, res.PagesSkipped)
+			if len(res.Errors) > 0 {
+				fmt.Printf("Errors encountered: %d\n", len(res.Errors))
 			}
-			html := string(b)
 
-			extracted := scraper.ExtractContent(html, "")
-
-			uri := "contextfs://scrape/" + url.PathEscape(urlStr)
-			name := extracted.Title
-			if name == "" {
-				name = urlStr
-			}
-			abstract := fmt.Sprintf("Scraped from %s (%d words)", urlStr, extracted.WordCount)
-
-			fmt.Printf("Storing node %s...\n", uri)
-			return runNodeStore(project, uri, name, abstract, "", "", extracted.Markdown)
+			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&project, "project", "P", "default", "Project namespace")
+	cmd.Flags().IntVar(&maxPages, "max-pages", 50, "Max pages to crawl")
+	cmd.Flags().IntVar(&maxDepth, "max-depth", 3, "Max depth to crawl")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 3, "Concurrent requests")
 	return cmd
 }
 

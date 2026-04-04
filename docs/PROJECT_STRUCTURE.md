@@ -1,20 +1,14 @@
 # Mairu Project Structure
 
-This repository is organized as a single project named **Mairu** with multiple runtime components.
+This repository is organized as a single project named **Mairu** with a unified Go runtime.
 
 ## Components
 
 - `mairu/` - Go runtime and core product surface
-  - `cmd/` - CLI entrypoints
+  - `cmd/` - CLI entrypoints (`mairu` binary)
   - `internal/agent/` - coding agent engine
   - `internal/contextsrv/` - centralized context server (HTTP API)
-  - `ui/` - embedded web UI for the Go runtime
-- `mairu/contextfs/` - TypeScript context engine and CLI
-  - `src/` - CLI, dashboard API, ingestion daemon, retrieval logic
-  - `scripts/` - local Meilisearch lifecycle script
-  - `types/` - custom type roots
-- `mairu/ui/` - unified Svelte web UI for chat + context dashboard features
-- `tests/` - Vitest coverage for TypeScript engine
+  - `ui/` - unified Svelte web UI for chat + context dashboard features
 - `docs/` - project-level docs, specs, and plans
 
 ## Typical Flows
@@ -22,17 +16,17 @@ This repository is organized as a single project named **Mairu** with multiple r
 ### 1) Run Unified Dashboard Stack
 
 ```bash
-bun run dashboard
+make dashboard
 ```
 
 This starts:
-- `mairu-agent context-server` on port `8788` (via `bun run dashboard:api`)
-- `mairu/ui` dev server (via `bun run dashboard:dev`)
+- `mairu-agent context-server` on port `8788`
+- `mairu/ui` dev server on port `5173`
 
 ### 2) Run Mairu Agent (Go)
 
 ```bash
-bun run mairu:build
+make mairu-build
 ./mairu/bin/mairu-agent tui
 ```
 
@@ -44,10 +38,7 @@ bun run mairu:build
 
 ## Data and Runtime Artifacts
 
-Local Meilisearch artifacts are created either at repository root or under `mairu/contextfs/`, depending on script entrypoint:
-
-- `.tools/` / `.data/` / `.logs/`
-- `mairu/contextfs/.tools/` / `mairu/contextfs/.data/` / `mairu/contextfs/.logs/`
+Local Meilisearch artifacts are created at the repository root in `.mairu/` (if using local fallback script) or managed by Docker.
 
 Both paths are git-ignored.
 
@@ -55,4 +46,4 @@ Both paths are git-ignored.
 
 - Project name: **Mairu**
 - Go binary: `mairu-agent`
-- TypeScript context CLI: `mairu-context` (with backward-compatible alias `context-cli`)
+- Web UI: **Mairu UI**

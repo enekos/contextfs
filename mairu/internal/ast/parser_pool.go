@@ -1,6 +1,8 @@
 package ast
 
-import "sync"
+import (
+	"sync"
+)
 
 var parserPoolState struct {
 	sync.Mutex

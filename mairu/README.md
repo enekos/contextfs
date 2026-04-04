@@ -44,7 +44,6 @@ go build -C mairu -o bin/mairu-agent ./cmd/mairu
 
 ## Notes
 
-- The TypeScript context engine now lives at `mairu/contextfs/`.
 - The unified dashboard UI lives at `mairu/ui/`.
 - Core ContextFS workflows (`memory`, `skill`, `node`, `vibe`, `vibe-query`, `vibe-mutation`, `ingest`, `daemon`) are native Go commands in `mairu` CLI.
 - Go developer tooling is centralized in `mairu/scripts/go-dev.sh` and surfaced via root `make` targets.

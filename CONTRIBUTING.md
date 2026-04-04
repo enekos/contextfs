@@ -17,22 +17,22 @@ bun --cwd mairu/ui install
 cp .env.example .env
 ```
 
-3. Build and typecheck:
+3. Build Go and typecheck frontend:
 
 ```bash
-bun run build
-bun run typecheck
+make build
+bun run --cwd mairu/ui check
 ```
 
 ## Useful Commands
 
-- `bun run setup` - reset and initialize database schema (destructive).
-- `bun run dashboard:api` - run Go context server API.
-- `bun run dashboard:dev` - run unified Svelte dashboard (`mairu/ui`).
-- `bun run eval:retrieval -- --dataset eval/dataset.json --topK 5 --verbose true` - run retrieval benchmark.
-- `context-cli memory search "query" -P my-project --mode surface` - curated-memory-first retrieval.
-- `context-cli memory feedback -P my-project --arm <arm> --outcome accepted|ignored --rank 1` - feed reward signals.
-- `context-cli memory policy -P my-project` / `context-cli memory policy -P my-project --reset` - inspect/reset adaptive policy state.
+- `make setup` - reset and initialize database schema (destructive).
+- `make dashboard` - run Go context server API and Svelte dev server.
+- `bun run --cwd mairu/ui dev` - run unified Svelte dashboard (`mairu/ui`).
+- `make eval-retrieval` - run retrieval benchmark.
+- `mairu-agent memory search "query" -P my-project --mode surface` - curated-memory-first retrieval.
+- `mairu-agent memory feedback -P my-project --arm <arm> --outcome accepted|ignored --rank 1` - feed reward signals.
+- `mairu-agent memory policy -P my-project` / `mairu-agent memory policy -P my-project --reset` - inspect/reset adaptive policy state.
 
 ## Contribution Guidelines
 
@@ -40,8 +40,7 @@ bun run typecheck
 - Update docs and examples when behavior changes.
 - Preserve backward compatibility where practical.
 - Do not commit secrets (`.env`, tokens, credentials).
-- If changing adaptive retrieval behavior, run eval in both baseline and adaptive modes:
-  - `bun run eval:retrieval -- --dataset eval/dataset.json --project my-project --adaptive-compare true`
+- If changing adaptive retrieval behavior, run eval in both baseline and adaptive modes.
 
 ## Pull Requests
 

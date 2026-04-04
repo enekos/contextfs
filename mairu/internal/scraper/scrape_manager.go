@@ -6,7 +6,9 @@ import (
 	"mairu/internal/contextsrv"
 )
 
-func ScrapeAndIngest(ctx context.Context, options ScrapeOptions, service contextsrv.Service, geminiAPIKey string) (*ScrapeResult, error) {
+type NodeStoreFunc func(ctx context.Context, input contextsrv.ContextCreateInput) error
+
+func ScrapeAndIngest(ctx context.Context, options ScrapeOptions, storeFn NodeStoreFunc, geminiAPIKey string) (*ScrapeResult, error) {
 	out := make(chan CrawledPage, 10)
 	go Crawl(options.CrawlOptions, out)
 
@@ -21,13 +23,11 @@ func ScrapeAndIngest(ctx context.Context, options ScrapeOptions, service context
 
 		summary := SummarizePage(ctx, geminiAPIKey, content.Title, content.Markdown, page.URL)
 
-		if !options.DryRun && service != nil {
+		if !options.DryRun && storeFn != nil {
 			uri := URLToURI(page.URL)
 			parentURI := URLToParentURI(page.URL)
 
-			// Just a basic save (the TS codebase did deduplication, etc.)
-			// We can just add it via the service.
-			_, err := service.CreateContextNode(contextsrv.ContextCreateInput{
+			err := storeFn(ctx, contextsrv.ContextCreateInput{
 				URI:       uri,
 				Project:   options.Project,
 				ParentURI: parentURI,
