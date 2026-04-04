@@ -75,7 +75,7 @@ func TestLoadSavedSessionMessages_MigratesLegacyJSONAsDefault(t *testing.T) {
 	if len(messages) != 1 {
 		t.Fatalf("expected 1 migrated message, got %d", len(messages))
 	}
-	if messages[0].Role != "user" || messages[0].Content != "hello" {
+	if messages[0].Role != "user" || len(messages[0].Parts) != 1 || messages[0].Parts[0].Text != "hello" {
 		t.Fatalf("unexpected migrated message content: %#v", messages[0])
 	}
 }
