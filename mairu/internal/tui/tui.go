@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -533,13 +534,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						args := strings.Join(cmdParts[2:], " ")
 						projectName := filepath.Base(m.agent.GetRoot())
 
-						var bashCmd string
+						var out []byte
+						var err error
 						if subCmd == "search" {
-							bashCmd = fmt.Sprintf("context-cli memory search %q -k 5 -P %q", args, projectName)
 							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Searching memory: " + args})
+							out, err = m.contextGet("/api/search", map[string]string{
+								"q":       args,
+								"type":    "memory",
+								"topK":    "5",
+								"project": projectName,
+							})
 						} else if subCmd == "store" {
-							bashCmd = fmt.Sprintf("context-cli memory store %q -c observation -o user -i 5 -P %q", args, projectName)
 							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Storing memory: " + args})
+							out, err = m.contextPost("/api/memories", map[string]any{
+								"project":    projectName,
+								"content":    args,
+								"category":   "observation",
+								"owner":      "user",
+								"importance": 5,
+							})
 						} else {
 							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /memory <search|store> <text>"})
 							m.renderMessages()
@@ -550,11 +563,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.renderMessages()
 						m.viewport.GotoBottom()
 
-						out, err := m.agent.RunBash(bashCmd, 15000)
 						if err != nil {
-							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Memory operation failed: " + err.Error() + "\n" + out})
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Memory operation failed: " + err.Error()})
 						} else {
-							m.messages = append(m.messages, ChatMessage{Role: "System", Content: out})
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "```json\n" + prettyJSON(out) + "\n```"})
 						}
 					} else {
 						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /memory <search|store> <text>"})
@@ -569,13 +581,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						args := strings.Join(cmdParts[2:], " ")
 						projectName := filepath.Base(m.agent.GetRoot())
 
-						var bashCmd string
+						var out []byte
+						var err error
 						if subCmd == "search" {
-							bashCmd = fmt.Sprintf("context-cli node search %q -k 5 -P %q", args, projectName)
 							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Searching nodes: " + args})
+							out, err = m.contextGet("/api/search", map[string]string{
+								"q":       args,
+								"type":    "context",
+								"topK":    "5",
+								"project": projectName,
+							})
 						} else if subCmd == "ls" {
-							bashCmd = fmt.Sprintf("context-cli node ls %q -P %q", args, projectName)
 							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Listing node: " + args})
+							out, err = m.contextGet("/api/context", map[string]string{
+								"project":   projectName,
+								"parentUri": args,
+							})
 						} else {
 							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /node <search|ls> <text|uri>"})
 							m.renderMessages()
@@ -586,18 +607,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.renderMessages()
 						m.viewport.GotoBottom()
 
-						out, err := m.agent.RunBash(bashCmd, 15000)
 						if err != nil {
-							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Node operation failed: " + err.Error() + "\n" + out})
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Node operation failed: " + err.Error()})
 						} else {
-							prettyOut := out
-							if strings.HasPrefix(strings.TrimSpace(out), "{") || strings.HasPrefix(strings.TrimSpace(out), "[") {
-								prettyCmd := fmt.Sprintf("echo %q | jq .", out)
-								if jsonOut, err := m.agent.RunBash(prettyCmd, 5000); err == nil && jsonOut != "" {
-									prettyOut = jsonOut
-								}
-							}
-							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "```json\n" + prettyOut + "\n```"})
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "```json\n" + prettyJSON(out) + "\n```"})
 						}
 					} else {
 						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /node <search|ls> <text|uri>"})
@@ -610,17 +623,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if len(cmdParts) > 1 {
 						args := strings.Join(cmdParts[1:], " ")
 						projectName := filepath.Base(m.agent.GetRoot())
-						bashCmd := fmt.Sprintf("context-cli vibe-query %q -P %q", args, projectName)
 
 						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Vibe querying: " + args})
 						m.renderMessages()
 						m.viewport.GotoBottom()
 
-						out, err := m.agent.RunBash(bashCmd, 30000)
+						out, err := m.contextPost("/api/vibe/query", map[string]any{
+							"prompt":  args,
+							"project": projectName,
+							"topK":    5,
+						})
 						if err != nil {
-							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Vibe query failed: " + err.Error() + "\n" + out})
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Vibe query failed: " + err.Error()})
 						} else {
-							m.messages = append(m.messages, ChatMessage{Role: "System", Content: out})
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "```json\n" + prettyJSON(out) + "\n```"})
 						}
 					} else {
 						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /vibe <query>"})
@@ -633,17 +649,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if len(cmdParts) > 1 {
 						args := strings.Join(cmdParts[1:], " ")
 						projectName := filepath.Base(m.agent.GetRoot())
-						bashCmd := fmt.Sprintf("context-cli vibe-mutation %q -P %q -y", args, projectName)
 
 						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Remembering: " + args})
 						m.renderMessages()
 						m.viewport.GotoBottom()
 
-						out, err := m.agent.RunBash(bashCmd, 45000)
+						planOut, err := m.contextPost("/api/vibe/mutation/plan", map[string]any{
+							"prompt":  args,
+							"project": projectName,
+							"topK":    5,
+						})
 						if err != nil {
-							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Vibe mutation failed: " + err.Error() + "\n" + out})
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Vibe planning failed: " + err.Error()})
 						} else {
-							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Knowledge stored successfully:\n" + out})
+							var plan struct {
+								Operations []map[string]any `json:"operations"`
+							}
+							if err := json.Unmarshal(planOut, &plan); err != nil {
+								m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to parse mutation plan: " + err.Error()})
+							} else {
+								execOut, execErr := m.contextPost("/api/vibe/mutation/execute", map[string]any{
+									"project":    projectName,
+									"operations": plan.Operations,
+								})
+								if execErr != nil {
+									m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Vibe mutation failed: " + execErr.Error()})
+								} else {
+									m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Knowledge stored successfully:\n```json\n" + prettyJSON(execOut) + "\n```"})
+								}
+							}
 						}
 					} else {
 						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /remember <fact or rule>"})

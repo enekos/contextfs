@@ -1,6 +1,7 @@
 package contextsrv
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -285,6 +286,7 @@ func NewHandler(svc Service, authToken string) *Handler {
 				TopK:          topK,
 				MinScore:      floatParam(c.Query("minScore"), 0),
 				Highlight:     c.Query("highlight") == "true",
+				FieldBoosts:   parseFieldBoosts(c.Query("fieldBoosts")),
 				Fuzziness:     c.Query("fuzziness"),
 				PhraseBoost:   floatParam(c.Query("phraseBoost"), 0),
 				WeightVector:  floatParam(c.Query("weightVector"), 0),
@@ -411,6 +413,17 @@ func floatParam(raw string, fallback float64) float64 {
 		return fallback
 	}
 	return n
+}
+
+func parseFieldBoosts(raw string) map[string]float64 {
+	if raw == "" {
+		return nil
+	}
+	out := map[string]float64{}
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil
+	}
+	return out
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

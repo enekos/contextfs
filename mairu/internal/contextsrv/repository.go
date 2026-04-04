@@ -470,80 +470,131 @@ func (r *PostgresRepository) DeleteContextNode(ctx context.Context, uri string) 
 }
 
 func (r *PostgresRepository) SearchText(ctx context.Context, opts SearchOptions) (map[string]any, error) {
-	query := opts.Query
 	project := opts.Project
-	store := opts.Store
+	store := normalizeStoreName(opts.Store)
 	topK := opts.TopK
 	if topK <= 0 {
 		topK = 10
 	}
-	if store == "" {
-		store = "all"
+	candidateLimit := topK * 5
+	if candidateLimit < 25 {
+		candidateLimit = 25
 	}
-	q := "%" + strings.ToLower(query) + "%"
+
+	queryTokens := tokenizeForSearch(opts.Query)
+	if len(queryTokens) == 0 {
+		return map[string]any{
+			"memories":     []map[string]any{},
+			"skills":       []map[string]any{},
+			"contextNodes": []map[string]any{},
+		}, nil
+	}
+
+	q := "%" + strings.ToLower(opts.Query) + "%"
 	out := map[string]any{}
+
 	if store == "all" || store == "memories" {
 		rows, err := r.db.QueryContext(ctx, `
-			SELECT id, content FROM memories
+			SELECT id, content, importance, created_at
+			FROM memories
 			WHERE ($1 = '' OR project = $1) AND LOWER(content) LIKE $2
 			ORDER BY created_at DESC LIMIT $3
-		`, project, q, topK)
+		`, project, q, candidateLimit)
 		if err != nil {
 			return nil, err
 		}
-		var items []map[string]any
+		items := []scoredDoc{}
 		for rows.Next() {
 			var id, content string
-			if err := rows.Scan(&id, &content); err != nil {
+			var importance int
+			var createdAt time.Time
+			if err := rows.Scan(&id, &content, &importance, &createdAt); err != nil {
 				rows.Close()
 				return nil, err
 			}
-			items = append(items, map[string]any{"id": id, "content": content, "_hybrid_score": 0.7})
+			fields := map[string]string{"content": content}
+			score := scoreHybrid(fields, queryTokens, createdAt, importance, opts, defaultMemoryWeights())
+			doc := map[string]any{"id": id, "content": content, "_score": score}
+			if opts.Highlight {
+				if h := highlightsForFields(fields, queryTokens); len(h) > 0 {
+					doc["_highlight"] = h
+				}
+			}
+			items = append(items, scoredDoc{score: score, doc: doc})
 		}
 		rows.Close()
-		out["memories"] = items
+		out["memories"] = finalizeScoredDocs(items, topK, opts.MinScore)
 	}
+
 	if store == "all" || store == "skills" {
 		rows, err := r.db.QueryContext(ctx, `
-			SELECT id, name, description FROM skills
+			SELECT id, name, description, created_at
+			FROM skills
 			WHERE ($1 = '' OR project = $1) AND (LOWER(name) LIKE $2 OR LOWER(description) LIKE $2)
 			ORDER BY created_at DESC LIMIT $3
-		`, project, q, topK)
+		`, project, q, candidateLimit)
 		if err != nil {
 			return nil, err
 		}
-		var items []map[string]any
+		items := []scoredDoc{}
 		for rows.Next() {
 			var id, name, description string
-			if err := rows.Scan(&id, &name, &description); err != nil {
+			var createdAt time.Time
+			if err := rows.Scan(&id, &name, &description, &createdAt); err != nil {
 				rows.Close()
 				return nil, err
 			}
-			items = append(items, map[string]any{"id": id, "name": name, "description": description, "_hybrid_score": 0.7})
+			fields := map[string]string{
+				"name":        name,
+				"description": description,
+			}
+			score := scoreHybrid(fields, queryTokens, createdAt, 0, opts, defaultSkillWeights())
+			doc := map[string]any{"id": id, "name": name, "description": description, "_score": score}
+			if opts.Highlight {
+				if h := highlightsForFields(fields, queryTokens); len(h) > 0 {
+					doc["_highlight"] = h
+				}
+			}
+			items = append(items, scoredDoc{score: score, doc: doc})
 		}
 		rows.Close()
-		out["skills"] = items
+		out["skills"] = finalizeScoredDocs(items, topK, opts.MinScore)
 	}
+
 	if store == "all" || store == "context" {
 		rows, err := r.db.QueryContext(ctx, `
-			SELECT uri, name, abstract FROM context_nodes
+			SELECT uri, name, abstract, content, created_at
+			FROM context_nodes
 			WHERE ($1 = '' OR project = $1) AND (LOWER(name) LIKE $2 OR LOWER(abstract) LIKE $2 OR LOWER(content) LIKE $2)
 			ORDER BY created_at DESC LIMIT $3
-		`, project, q, topK)
+		`, project, q, candidateLimit)
 		if err != nil {
 			return nil, err
 		}
-		var items []map[string]any
+		items := []scoredDoc{}
 		for rows.Next() {
-			var uri, name, abstract string
-			if err := rows.Scan(&uri, &name, &abstract); err != nil {
+			var uri, name, abstract, content string
+			var createdAt time.Time
+			if err := rows.Scan(&uri, &name, &abstract, &content, &createdAt); err != nil {
 				rows.Close()
 				return nil, err
 			}
-			items = append(items, map[string]any{"uri": uri, "name": name, "abstract": abstract, "_hybrid_score": 0.7})
+			fields := map[string]string{
+				"name":     name,
+				"abstract": abstract,
+				"content":  content,
+			}
+			score := scoreHybrid(fields, queryTokens, createdAt, 0, opts, defaultContextWeights())
+			doc := map[string]any{"uri": uri, "name": name, "abstract": abstract, "_score": score}
+			if opts.Highlight {
+				if h := highlightsForFields(fields, queryTokens); len(h) > 0 {
+					doc["_highlight"] = h
+				}
+			}
+			items = append(items, scoredDoc{score: score, doc: doc})
 		}
 		rows.Close()
-		out["contextNodes"] = items
+		out["contextNodes"] = finalizeScoredDocs(items, topK, opts.MinScore)
 	}
 	return out, nil
 }

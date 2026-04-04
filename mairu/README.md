@@ -27,9 +27,17 @@ go build -C mairu -o bin/mairu-agent ./cmd/mairu
 ./mairu/bin/mairu-agent tui
 ./mairu/bin/mairu-agent web -p 8080
 ./mairu/bin/mairu-agent context-server -p 8788
+
+# Go-native ContextFS commands (use -P for project)
+./mairu/bin/mairu-agent memory search "auth token" -P my-project -k 5
+./mairu/bin/mairu-agent memory store "we use Postgres for context server" -P my-project -c observation -o agent -i 5
+./mairu/bin/mairu-agent node search "authentication architecture" -P my-project -k 5
+./mairu/bin/mairu-agent vibe query "how does auth work?" -P my-project -k 5
+./mairu/bin/mairu-agent vibe mutation "remember we use gRPC internally" -P my-project -k 5
 ```
 
 ## Notes
 
 - The TypeScript context engine now lives at `mairu/contextfs/`.
 - The unified dashboard UI lives at `mairu/ui/`.
+- Core ContextFS workflows (`memory`, `skill`, `node`, `vibe`, `vibe-query`, `vibe-mutation`) are native Go commands in `mairu` CLI.

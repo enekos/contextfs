@@ -117,6 +117,7 @@ type SearchOptions struct {
 	TopK          int     `json:"topK"`
 	MinScore      float64 `json:"minScore"`
 	Highlight     bool    `json:"highlight"`
+	FieldBoosts   map[string]float64 `json:"fieldBoosts"`
 	Fuzziness     string  `json:"fuzziness"`
 	PhraseBoost   float64 `json:"phraseBoost"`
 	WeightVector  float64 `json:"weightVector"`

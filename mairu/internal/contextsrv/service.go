@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -249,9 +250,36 @@ func (s *AppService) PlanVibeMutation(prompt, project string, topK int) (VibeMut
 	if strings.TrimSpace(prompt) == "" {
 		return VibeMutationPlan{}, fmt.Errorf("prompt is required")
 	}
+	if topK <= 0 {
+		topK = 5
+	}
 	plan := VibeMutationPlan{
 		Reasoning: "Generated a conservative mutation plan from plain-English intent.",
 	}
+	search, err := s.Search(SearchOptions{
+		Query:   prompt,
+		Project: project,
+		Store:   "memories",
+		TopK:    topK,
+	})
+	if err == nil {
+		if existing, ok := bestMemoryMatch(search["memories"], prompt); ok {
+			plan.Reasoning = "Existing memory is highly similar, so route to update instead of duplicate create."
+			plan.Operations = append(plan.Operations, VibeMutationOp{
+				Op:          "update_memory",
+				Target:      existing.ID,
+				Description: "Update the closest matching memory with refined content.",
+				Data: map[string]any{
+					"id":       existing.ID,
+					"content":  prompt,
+					"category": "observation",
+					"owner":    "agent",
+				},
+			})
+			return plan, nil
+		}
+	}
+
 	lower := strings.ToLower(prompt)
 	switch {
 	case strings.Contains(lower, "remember"):
@@ -315,6 +343,24 @@ func (s *AppService) ExecuteVibeMutation(ops []VibeMutationOp, project string) (
 				continue
 			}
 			results = append(results, map[string]any{"op": op.Op, "result": "created memory " + mem.ID})
+		case "update_memory":
+			id := firstString(op.Data["id"], op.Target)
+			if id == "" {
+				results = append(results, map[string]any{"op": op.Op, "error": "missing id"})
+				continue
+			}
+			updated, err := s.UpdateMemory(MemoryUpdateInput{
+				ID:         id,
+				Content:    firstString(op.Data["content"], ""),
+				Category:   firstString(op.Data["category"], ""),
+				Owner:      firstString(op.Data["owner"], ""),
+				Importance: intFromAny(op.Data["importance"], 0),
+			})
+			if err != nil {
+				results = append(results, map[string]any{"op": op.Op, "error": err.Error()})
+				continue
+			}
+			results = append(results, map[string]any{"op": op.Op, "result": "updated memory " + updated.ID})
 		case "create_skill":
 			skill, err := s.CreateSkill(SkillCreateInput{
 				Project:     firstString(op.Data["project"], project),
@@ -331,6 +377,61 @@ func (s *AppService) ExecuteVibeMutation(ops []VibeMutationOp, project string) (
 		}
 	}
 	return results, nil
+}
+
+type memorySearchHit struct {
+	ID      string
+	Content string
+}
+
+func bestMemoryMatch(raw any, prompt string) (memorySearchHit, bool) {
+	items := toAnyMapSlice(raw)
+	best := memorySearchHit{}
+	bestScore := 0.0
+	for _, item := range items {
+		id, _ := item["id"].(string)
+		content, _ := item["content"].(string)
+		if id == "" || strings.TrimSpace(content) == "" {
+			continue
+		}
+		score := textSimilarity(content, prompt)
+		if score > bestScore {
+			bestScore = score
+			best = memorySearchHit{ID: id, Content: content}
+		}
+	}
+	return best, bestScore >= 0.85
+}
+
+func textSimilarity(a, b string) float64 {
+	setA := tokenSet(a)
+	setB := tokenSet(b)
+	if len(setA) == 0 || len(setB) == 0 {
+		return 0
+	}
+	inter := 0
+	for token := range setA {
+		if _, ok := setB[token]; ok {
+			inter++
+		}
+	}
+	union := len(setA) + len(setB) - inter
+	if union == 0 {
+		return 0
+	}
+	return float64(inter) / math.Max(float64(union), 1)
+}
+
+func tokenSet(s string) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, token := range strings.Fields(strings.ToLower(s)) {
+		token = strings.Trim(token, ".,:;!?()[]{}\"'`")
+		if token == "" {
+			continue
+		}
+		out[token] = struct{}{}
+	}
+	return out
 }
 
 func (s *AppService) ListModerationQueue(limit int) ([]ModerationEvent, error) {

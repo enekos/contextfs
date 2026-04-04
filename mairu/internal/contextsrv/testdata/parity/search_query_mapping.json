@@ -1,0 +1,14 @@
+{
+  "query": "auth token",
+  "project": "demo",
+  "store": "all",
+  "topK": 7,
+  "minScore": 0.72,
+  "highlight": true,
+  "weightVector": 0.6,
+  "weightKeyword": 0.25,
+  "weightRecency": 0.1,
+  "weightImportance": 0.05,
+  "recencyScale": "30d",
+  "recencyDecay": 0.5
+}
