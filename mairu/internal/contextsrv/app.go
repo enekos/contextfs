@@ -73,7 +73,12 @@ func NewApp(cfg Config) (*App, error) {
 		llmClient = geminiClient
 	}
 
-	svc := NewServiceWithSearch(repo, indexer, llmClient)
+	var repoIntf Repository
+	if repo != nil {
+		repoIntf = repo
+	}
+
+	svc := NewServiceWithSearch(repoIntf, indexer, llmClient)
 	handler := NewHandler(svc, cfg.AuthToken)
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
@@ -115,6 +120,8 @@ func (a *App) runProjector(ctx context.Context) {
 }
 
 func (a *App) Shutdown(ctx context.Context) error {
-	_ = a.repo.Close()
+	if a.repo != nil {
+		_ = a.repo.Close()
+	}
 	return a.server.Shutdown(ctx)
 }

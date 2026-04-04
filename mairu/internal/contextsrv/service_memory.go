@@ -28,12 +28,12 @@ func (s *AppService) CreateMemory(input MemoryCreateInput) (Memory, error) {
 		searchRes, err := s.searchBackend.Search(SearchOptions{
 			Query:        input.Content,
 			Project:      input.Project,
-			Store:        "memory",
+			Store:        StoreMemory,
 			TopK:         5,
 			WeightVector: 1.0,
 		})
-		if err == nil && searchRes["memories"] != nil {
-			items := toAnyMapSlice(searchRes["memories"])
+		if err == nil && searchRes[StoreMemories] != nil {
+			items := toAnyMapSlice(searchRes[StoreMemories])
 			var candidates []llm.RouterCandidate
 			for _, item := range items {
 				id, _ := item["id"].(string)

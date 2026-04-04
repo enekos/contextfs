@@ -9,6 +9,8 @@ import (
 
 var ErrModerationRejected = errors.New("content rejected by moderation policy")
 
+// Service defines the interface for core functionality, including memories, skills,
+// context nodes, vibe querying and mutation, and moderation.
 type Service interface {
 	Health() map[string]any
 	CreateMemory(input MemoryCreateInput) (Memory, error)
@@ -34,6 +36,7 @@ type Service interface {
 	Ingest(text, baseURI string) ([]llm.ProposedContextNode, error)
 }
 
+// Repository encapsulates data access logic, usually persisting to a database.
 type Repository interface {
 	CreateMemory(ctx context.Context, input MemoryCreateInput) (Memory, error)
 	ListMemories(ctx context.Context, project string, limit int) ([]Memory, error)
@@ -53,29 +56,35 @@ type Repository interface {
 	EnqueueOutbox(ctx context.Context, entityType, entityID, opType string, payload any) error
 }
 
+// AppService is the default implementation of the Service interface.
 type AppService struct {
 	repo          Repository
 	searchBackend SearchBackend
 	llmClient     LLMClient
 }
 
+// NewService creates a new AppService with the given repository.
 func NewService(repo Repository) *AppService {
 	return &AppService{repo: repo}
 }
 
+// SearchBackend defines the capability for advanced text or hybrid searches.
 type SearchBackend interface {
 	Search(opts SearchOptions) (map[string]any, error)
 	ClusterStats() map[string]any
 }
 
+// NewServiceWithSearch creates an AppService with both a repository and search backend.
 func NewServiceWithSearch(repo Repository, backend SearchBackend, llmClient LLMClient) *AppService {
 	return &AppService{repo: repo, searchBackend: backend, llmClient: llmClient}
 }
 
+// Health returns basic service health status.
 func (s *AppService) Health() map[string]any {
 	return map[string]any{"ok": true, "service": "contextsrv"}
 }
 
+// Search performs a search across memories, skills, and/or context nodes.
 func (s *AppService) Search(opts SearchOptions) (map[string]any, error) {
 	if s.searchBackend != nil {
 		if out, err := s.searchBackend.Search(opts); err == nil {
@@ -85,7 +94,21 @@ func (s *AppService) Search(opts SearchOptions) (map[string]any, error) {
 	return s.repo.SearchText(context.Background(), opts)
 }
 
+// Dashboard returns a summary of the current project state.
 func (s *AppService) Dashboard(limit int, project string) (map[string]any, error) {
+	if s.repo == nil {
+		return map[string]any{
+			"counts": map[string]int{
+				StoreSkills:       0,
+				StoreMemories:     0,
+				StoreContextNodes: 0,
+			},
+			StoreSkills:       []Skill{},
+			StoreMemories:     []Memory{},
+			StoreContextNodes: []ContextNode{},
+			"warning":         "PostgreSQL repository not configured",
+		}, nil
+	}
 	memories, err := s.repo.ListMemories(context.Background(), project, limit)
 	if err != nil {
 		return nil, err
@@ -110,6 +133,7 @@ func (s *AppService) Dashboard(limit int, project string) (map[string]any, error
 	}, nil
 }
 
+// ClusterStats retrieves search cluster indexing metadata.
 func (s *AppService) ClusterStats() map[string]any {
 	if s.searchBackend != nil {
 		return s.searchBackend.ClusterStats()
@@ -117,10 +141,11 @@ func (s *AppService) ClusterStats() map[string]any {
 	return map[string]any{
 		"ok":      true,
 		"service": "contextsrv",
-		"indexes": []string{IndexMemories, IndexSkills, IndexNodes},
+		"indexes": []string{IndexMemories, IndexSkills, IndexNodes, IndexSymbols},
 	}
 }
 
+// Ingest converts raw text into structured ContextNodes via an LLM.
 func (s *AppService) Ingest(text, baseURI string) ([]llm.ProposedContextNode, error) {
 	if s.llmClient == nil {
 		return nil, errors.New("no llm client configured")

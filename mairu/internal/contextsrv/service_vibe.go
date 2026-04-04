@@ -30,9 +30,9 @@ func (s *AppService) VibeQuery(prompt, project string, topK int) (VibeQueryResul
 	}
 
 	queries := []vibeQueryPlanItem{
-		{Store: "memory", Query: prompt},
-		{Store: "skill", Query: prompt},
-		{Store: "node", Query: prompt},
+		{Store: StoreMemory, Query: prompt},
+		{Store: StoreSkill, Query: prompt},
+		{Store: StoreNode, Query: prompt},
 	}
 	reasoning := "Queried memories, skills, and context nodes with the same prompt for broad recall."
 
@@ -326,7 +326,7 @@ func (s *AppService) fallbackVibeMutationPlan(prompt, project string, topK int) 
 	search, err := s.Search(SearchOptions{
 		Query:   prompt,
 		Project: project,
-		Store:   "memories",
+		Store:   StoreMemories,
 		TopK:    topK,
 	})
 	if err == nil {

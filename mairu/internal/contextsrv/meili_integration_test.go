@@ -47,7 +47,7 @@ func TestMeiliReadContextEndToEnd(t *testing.T) {
 		out, err := indexer.Search(SearchOptions{
 			Query:   "token rotation policy",
 			Project: project,
-			Store:   "context",
+			Store:   StoreContext,
 			TopK:    5,
 		})
 		if err != nil {

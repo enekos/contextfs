@@ -6,7 +6,6 @@ Unified monorepo for:
 
 - the **Mairu coding agent** (Go, TUI + web)
 - the **central context server** (Go)
-- the **context engine** (TypeScript + Meilisearch + CLI)
 - the **unified web UI dashboard** (Svelte)
 
 ## Repository Layout
@@ -16,12 +15,8 @@ Unified monorepo for:
 ├── mairu/
 │   ├── cmd/                 # Go entrypoint (mairu binary)
 │   ├── internal/            # Go agent + context-server internals
-│   ├── ui/                  # Unified Mairu dashboard UI (Svelte) & Go app frontend
-│   └── contextfs/
-│       ├── src/             # TypeScript context engine and API
-│       ├── scripts/         # Local Meilisearch helper script
-│       └── types/           # Custom TS type roots
-├── tests/                   # Vitest tests for TypeScript context engine
+│   ├── scripts/             # Local Meilisearch helper script
+│   └── ui/                  # Unified Mairu dashboard UI (Svelte) & Go app frontend
 ├── docs/                    # Specs and project docs
 ├── package.json             # Monorepo task runner scripts
 └── Makefile                 # Dev shortcuts
@@ -29,7 +24,7 @@ Unified monorepo for:
 
 ## Requirements
 
-- Bun 1+
+- Bun 1+ (for dashboard UI)
 - Go 1.25+
 - Docker (optional if using local Meilisearch fallback)
 - Gemini API key (unless `ALLOW_ZERO_EMBEDDINGS=true` for local-only testing)
@@ -46,7 +41,6 @@ If you prefer to set up manually:
 
 ```bash
 cp .env.example .env
-bun install
 bun install --cwd mairu/ui
 make setup-no-docker
 ```
@@ -63,15 +57,13 @@ make mairu-web        # Mairu agent web UI
 
 | Command | Description |
 |---|---|
-| `bun run build` | Compile TypeScript context engine to `dist/` |
-| `bun run typecheck` | Type-check TypeScript |
-| `bun run test` | Run Vitest test suite |
-| `bun run lint` | Lint `mairu/contextfs/src` |
+| `bun run build` | Build Go `mairu-agent` binary |
+| `bun run test` | Run Go test suite |
+| `bun run lint` | Run Go vet |
 | `bun run setup` | Initialize/reset Meilisearch indexes (destructive) |
 | `bun run dashboard` | Run context server + unified Mairu dashboard UI |
 | `bun run mairu:build` | Build Go `mairu-agent` binary |
 | `bun run mairu:web` | Launch Mairu web UI |
-| `bun run eval:retrieval -- --dataset eval/dataset.json --topK 5` | Run retrieval benchmark |
 
 ## Local Meilisearch (No Docker)
 
@@ -82,22 +74,7 @@ make meili-down
 make meili-clean
 ```
 
-Script path: `mairu/contextfs/scripts/meili-local.sh`.
-
-## Context CLI
-
-The TypeScript context CLI remains available as:
-
-- `context-cli` (compatibility name)
-- `mairu-context` (new unified name)
-
-Examples:
-
-```bash
-mairu-context memory search "authentication token rules" -k 5 -P my-project
-mairu-context node search "architecture" -k 5 -P my-project
-mairu-context daemon . -P my-project
-```
+Script path: `mairu/scripts/meili-local.sh`.
 
 ## Go CLI Commands (Mairu Agent)
 
