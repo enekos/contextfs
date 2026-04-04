@@ -274,6 +274,7 @@ func (d *Daemon) ProcessFile(ctx context.Context, filePath string) error {
 	d.nodePayloadHashes[abs] = payloadHash
 	d.mu.Unlock()
 	
+	fmt.Printf("[Daemon] Updated AST context for %s\n", filepath.Base(abs))
 	return nil
 }
 
