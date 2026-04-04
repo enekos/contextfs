@@ -1,0 +1,119 @@
+package ast
+
+import (
+	"regexp"
+	"sort"
+)
+
+type LogicSymbol struct {
+	ID       string
+	Name     string
+	Kind     string
+	Exported bool
+	Doc      string
+}
+
+type LogicEdge struct {
+	From string
+	To   string
+	Kind string
+}
+
+type FileGraph struct {
+	FileSummary        string
+	Symbols            []LogicSymbol
+	Edges              []LogicEdge
+	Imports            []string
+	SymbolDescriptions map[string]string
+}
+
+type LanguageDescriber interface {
+	LanguageID() string
+	Extensions() []string
+	ExtractFileGraph(filePath, source string) FileGraph
+}
+
+var (
+	reFunc   = regexp.MustCompile(`(?m)(?:export\s+)?function\s+([A-Za-z_]\w*)\s*\(`)
+	reClass  = regexp.MustCompile(`(?m)(?:export\s+)?class\s+([A-Za-z_]\w*)`)
+	reImport = regexp.MustCompile(`(?m)^\s*import\s+.*?from\s+['"]([^'"]+)['"]`)
+	reCalls  = regexp.MustCompile(`([A-Za-z_]\w*)\s*\(`)
+)
+
+func BaseExtract(source string) FileGraph {
+	symbols := []LogicSymbol{}
+	for _, m := range reFunc.FindAllStringSubmatch(source, -1) {
+		symbols = append(symbols, LogicSymbol{ID: "fn:" + m[1], Name: m[1], Kind: "fn", Exported: true})
+	}
+	for _, m := range reClass.FindAllStringSubmatch(source, -1) {
+		symbols = append(symbols, LogicSymbol{ID: "cls:" + m[1], Name: m[1], Kind: "cls", Exported: true})
+	}
+	idsByName := map[string]string{}
+	for _, s := range symbols {
+		idsByName[s.Name] = s.ID
+	}
+	edges := []LogicEdge{}
+	for _, s := range symbols {
+		for _, c := range reCalls.FindAllStringSubmatch(source, -1) {
+			to := idsByName[c[1]]
+			if to != "" && to != s.ID {
+				edges = append(edges, LogicEdge{From: s.ID, To: to, Kind: "call"})
+			}
+		}
+	}
+	descs := map[string]string{}
+	for _, s := range symbols {
+		descs[s.ID] = "Describes " + s.Name
+	}
+	imports := []string{}
+	for _, m := range reImport.FindAllStringSubmatch(source, -1) {
+		imports = append(imports, m[1])
+	}
+	sort.Slice(symbols, func(i, j int) bool { return symbols[i].ID < symbols[j].ID })
+	sort.Slice(edges, func(i, j int) bool {
+		if edges[i].From == edges[j].From {
+			return edges[i].To < edges[j].To
+		}
+		return edges[i].From < edges[j].From
+	})
+	return FileGraph{
+		FileSummary:        "File graph extracted.",
+		Symbols:            symbols,
+		Edges:              dedupeEdges(edges),
+		Imports:            imports,
+		SymbolDescriptions: descs,
+	}
+}
+
+func CompareSymbols(a, b LogicSymbol) bool { return a.ID < b.ID }
+
+func SortSymbols(in []LogicSymbol) []LogicSymbol {
+	out := append([]LogicSymbol(nil), in...)
+	sort.Slice(out, func(i, j int) bool { return CompareSymbols(out[i], out[j]) })
+	return out
+}
+
+func SortEdges(in []LogicEdge) []LogicEdge {
+	out := append([]LogicEdge(nil), in...)
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].From == out[j].From {
+			return out[i].To < out[j].To
+		}
+		return out[i].From < out[j].From
+	})
+	return out
+}
+
+func dedupeEdges(edges []LogicEdge) []LogicEdge {
+	seen := map[string]bool{}
+	out := []LogicEdge{}
+	for _, e := range edges {
+		k := e.From + "|" + e.To + "|" + e.Kind
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, e)
+	}
+	return out
+}
