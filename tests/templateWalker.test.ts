@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   walkTemplate,
   type TemplateNode,
-} from "../src/ast/templateWalker";
+} from "../mairu/contextfs/src/ast/templateWalker";
 
 function makeNode(
   tag: string,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shouldFollowUrl, normalizeLinks, filterLinks } from "../../src/scraper/crawler";
+import { shouldFollowUrl, normalizeLinks, filterLinks } from "../../mairu/contextfs/src/scraper/crawler";
 
 describe("shouldFollowUrl", () => {
   it("allows same-domain URLs", () => {

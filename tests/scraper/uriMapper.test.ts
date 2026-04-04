@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { urlToUri, urlToParentUri, domainSlug, normalizeUrl } from "../../src/scraper/uriMapper";
+import { urlToUri, urlToParentUri, domainSlug, normalizeUrl } from "../../mairu/contextfs/src/scraper/uriMapper";
 
 describe("domainSlug", () => {
   it("converts dots to hyphens and lowercases", () => {

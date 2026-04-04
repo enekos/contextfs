@@ -1,12 +1,19 @@
 # Dependencies
 node_modules/
-dashboard/node_modules/
+mairu/ui/node_modules/
 
 # Build artifacts
 dist/
-dashboard/dist/
+mairu/ui/dist/
 coverage/
 *.tsbuildinfo
+mairu/bin/
+mairu/*.exe
+mairu/mairu-agent
+**/.gomodcache/
+**/.gocache/
+*.test
+*.out
 
 # Environment and secrets
 .env
@@ -24,7 +31,20 @@ pnpm-debug.log*
 .idea/
 .vscode/
 
+# UI test artifacts
+mairu/ui/test-results/
+mairu/ui/playwright-report/
+
 # Daemon persistent cache
 .contextfs-cache.json
 .contextfs-cache.json.tmp
 .contextfs-scrape-cache.json
+.mairu/
+
+# Local Meilisearch fallback runtime artifacts
+.tools/
+.data/
+.logs/
+mairu/contextfs/.tools/
+mairu/contextfs/.data/
+mairu/contextfs/.logs/

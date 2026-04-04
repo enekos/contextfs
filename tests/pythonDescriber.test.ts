@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { PythonDescriber } from "../src/ast/pythonDescriber";
+import { PythonDescriber } from "../mairu/contextfs/src/ast/pythonDescriber";
 
 describe("PythonDescriber", () => {
   const describer = new PythonDescriber();

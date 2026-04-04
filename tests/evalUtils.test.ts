@@ -8,7 +8,7 @@ import {
   summarize,
   computeRecallMetrics,
   type PerCaseResult,
-} from "../src/eval/evalUtils";
+} from "../mairu/contextfs/src/eval/evalUtils";
 
 // ---------------------------------------------------------------------------
 // Helpers

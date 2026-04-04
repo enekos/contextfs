@@ -24,7 +24,7 @@ const mockGetContextNode = vi.fn();
 const mockAddContextNode = vi.fn();
 const mockGetContextSubtree = vi.fn();
 
-vi.mock("../src/storage/meilisearchDB", () => ({
+vi.mock("../mairu/contextfs/src/storage/meilisearchDB", () => ({
   MeilisearchDB: vi.fn().mockImplementation(() => ({
     listMemories: mockListMemories,
     searchMemoriesByVector: mockSearchMemoriesByVector,
@@ -43,14 +43,14 @@ vi.mock("../src/storage/meilisearchDB", () => ({
 }));
 
 const mockGetEmbedding = vi.fn().mockResolvedValue(new Array(3072).fill(0));
-vi.mock("../src/storage/embedder", () => ({
+vi.mock("../mairu/contextfs/src/storage/embedder", () => ({
   Embedder: { getEmbedding: (...args: any[]) => mockGetEmbedding(...args) },
 }));
 
 describe("dreamer types", () => {
   it("accepts derived_pattern as a valid MemoryCategory", async () => {
     // TypeScript compilation is the test — if this compiles, the type exists
-    const category: import("../src/core/types").MemoryCategory = "derived_pattern";
+    const category: import("../mairu/contextfs/src/core/types").MemoryCategory = "derived_pattern";
     expect(category).toBe("derived_pattern");
   });
 });
@@ -89,7 +89,7 @@ describe("deductionPass", () => {
       }),
     });
 
-    const { deductionPass } = await import("../src/dreamer");
+    const { deductionPass } = await import("../mairu/contextfs/src/dreamer");
     await deductionPass("proj");
 
     // Should update the newer memory with merged content
@@ -123,7 +123,7 @@ describe("deductionPass", () => {
       }),
     });
 
-    const { deductionPass } = await import("../src/dreamer");
+    const { deductionPass } = await import("../mairu/contextfs/src/dreamer");
     await deductionPass("proj");
 
     // Should delete the older (source) memory
@@ -142,7 +142,7 @@ describe("deductionPass", () => {
     mockListMemories.mockResolvedValueOnce([mem1]);
     mockSearchMemoriesByVector.mockResolvedValueOnce([]); // no similar memories
 
-    const { deductionPass } = await import("../src/dreamer");
+    const { deductionPass } = await import("../mairu/contextfs/src/dreamer");
     await deductionPass("proj");
 
     expect(mockGenerateContent).not.toHaveBeenCalled();
@@ -185,7 +185,7 @@ describe("inductionPass", () => {
       }),
     });
 
-    const { inductionPass } = await import("../src/dreamer");
+    const { inductionPass } = await import("../mairu/contextfs/src/dreamer");
     await inductionPass("proj");
 
     expect(mockAddMemory).toHaveBeenCalledWith(
@@ -211,7 +211,7 @@ describe("inductionPass", () => {
       { ...memories[1], _score: 0.82 },
     ]);
 
-    const { inductionPass } = await import("../src/dreamer");
+    const { inductionPass } = await import("../mairu/contextfs/src/dreamer");
     await inductionPass("proj");
 
     expect(mockGenerateContent).not.toHaveBeenCalled();
@@ -235,7 +235,7 @@ describe("inductionPass", () => {
       text: JSON.stringify({ pattern: null, confidence: null, evidence: null }),
     });
 
-    const { inductionPass } = await import("../src/dreamer");
+    const { inductionPass } = await import("../mairu/contextfs/src/dreamer");
     await inductionPass("proj");
 
     expect(mockAddMemory).not.toHaveBeenCalled();

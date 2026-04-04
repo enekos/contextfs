@@ -25,20 +25,20 @@ vi.mock("meilisearch", () => ({
   })),
 }));
 
-vi.mock("../src/storage/embedder", () => ({
+vi.mock("../mairu/contextfs/src/storage/embedder", () => ({
   Embedder: {
     getEmbedding: vi.fn().mockResolvedValue(Array(3072).fill(0)),
     getEmbeddings: vi.fn().mockResolvedValue([Array(3072).fill(0)]),
   },
 }));
 
-vi.mock("../src/llm/llmRouter", () => ({
+vi.mock("../mairu/contextfs/src/llm/llmRouter", () => ({
   decideMemoryAction: vi.fn().mockResolvedValue({ action: "create" }),
   decideContextAction: vi.fn().mockResolvedValue({ action: "create" }),
 }));
 
-vi.mock("../src/core/config", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../src/core/config")>();
+vi.mock("../mairu/contextfs/src/core/config", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../mairu/contextfs/src/core/config")>();
   return {
     ...original,
     config: {
@@ -56,9 +56,9 @@ vi.mock("../src/core/config", async (importOriginal) => {
   };
 });
 
-import { MeilisearchDB, MEMORIES_INDEX } from "../src/storage/meilisearchDB";
-import { ContextManager } from "../src/storage/contextManager";
-import type { BudgetExceeded } from "../src/core/types";
+import { MeilisearchDB, MEMORIES_INDEX } from "../mairu/contextfs/src/storage/meilisearchDB";
+import { ContextManager } from "../mairu/contextfs/src/storage/contextManager";
+import type { BudgetExceeded } from "../mairu/contextfs/src/core/types";
 
 describe("countByProject", () => {
   let db: MeilisearchDB;

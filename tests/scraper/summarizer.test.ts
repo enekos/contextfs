@@ -16,7 +16,7 @@ vi.mock("@google/genai", () => ({
   })),
 }));
 
-vi.mock("../../src/core/config", () => ({
+vi.mock("../../mairu/contextfs/src/core/config", () => ({
   config: {
     geminiApiKey: "test-api-key",
     llmModel: "gemini-2.0-flash-lite",
@@ -32,7 +32,7 @@ describe("summarizePage", () => {
   });
 
   it("returns structured summary from LLM", async () => {
-    const { summarizePage } = await import("../../src/scraper/summarizer");
+    const { summarizePage } = await import("../../mairu/contextfs/src/scraper/summarizer");
     const result = await summarizePage(
       "Authentication Guide",
       "# Auth\nThis guide explains OAuth2 and JWT authentication.",
@@ -45,7 +45,7 @@ describe("summarizePage", () => {
   });
 
   it("returns minimal summary for very short content", async () => {
-    const { summarizePage } = await import("../../src/scraper/summarizer");
+    const { summarizePage } = await import("../../mairu/contextfs/src/scraper/summarizer");
     const result = await summarizePage(
       "Short Page",
       "Just a few words.",

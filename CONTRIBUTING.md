@@ -8,7 +8,7 @@ Thanks for your interest in improving this project.
 
 ```bash
 bun install
-bun --cwd dashboard install
+bun --cwd mairu/ui install
 ```
 
 2. Create a local environment file:
@@ -27,8 +27,8 @@ bun run typecheck
 ## Useful Commands
 
 - `bun run setup` - reset and initialize database schema (destructive).
-- `bun run dashboard:api` - run API for dashboard.
-- `bun run dashboard:dev` - run Svelte dashboard.
+- `bun run dashboard:api` - run Go context server API.
+- `bun run dashboard:dev` - run unified Svelte dashboard (`mairu/ui`).
 - `bun run eval:retrieval -- --dataset eval/dataset.json --topK 5 --verbose true` - run retrieval benchmark.
 - `context-cli memory search "query" -P my-project --mode surface` - curated-memory-first retrieval.
 - `context-cli memory feedback -P my-project --arm <arm> --outcome accepted|ignored --rank 1` - feed reward signals.

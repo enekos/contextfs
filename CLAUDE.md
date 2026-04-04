@@ -1,4 +1,4 @@
-# contextfs
+# mairu
 
 A dynamic context and memory storage system for coding agents. Provides native hybrid retrieval (vector + full-text + app-side re-ranking) backed by Meilisearch with Google Gemini embeddings. Exposes two interfaces: CLI and REST API (dashboard).
 
@@ -17,7 +17,7 @@ A dynamic context and memory storage system for coding agents. Provides native h
 ```bash
 docker compose up -d    # start Meilisearch
 bun install
-bun --cwd dashboard install
+bun --cwd mairu/dashboard install
 cp .env.example .env    # fill in MEILI_URL, GEMINI_API_KEY
 bun run setup           # create Meilisearch indexes (destructive — drops and recreates)
 ```
@@ -31,7 +31,7 @@ bun run setup           # create Meilisearch indexes (destructive — drops and 
 | `bun run link` | Build and install `context-cli` globally via `bun link` |
 | `bun run build` | Compile TypeScript → `dist/` |
 | `bun run typecheck` | Type-check without emit |
-| `bun run lint` | Run oxlint on `src/` |
+| `bun run lint` | Run oxlint on `mairu/contextfs/src/` |
 | `bun run test` | Run Vitest tests once |
 | `bun run test:watch` | Vitest in watch mode |
 | `bun run clean` | Remove `dist/` |
@@ -91,21 +91,21 @@ Weights (vector, keyword, recency, importance) are defined in `scorer.ts`.
 
 | File | Role |
 |---|---|
-| `src/storage/meilisearchDB.ts` | DB layer: CRUD, hybrid search (vector + full-text + re-ranking), tree queries |
-| `src/storage/contextManager.ts` | High-level API used by CLI |
-| `src/storage/embedder.ts` | Gemini embedding calls |
-| `src/storage/scorer.ts` | Hybrid weight definitions |
-| `src/llm/llmRouter.ts` | LLM-powered deduplication (CREATE / UPDATE / SKIP) |
-| `src/llm/ingestor.ts` | Free-form text → structured context nodes |
-| `src/llm/vibeEngine.ts` | LLM-driven free-text query planning and mutation planning |
-| `src/cli.ts` | CLI entry point |
-| `src/dashboardApi.ts` | REST API for dashboard |
-| `src/eval/evaluate.ts` | Evaluation harness entry point |
-| `src/daemon.ts` | File watcher daemon: parallel processing, persistent cache, NL content assembly |
-| `src/ast/languageDescriber.ts` | Pluggable interface for language-specific AST extraction + shared types/utilities |
-| `src/ast/typescriptDescriber.ts` | TypeScript/JS implementation of LanguageDescriber (ts-morph based) |
-| `src/ast/nlDescriber.ts` | AST-to-English engine: converts function bodies to numbered NL descriptions |
-| `src/ast/nlEnricher.ts` | Post-enrichment pass: injects cross-function context into NL descriptions |
+| `mairu/contextfs/src/storage/meilisearchDB.ts` | DB layer: CRUD, hybrid search (vector + full-text + re-ranking), tree queries |
+| `mairu/contextfs/src/storage/contextManager.ts` | High-level API used by CLI |
+| `mairu/contextfs/src/storage/embedder.ts` | Gemini embedding calls |
+| `mairu/contextfs/src/storage/scorer.ts` | Hybrid weight definitions |
+| `mairu/contextfs/src/llm/llmRouter.ts` | LLM-powered deduplication (CREATE / UPDATE / SKIP) |
+| `mairu/contextfs/src/llm/ingestor.ts` | Free-form text → structured context nodes |
+| `mairu/contextfs/src/llm/vibeEngine.ts` | LLM-driven free-text query planning and mutation planning |
+| `mairu/contextfs/src/cli.ts` | CLI entry point |
+| `mairu/contextfs/src/dashboardApi.ts` | REST API for dashboard |
+| `mairu/contextfs/src/eval/evaluate.ts` | Evaluation harness entry point |
+| `mairu/contextfs/src/daemon.ts` | File watcher daemon: parallel processing, persistent cache, NL content assembly |
+| `mairu/contextfs/src/ast/languageDescriber.ts` | Pluggable interface for language-specific AST extraction + shared types/utilities |
+| `mairu/contextfs/src/ast/typescriptDescriber.ts` | TypeScript/JS implementation of LanguageDescriber (ts-morph based) |
+| `mairu/contextfs/src/ast/nlDescriber.ts` | AST-to-English engine: converts function bodies to numbered NL descriptions |
+| `mairu/contextfs/src/ast/nlEnricher.ts` | Post-enrichment pass: injects cross-function context into NL descriptions |
 
 ### AST Ingestion (Daemon)
 
@@ -173,7 +173,7 @@ RECENCY_DECAY=0.5            # Decay factor at scale distance
 
 # Agent Integration Instructions
 
-To integrate OpenContextFS into Claude or Opencode using the CLI, refer to this section. You must use the terminal (`bash` tool) to invoke `context-cli`.
+To integrate OpenContextFS into Claude or Opencode using the CLI, refer to this section. You must use the terminal (`bash` tool) to invoke `mairu-context` (or compatibility alias `context-cli`).
 
 **IMPORTANT**: Always use the `-P, --project <project>` flag when managing or searching memories/context so that information is correctly isolated by project.
 
@@ -182,9 +182,9 @@ When starting a new session or debugging an issue, you MUST search memories and 
 Prefer direct retrieval commands first so the agent can control scope and ranking behavior explicitly:
 
 ```bash
-context-cli memory search "authentication token validation rules" -k 5 -P my-project
-context-cli node search "authentication architecture" -k 5 -P my-project
-context-cli node ls "contextfs://my-project/backend/auth" -P my-project
+mairu-context memory search "authentication token validation rules" -k 5 -P my-project
+mairu-context node search "authentication architecture" -k 5 -P my-project
+mairu-context node ls "contextfs://my-project/backend/auth" -P my-project
 ```
 
 ### 2. Natural Language Storage (Recommended)
@@ -192,14 +192,14 @@ When you successfully complete a complex task, summarize the structural decision
 **Note:** Always pass `-y` to auto-approve mutations.
 
 ```bash
-context-cli vibe-mutation "remember that we switched from REST to gRPC for internal service calls" -P my-project -y
+mairu-context vibe-mutation "remember that we switched from REST to gRPC for internal service calls" -P my-project -y
 ```
 
 ### 3. Natural-Language Retrieval (Optional Fallback)
 Use `vibe-query` only when direct memory/node searches are not sufficient (for example, broad or ambiguous questions that need multi-step planning).
 
 ```bash
-context-cli vibe-query "how does the authentication system work?" -P my-project
+mairu-context vibe-query "how does the authentication system work?" -P my-project
 ```
 
 ### 4. Advanced/Precise Operations
@@ -207,21 +207,21 @@ Use direct commands when you need exact control over what is stored or retrieved
 
 **Memory Store:**
 ```bash
-context-cli memory store "In project X, we use Vitest instead of Jest for unit testing." -c observation -o agent -i 5 -P my-project
+mairu-context memory store "In project X, we use Vitest instead of Jest for unit testing." -c observation -o agent -i 5 -P my-project
 ```
 
 **Memory Search:**
 ```bash
-context-cli memory search "testing framework" -k 5 -P my-project
+mairu-context memory search "testing framework" -k 5 -P my-project
 
 # With highlights
-context-cli memory search "authentication setup" -k 5 -P my-project --highlight
+mairu-context memory search "authentication setup" -k 5 -P my-project --highlight
 ```
 
 **Managing Context Nodes (Hierarchical Knowledge):**
 ```bash
-context-cli node store "contextfs://my-project/backend/auth" "Auth Module" "Uses JWT with RSA signatures." -P my-project
-context-cli node ls "contextfs://my-project/backend" -P my-project
+mairu-context node store "contextfs://my-project/backend/auth" "Auth Module" "Uses JWT with RSA signatures." -P my-project
+mairu-context node ls "contextfs://my-project/backend" -P my-project
 ```
 
 Agents should proactively search memories and context nodes when beginning a task, and store important discoveries or user preferences as they work.

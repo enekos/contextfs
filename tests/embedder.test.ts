@@ -29,7 +29,7 @@ describe("Embedder", () => {
       vi.resetModules();
     } else {
       for (const key in require.cache) {
-        if (key.includes("/src/")) {
+        if (key.includes("/mairu/contextfs/src/")) {
           delete require.cache[key];
         }
       }
@@ -48,7 +48,7 @@ describe("Embedder", () => {
     delete process.env.GEMINI_API_KEY;
     process.env.ALLOW_ZERO_EMBEDDINGS = "true";
 
-    const { Embedder: FreshEmbedder } = await import("../src/storage/embedder");
+    const { Embedder: FreshEmbedder } = await import("../mairu/contextfs/src/storage/embedder");
 
     const result = await FreshEmbedder.getEmbedding("test text");
     expect(result.length).toBe(3072); // default dimension for gemini-embedding-001
@@ -59,7 +59,7 @@ describe("Embedder", () => {
     delete process.env.GEMINI_API_KEY;
     process.env.ALLOW_ZERO_EMBEDDINGS = "false";
 
-    const { Embedder: FreshEmbedder } = await import("../src/storage/embedder");
+    const { Embedder: FreshEmbedder } = await import("../mairu/contextfs/src/storage/embedder");
 
     await expect(FreshEmbedder.getEmbedding("test text")).rejects.toThrow(
       "GEMINI_API_KEY is not set and ALLOW_ZERO_EMBEDDINGS=false"
@@ -76,7 +76,7 @@ describe("Embedder", () => {
       embeddings: [{ values: fakeEmbedding }],
     });
 
-    const { Embedder: FreshEmbedder } = await import("../src/storage/embedder");
+    const { Embedder: FreshEmbedder } = await import("../mairu/contextfs/src/storage/embedder");
 
     const result = await FreshEmbedder.getEmbedding("test text");
     expect(mockEmbedContent).toHaveBeenCalledTimes(1);
@@ -91,7 +91,7 @@ describe("Embedder", () => {
     process.env.GEMINI_API_KEY = "fake-key";
     mockEmbedContent.mockResolvedValue({ embeddings: [] });
 
-    const { Embedder: FreshEmbedder } = await import("../src/storage/embedder");
+    const { Embedder: FreshEmbedder } = await import("../mairu/contextfs/src/storage/embedder");
 
     await expect(FreshEmbedder.getEmbedding("test")).rejects.toThrow(
       "No embedding returned from Gemini API"
@@ -111,7 +111,7 @@ describe("Embedder", () => {
       embeddings: [{ values: fakeEmbedding }],
     });
 
-    const { Embedder: FreshEmbedder } = await import("../src/storage/embedder");
+    const { Embedder: FreshEmbedder } = await import("../mairu/contextfs/src/storage/embedder");
 
     const result = await FreshEmbedder.getEmbedding("test text");
 
@@ -146,7 +146,7 @@ describe("getEmbeddings (batch)", () => {
       embeddings: [{ values: fakeEmbedding }],
     });
 
-    const { Embedder: FreshEmbedder } = await import("../src/storage/embedder");
+    const { Embedder: FreshEmbedder } = await import("../mairu/contextfs/src/storage/embedder");
 
     const results = await FreshEmbedder.getEmbeddings(["hello", "world"]);
     expect(results).toHaveLength(2);
@@ -157,7 +157,7 @@ describe("getEmbeddings (batch)", () => {
   it("returns empty array for empty input", async () => {
     process.env.GEMINI_API_KEY = "fake-key";
 
-    const { Embedder: FreshEmbedder } = await import("../src/storage/embedder");
+    const { Embedder: FreshEmbedder } = await import("../mairu/contextfs/src/storage/embedder");
 
     const results = await FreshEmbedder.getEmbeddings([]);
     expect(results).toHaveLength(0);
@@ -172,7 +172,7 @@ describe("getEmbeddings (batch)", () => {
       embeddings: [{ values: fakeEmbedding }],
     });
 
-    const { Embedder: FreshEmbedder } = await import("../src/storage/embedder");
+    const { Embedder: FreshEmbedder } = await import("../mairu/contextfs/src/storage/embedder");
 
     const results = await FreshEmbedder.getEmbeddings(["single"]);
     expect(results).toHaveLength(1);

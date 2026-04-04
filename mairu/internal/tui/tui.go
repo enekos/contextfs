@@ -1,0 +1,928 @@
+package tui
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	"github.com/atotto/clipboard"
+	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
+
+	"mairu/internal/agent"
+)
+
+type errMsg error
+
+type ChatMessage struct {
+	Role    string
+	Content string
+}
+
+type listItem struct {
+	title, desc string
+}
+
+func (i listItem) Title() string       { return i.title }
+func (i listItem) Description() string { return i.desc }
+func (i listItem) FilterValue() string { return i.title }
+
+type model struct {
+	viewport viewport.Model
+	messages []ChatMessage
+	textarea textarea.Model
+	err      error
+	agent    *agent.Agent
+	thinking bool
+	spinner  spinner.Model
+
+	currentResponse string
+	toolEvents      []string
+	mdRenderer      *glamour.TermRenderer
+	activeStream    chan agent.AgentEvent
+
+	showList  bool
+	listModel list.Model
+	listType  string // "session" or "model"
+
+	width  int
+	height int
+
+	chatPaneWidth int
+	sidebarWidth  int
+	panesHeight   int
+}
+
+type agentStreamMsg agent.AgentEvent
+
+var (
+	colorUser   = lipgloss.Color("#5e81ac") // Nord blue
+	colorAgent  = lipgloss.Color("#b48ead") // Nord purple
+	colorSystem = lipgloss.Color("#4c566a") // Nord dark gray
+	colorTool   = lipgloss.Color("#a3be8c") // Nord green
+	colorError  = lipgloss.Color("#bf616a") // Nord red
+	colorPrompt = lipgloss.Color("#88c0d0") // Nord light blue
+
+	appStyle    = lipgloss.NewStyle().Padding(0, 1)
+	userStyle   = lipgloss.NewStyle().Foreground(colorUser).Bold(true)
+	agentStyle  = lipgloss.NewStyle().Foreground(colorAgent).Bold(true)
+	systemStyle = lipgloss.NewStyle().Foreground(colorSystem).Italic(true)
+	toolStyle   = lipgloss.NewStyle().Foreground(colorTool).Italic(true)
+	errorStyle  = lipgloss.NewStyle().Foreground(colorError).Bold(true)
+
+	chatPaneStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorUser).
+			Padding(0, 1)
+
+	sidebarPaneStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorSystem).
+			Padding(0, 1)
+
+	sidebarHeaderStyle = lipgloss.NewStyle().Foreground(colorPrompt).Bold(true)
+	sidebarLabelStyle  = lipgloss.NewStyle().Foreground(colorSystem)
+	footerStyle        = lipgloss.NewStyle().Foreground(colorSystem).Italic(true)
+)
+
+func initialModel(a *agent.Agent, sessionName string) model {
+	ta := textarea.New()
+	ta.Placeholder = "Type a message or /help for commands..."
+	ta.Focus()
+	ta.Prompt = "╰─○ "
+	ta.CharLimit = 10000
+	ta.SetWidth(100)
+	ta.SetHeight(1)
+	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	ta.ShowLineNumbers = false
+	ta.KeyMap.InsertNewline.SetEnabled(false)
+	ta.FocusedStyle.Prompt = lipgloss.NewStyle().Foreground(colorPrompt).Bold(true)
+	ta.FocusedStyle.Text = lipgloss.NewStyle()
+
+	vp := viewport.New(100, 20)
+	vp.SetContent("Mairu Agent initialized.\n")
+
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(colorAgent)
+
+	r, _ := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(95),
+	)
+
+	var msgs []ChatMessage
+
+	if sessionName != "" {
+		msgs = append(msgs, ChatMessage{Role: "System", Content: fmt.Sprintf("Loaded session: %s", sessionName)})
+	}
+	for _, text := range a.GetHistoryText() {
+		if strings.HasPrefix(text, "You: ") {
+			msgs = append(msgs, ChatMessage{Role: "You", Content: strings.TrimPrefix(text, "You: ")})
+		} else if strings.HasPrefix(text, "Mairu: ") {
+			msgs = append(msgs, ChatMessage{Role: "Mairu", Content: strings.TrimPrefix(text, "Mairu: ")})
+		}
+	}
+
+	l := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
+	l.SetShowTitle(true)
+
+	m := model{
+		textarea:   ta,
+		messages:   msgs,
+		viewport:   vp,
+		err:        nil,
+		agent:      a,
+		spinner:    s,
+		mdRenderer: r,
+		listModel:  l,
+	}
+	m.renderMessages()
+	return m
+}
+
+func Start(a *agent.Agent, sessionName string) error {
+	p := tea.NewProgram(initialModel(a, sessionName), tea.WithAltScreen())
+	_, err := p.Run()
+	return err
+}
+
+func (m model) Init() tea.Cmd {
+	return tea.Batch(textarea.Blink, m.spinner.Tick)
+}
+
+func waitForStream(ch <-chan agent.AgentEvent) tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-ch
+		if !ok {
+			return agentStreamMsg{Type: "done"}
+		}
+		return agentStreamMsg(ev)
+	}
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		tiCmd tea.Cmd
+		vpCmd tea.Cmd
+		spCmd tea.Cmd
+		lsCmd tea.Cmd
+		cmds  []tea.Cmd
+	)
+
+	if m.showList {
+		switch msg := msg.(type) {
+		case tea.WindowSizeMsg:
+			m.width = msg.Width
+			m.height = msg.Height
+			m.listModel.SetSize(msg.Width, msg.Height)
+			return m, nil
+		case tea.KeyMsg:
+			switch msg.Type {
+			case tea.KeyEsc, tea.KeyCtrlC:
+				m.showList = false
+				return m, nil
+			case tea.KeyEnter:
+				m.showList = false
+				selectedItem := m.listModel.SelectedItem()
+				if selectedItem != nil {
+					if m.listType == "session" {
+						sessionName := selectedItem.(listItem).title
+						m.agent.SaveSession("current")
+						err := m.agent.LoadSession(sessionName)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to load session: " + err.Error()})
+						} else {
+							m.messages = []ChatMessage{{Role: "System", Content: "Loaded session: " + sessionName}}
+							for _, text := range m.agent.GetHistoryText() {
+								if strings.HasPrefix(text, "You: ") {
+									m.messages = append(m.messages, ChatMessage{Role: "You", Content: strings.TrimPrefix(text, "You: ")})
+								} else if strings.HasPrefix(text, "Mairu: ") {
+									m.messages = append(m.messages, ChatMessage{Role: "Mairu", Content: strings.TrimPrefix(text, "Mairu: ")})
+								}
+							}
+						}
+						m.renderMessages()
+						m.viewport.GotoBottom()
+					} else if m.listType == "model" {
+						modelName := selectedItem.(listItem).title
+						m.agent.SetModel(modelName)
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Switched model to: " + modelName})
+						m.renderMessages()
+						m.viewport.GotoBottom()
+					}
+				}
+				return m, nil
+			}
+		}
+		m.listModel, lsCmd = m.listModel.Update(msg)
+		return m, lsCmd
+	}
+
+	m.textarea, tiCmd = m.textarea.Update(msg)
+	m.viewport, vpCmd = m.viewport.Update(msg)
+	m.spinner, spCmd = m.spinner.Update(msg)
+	cmds = append(cmds, tiCmd, vpCmd, spCmd)
+
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.listModel.SetSize(msg.Width, msg.Height)
+		m.recomputeLayout()
+		m.renderMessages()
+		m.viewport.GotoBottom()
+
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyCtrlC, tea.KeyCtrlD:
+			return m, tea.Quit
+		case tea.KeyCtrlP:
+			models := []string{
+				"gemini-3.1-flash-lite-preview",
+				"gemini-3.1-pro-preview",
+				"gemini-1.5-pro-latest",
+				"gemini-1.5-flash-latest",
+				"gemini-2.0-flash-exp",
+				"gemini-2.0-pro-exp",
+			}
+			current := m.agent.GetModelName()
+			idx := 0
+			for i, mod := range models {
+				if mod == current {
+					idx = i
+					break
+				}
+			}
+			idx = (idx + 1) % len(models)
+			newMod := models[idx]
+			m.agent.SetModel(newMod)
+			m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Switched model to: " + newMod})
+			m.renderMessages()
+			m.viewport.GotoBottom()
+			return m, nil
+		case tea.KeyCtrlL:
+			m.messages = []ChatMessage{{Role: "System", Content: "Terminal cleared."}}
+			m.renderMessages()
+			m.viewport.GotoBottom()
+			return m, nil
+		case tea.KeyEnter:
+			if msg.Alt {
+				m.textarea.InsertString("\n")
+				return m, nil
+			}
+			if m.thinking {
+				return m, nil
+			}
+
+			v := strings.TrimSpace(m.textarea.Value())
+			m.textarea.Reset()
+
+			if v == "" {
+				return m, nil
+			}
+
+			if strings.HasPrefix(v, "!!") {
+				cmdStr := strings.TrimSpace(strings.TrimPrefix(v, "!!"))
+				m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Running local command: " + cmdStr})
+				m.renderMessages()
+				m.viewport.GotoBottom()
+
+				out, err := m.agent.RunBash(cmdStr, 60000)
+				if err != nil {
+					m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Command failed: " + err.Error() + "\n" + out})
+				} else {
+					m.messages = append(m.messages, ChatMessage{Role: "System", Content: "```\n" + out + "\n```"})
+				}
+				m.renderMessages()
+				m.viewport.GotoBottom()
+				return m, nil
+			} else if strings.HasPrefix(v, "!") {
+				cmdStr := strings.TrimSpace(strings.TrimPrefix(v, "!"))
+				m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Running command and appending to prompt: " + cmdStr})
+				m.renderMessages()
+				m.viewport.GotoBottom()
+
+				out, err := m.agent.RunBash(cmdStr, 60000)
+				if err != nil {
+					v += fmt.Sprintf("\n\nCommand `!%s` failed: %v\nOutput: %s", cmdStr, err, out)
+				} else {
+					v += fmt.Sprintf("\n\nOutput of `!%s`:\n```\n%s\n```", cmdStr, out)
+				}
+			}
+
+			fileRegex := regexp.MustCompile(`@([a-zA-Z0-9_./-]+)`)
+			matches := fileRegex.FindAllStringSubmatch(v, -1)
+			if len(matches) > 0 {
+				for _, match := range matches {
+					filePath := match[1]
+					content, err := os.ReadFile(filepath.Join(m.agent.GetRoot(), filePath))
+					if err != nil {
+						content, err = os.ReadFile(filePath)
+					}
+					if err == nil {
+						v += fmt.Sprintf("\n\nFile: %s\n```\n%s\n```", filePath, string(content))
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: fmt.Sprintf("Could not read file @%s: %v", filePath, err)})
+					}
+				}
+			}
+
+			if strings.HasPrefix(v, "/") {
+				cmdParts := strings.Fields(v)
+				command := cmdParts[0]
+
+				switch command {
+				case "/copy":
+					var lastMairu string
+					for i := len(m.messages) - 1; i >= 0; i-- {
+						if m.messages[i].Role == "Mairu" {
+							lastMairu = m.messages[i].Content
+							break
+						}
+					}
+					if lastMairu != "" {
+						err := clipboard.WriteAll(lastMairu)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to copy to clipboard: " + err.Error()})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Copied last response to clipboard."})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "No response to copy."})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/exit", "/quit":
+					return m, tea.Quit
+				case "/clear":
+					m.messages = []ChatMessage{{Role: "System", Content: "Terminal cleared."}}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/help":
+					helpText := `**Available Commands:**
+- ` + "`" + `/help` + "`" + `: Show this help message
+- ` + "`" + `/clear` + "`" + `: Clear the terminal screen (or Ctrl+L)
+- ` + "`" + `/copy` + "`" + `: Copy last response to clipboard
+- ` + "`" + `/models` + "`" + `: Open model selector
+- ` + "`" + `/model <name>` + "`" + `: Switch to a specific model
+- ` + "`" + `/sessions` + "`" + `: Open session selector
+- ` + "`" + `/session <name>` + "`" + `: Load a specific session
+- ` + "`" + `/memory <search|store> <text>` + "`" + `: Interact with contextfs memory
+- ` + "`" + `/node <search|ls> <text|uri>` + "`" + `: Interact with contextfs nodes
+- ` + "`" + `/vibe <query>` + "`" + `: Run contextfs vibe-query
+- ` + "`" + `/remember <text>` + "`" + `: Run contextfs vibe-mutation
+- ` + "`" + `/save <name>` + "`" + `: Save the current session
+- ` + "`" + `/fork <name>` + "`" + `: Fork the current session to a new name
+- ` + "`" + `/reset` + "`" + ` / ` + "`" + `/new` + "`" + `: Start a fresh session and clear context
+- ` + "`" + `/compact` + "`" + `: Summarize history to save tokens
+- ` + "`" + `/export <file>` + "`" + `: Export conversation to a file
+- ` + "`" + `/exit` + "`" + ` / ` + "`" + `/quit` + "`" + `: Exit Mairu`
+					m.messages = append(m.messages, ChatMessage{Role: "System", Content: helpText})
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/fork":
+					if len(cmdParts) > 1 {
+						newName := cmdParts[1]
+						err := m.agent.SaveSession(newName)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to fork session: " + err.Error()})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Forked session to: " + newName})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /fork <name>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/save":
+					if len(cmdParts) > 1 {
+						sessionName := cmdParts[1]
+						err := m.agent.SaveSession(sessionName)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to save session: " + err.Error()})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Session saved as: " + sessionName})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /save <name>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/reset", "/new":
+					m.agent.ResetSession()
+					m.messages = []ChatMessage{{Role: "System", Content: "Session reset. Starting fresh context."}}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/compact", "/squash":
+					m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Compacting context... please wait."})
+					m.renderMessages()
+					m.viewport.GotoBottom()
+
+					// Simple spinner update while it happens synchronously
+					err := m.agent.CompactContext()
+					if err != nil {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to compact: " + err.Error()})
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Context compacted successfully!"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/export":
+					if len(cmdParts) > 1 {
+						fileName := cmdParts[1]
+						history := m.agent.GetHistoryText()
+						content := strings.Join(history, "\n\n")
+						err := os.WriteFile(fileName, []byte(content), 0644)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to export: " + err.Error()})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Conversation exported to: " + fileName})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /export <filename>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/memory":
+					if len(cmdParts) >= 3 {
+						subCmd := cmdParts[1]
+						args := strings.Join(cmdParts[2:], " ")
+						projectName := filepath.Base(m.agent.GetRoot())
+
+						var bashCmd string
+						if subCmd == "search" {
+							bashCmd = fmt.Sprintf("context-cli memory search %q -k 5 -P %q", args, projectName)
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Searching memory: " + args})
+						} else if subCmd == "store" {
+							bashCmd = fmt.Sprintf("context-cli memory store %q -c observation -o user -i 5 -P %q", args, projectName)
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Storing memory: " + args})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /memory <search|store> <text>"})
+							m.renderMessages()
+							m.viewport.GotoBottom()
+							return m, nil
+						}
+
+						m.renderMessages()
+						m.viewport.GotoBottom()
+
+						out, err := m.agent.RunBash(bashCmd, 15000)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Memory operation failed: " + err.Error() + "\n" + out})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: out})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /memory <search|store> <text>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+
+				case "/node":
+					if len(cmdParts) >= 3 {
+						subCmd := cmdParts[1]
+						args := strings.Join(cmdParts[2:], " ")
+						projectName := filepath.Base(m.agent.GetRoot())
+
+						var bashCmd string
+						if subCmd == "search" {
+							bashCmd = fmt.Sprintf("context-cli node search %q -k 5 -P %q", args, projectName)
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Searching nodes: " + args})
+						} else if subCmd == "ls" {
+							bashCmd = fmt.Sprintf("context-cli node ls %q -P %q", args, projectName)
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Listing node: " + args})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /node <search|ls> <text|uri>"})
+							m.renderMessages()
+							m.viewport.GotoBottom()
+							return m, nil
+						}
+
+						m.renderMessages()
+						m.viewport.GotoBottom()
+
+						out, err := m.agent.RunBash(bashCmd, 15000)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Node operation failed: " + err.Error() + "\n" + out})
+						} else {
+							prettyOut := out
+							if strings.HasPrefix(strings.TrimSpace(out), "{") || strings.HasPrefix(strings.TrimSpace(out), "[") {
+								prettyCmd := fmt.Sprintf("echo %q | jq .", out)
+								if jsonOut, err := m.agent.RunBash(prettyCmd, 5000); err == nil && jsonOut != "" {
+									prettyOut = jsonOut
+								}
+							}
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "```json\n" + prettyOut + "\n```"})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /node <search|ls> <text|uri>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+
+				case "/vibe":
+					if len(cmdParts) > 1 {
+						args := strings.Join(cmdParts[1:], " ")
+						projectName := filepath.Base(m.agent.GetRoot())
+						bashCmd := fmt.Sprintf("context-cli vibe-query %q -P %q", args, projectName)
+
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Vibe querying: " + args})
+						m.renderMessages()
+						m.viewport.GotoBottom()
+
+						out, err := m.agent.RunBash(bashCmd, 30000)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Vibe query failed: " + err.Error() + "\n" + out})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: out})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /vibe <query>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+
+				case "/remember":
+					if len(cmdParts) > 1 {
+						args := strings.Join(cmdParts[1:], " ")
+						projectName := filepath.Base(m.agent.GetRoot())
+						bashCmd := fmt.Sprintf("context-cli vibe-mutation %q -P %q -y", args, projectName)
+
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Remembering: " + args})
+						m.renderMessages()
+						m.viewport.GotoBottom()
+
+						out, err := m.agent.RunBash(bashCmd, 45000)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Vibe mutation failed: " + err.Error() + "\n" + out})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Knowledge stored successfully:\n" + out})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /remember <fact or rule>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/models":
+					m.listType = "model"
+					m.showList = true
+					var items []list.Item
+					models := []string{
+						"gemini-3.1-flash-lite-preview",
+						"gemini-3.1-pro-preview",
+						"gemini-1.5-pro-latest",
+						"gemini-1.5-flash-latest",
+						"gemini-2.0-flash-exp",
+						"gemini-2.0-pro-exp",
+					}
+					for _, mod := range models {
+						items = append(items, listItem{title: mod, desc: "Gemini Model"})
+					}
+					m.listModel.SetItems(items)
+					m.listModel.Title = "Select Model (Current: " + m.agent.GetModelName() + ")"
+					return m, nil
+				case "/model":
+					if len(cmdParts) > 1 {
+						modelName := cmdParts[1]
+						m.agent.SetModel(modelName)
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Switched model to: " + modelName})
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /model <name>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/sessions":
+					m.listType = "session"
+					m.showList = true
+					sessions, _ := m.agent.ListSessions()
+					var items []list.Item
+					for _, s := range sessions {
+						items = append(items, listItem{title: s, desc: "Saved session"})
+					}
+					m.listModel.SetItems(items)
+					m.listModel.Title = "Select Session"
+					return m, nil
+				case "/session":
+					if len(cmdParts) > 1 {
+						sessionName := cmdParts[1]
+						m.agent.SaveSession("current")
+						err := m.agent.LoadSession(sessionName)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to load session: " + err.Error()})
+						} else {
+							m.messages = []ChatMessage{{Role: "System", Content: "Loaded session: " + sessionName}}
+							for _, text := range m.agent.GetHistoryText() {
+								if strings.HasPrefix(text, "You: ") {
+									m.messages = append(m.messages, ChatMessage{Role: "You", Content: strings.TrimPrefix(text, "You: ")})
+								} else if strings.HasPrefix(text, "Mairu: ") {
+									m.messages = append(m.messages, ChatMessage{Role: "Mairu", Content: strings.TrimPrefix(text, "Mairu: ")})
+								}
+							}
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /session <name>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				default:
+					m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Unknown command: " + command + "\nType /help for a list of commands."})
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				}
+			}
+
+			// Adjust textarea height dynamically if text was multiple lines
+			taHeight := m.textarea.Height()
+			newHeight := m.height - taHeight - 2
+			if newHeight < 5 {
+				newHeight = 5
+			}
+			m.viewport.Height = newHeight
+
+			m.messages = append(m.messages, ChatMessage{Role: "You", Content: v})
+			m.renderMessages()
+			m.viewport.GotoBottom()
+
+			m.thinking = true
+			m.currentResponse = ""
+			m.toolEvents = []string{}
+
+			m.activeStream = make(chan agent.AgentEvent)
+			go m.agent.RunStream(v, m.activeStream)
+
+			cmds = append(cmds, waitForStream(m.activeStream))
+		}
+
+	case agentStreamMsg:
+		if msg.Type == "done" {
+			m.thinking = false
+			m.messages = append(m.messages, ChatMessage{Role: "Mairu", Content: m.currentResponse})
+			m.currentResponse = ""
+			m.toolEvents = []string{}
+			m.activeStream = nil
+			m.renderMessages()
+			m.viewport.GotoBottom()
+		} else if msg.Type == "text" {
+			m.currentResponse += msg.Content
+			m.renderMessages()
+			m.viewport.GotoBottom()
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "diff" {
+			m.messages = append(m.messages, ChatMessage{Role: "Diff", Content: msg.Content})
+			m.renderMessages()
+			m.viewport.GotoBottom()
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "status" {
+			m.toolEvents = append(m.toolEvents, msg.Content)
+			m.renderMessages()
+			m.viewport.GotoBottom()
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "tool_call" {
+			argsStr := ""
+			for k, v := range msg.ToolArgs {
+				argsStr += fmt.Sprintf("%s=%v ", k, v)
+			}
+			m.toolEvents = append(m.toolEvents, fmt.Sprintf("▶ %s(%s)", msg.ToolName, strings.TrimSpace(argsStr)))
+			m.renderMessages()
+			m.viewport.GotoBottom()
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "tool_result" {
+			resStr := fmt.Sprintf("%v", msg.ToolResult)
+			if len(resStr) > 80 {
+				resStr = strings.ReplaceAll(resStr[:80], "\n", " ") + "..."
+			}
+			m.toolEvents = append(m.toolEvents, fmt.Sprintf("✔ %s", resStr))
+			m.renderMessages()
+			m.viewport.GotoBottom()
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "error" {
+			m.thinking = false
+			m.messages = append(m.messages, ChatMessage{Role: "Error", Content: msg.Content})
+			m.activeStream = nil
+			m.renderMessages()
+			m.viewport.GotoBottom()
+		}
+
+	case errMsg:
+		m.err = msg
+		return m, nil
+	}
+
+	// Dynamic resizing of textarea based on content
+	lines := strings.Count(m.textarea.Value(), "\n") + 1
+	if lines > 5 {
+		lines = 5
+	}
+	if m.textarea.Height() != lines {
+		m.textarea.SetHeight(lines)
+		m.recomputeLayout()
+		m.viewport.GotoBottom()
+	}
+
+	return m, tea.Batch(cmds...)
+}
+
+func (m *model) renderMessages() {
+	var sb strings.Builder
+	for _, msg := range m.messages {
+		if msg.Role == "System" {
+			rendered, _ := m.mdRenderer.Render(msg.Content)
+			sb.WriteString(systemStyle.Render(rendered) + "\n")
+		} else if msg.Role == "You" {
+			sb.WriteString(userStyle.Render("○ You") + "\n" + msg.Content + "\n\n")
+		} else if msg.Role == "Error" {
+			sb.WriteString(errorStyle.Render("✗ Error") + "\n" + msg.Content + "\n\n")
+		} else if msg.Role == "Diff" {
+			rendered, _ := m.mdRenderer.Render(msg.Content)
+			sb.WriteString(rendered + "\n")
+		} else {
+			rendered, _ := m.mdRenderer.Render(msg.Content)
+			sb.WriteString(agentStyle.Render("● Mairu") + "\n" + rendered + "\n")
+		}
+	}
+
+	if m.thinking {
+		if m.currentResponse != "" {
+			rendered, _ := m.mdRenderer.Render(m.currentResponse)
+			sb.WriteString(agentStyle.Render("● Mairu") + "\n" + rendered + "\n")
+		} else {
+			sb.WriteString(agentStyle.Render("● Mairu") + "\n\n")
+		}
+		if len(m.toolEvents) > 0 {
+			for _, e := range m.toolEvents {
+				sb.WriteString(toolStyle.Render(e) + "\n")
+			}
+			sb.WriteString("\n")
+		}
+	}
+
+	m.viewport.SetContent(sb.String())
+}
+
+func (m model) View() string {
+	if m.showList {
+		return m.listModel.View()
+	}
+
+	statusStr := ""
+	if m.thinking {
+		statusStr = m.spinner.View() + " "
+	}
+
+	inputView := statusStr + m.textarea.View()
+
+	if m.chatPaneWidth == 0 || m.sidebarWidth == 0 || m.panesHeight == 0 {
+		m.recomputeLayout()
+	}
+
+	chatPane := chatPaneStyle.
+		Width(m.chatPaneWidth).
+		Height(m.panesHeight).
+		Render(m.viewport.View())
+	mainRow := chatPane
+	if m.sidebarWidth > 0 {
+		sidebarPane := sidebarPaneStyle.
+			Width(m.sidebarWidth).
+			Height(m.panesHeight).
+			Render(m.renderSidebar())
+		mainRow = lipgloss.JoinHorizontal(lipgloss.Top, chatPane, sidebarPane)
+	}
+
+	viewStr := fmt.Sprintf(
+		"%s\n%s\n%s",
+		appStyle.Render(mainRow),
+		appStyle.Render(inputView),
+		appStyle.Render(m.renderFooter()),
+	)
+	return viewStr
+}
+
+func (m *model) recomputeLayout() {
+	if m.width <= 0 || m.height <= 0 {
+		return
+	}
+
+	availableWidth := m.width - 2
+	if availableWidth < 60 {
+		availableWidth = m.width
+	}
+
+	sidebar := availableWidth / 3
+	if sidebar < 30 {
+		sidebar = 30
+	}
+	if sidebar > 46 {
+		sidebar = 46
+	}
+	chatWidth := availableWidth - sidebar - 1
+	if chatWidth < 24 {
+		chatWidth = availableWidth
+		sidebar = 0
+	}
+
+	taHeight := m.textarea.Height()
+	panesHeight := m.height - taHeight - 3
+	if panesHeight < 7 {
+		panesHeight = 7
+	}
+
+	m.chatPaneWidth = chatWidth
+	m.sidebarWidth = sidebar
+	m.panesHeight = panesHeight
+
+	viewportWidth := chatWidth - 4
+	if viewportWidth < 20 {
+		viewportWidth = 20
+	}
+	viewportHeight := panesHeight - 2
+	if viewportHeight < 3 {
+		viewportHeight = 3
+	}
+
+	m.viewport.Width = viewportWidth
+	m.viewport.Height = viewportHeight
+	m.textarea.SetWidth(availableWidth)
+
+	wrap := viewportWidth - 2
+	if wrap < 20 {
+		wrap = 20
+	}
+	r, _ := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(wrap),
+	)
+	m.mdRenderer = r
+}
+
+func (m model) renderSidebar() string {
+	stats := computeSessionStats(m.messages, m.currentResponse, m.toolEvents, m.thinking, m.agent.GetModelName())
+	var sb strings.Builder
+	sb.WriteString(sidebarHeaderStyle.Render("Session"))
+	sb.WriteString("\n")
+	sb.WriteString(fmt.Sprintf("%s %s\n", sidebarLabelStyle.Render("Model:"), stats.Model))
+	sb.WriteString(fmt.Sprintf("%s %s\n", sidebarLabelStyle.Render("State:"), stats.StreamState))
+	sb.WriteString(fmt.Sprintf("%s %d\n", sidebarLabelStyle.Render("Messages:"), len(m.messages)))
+	sb.WriteString(fmt.Sprintf("%s U:%d A:%d S:%d E:%d D:%d\n",
+		sidebarLabelStyle.Render("By role:"),
+		stats.UserMessages,
+		stats.AssistantMessages,
+		stats.SystemMessages,
+		stats.ErrorMessages,
+		stats.DiffMessages,
+	))
+	sb.WriteString("\n")
+	sb.WriteString(sidebarHeaderStyle.Render("Tools"))
+	sb.WriteString("\n")
+	sb.WriteString(fmt.Sprintf("%s %d\n", sidebarLabelStyle.Render("Events:"), stats.ToolEvents))
+	sb.WriteString(fmt.Sprintf("%s %d\n", sidebarLabelStyle.Render("Calls:"), stats.ToolCalls))
+	sb.WriteString(fmt.Sprintf("%s %d\n", sidebarLabelStyle.Render("Results:"), stats.ToolResults))
+	sb.WriteString("\n")
+	sb.WriteString(sidebarHeaderStyle.Render("Token Estimate"))
+	sb.WriteString("\n")
+	sb.WriteString(fmt.Sprintf("%s %d\n", sidebarLabelStyle.Render("User:"), stats.EstimatedUserTokens))
+	sb.WriteString(fmt.Sprintf("%s %d\n", sidebarLabelStyle.Render("Mairu:"), stats.EstimatedAgentTokens))
+	sb.WriteString(fmt.Sprintf("%s %d\n", sidebarLabelStyle.Render("Total:"), stats.EstimatedTotalTokens))
+
+	if len(m.toolEvents) > 0 {
+		sb.WriteString("\n\n")
+		sb.WriteString(sidebarHeaderStyle.Render("Recent Tool Activity"))
+		sb.WriteString("\n")
+		start := len(m.toolEvents) - 5
+		if start < 0 {
+			start = 0
+		}
+		for _, e := range m.toolEvents[start:] {
+			sb.WriteString("• " + e + "\n")
+		}
+	}
+
+	return sb.String()
+}
+
+func (m model) renderFooter() string {
+	footer := "Ctrl+C quit  ·  Ctrl+L clear  ·  Ctrl+P model cycle  ·  /help commands"
+	return footerStyle.Render(footer)
+}

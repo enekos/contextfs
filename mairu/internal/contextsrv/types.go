@@ -1,0 +1,175 @@
+package contextsrv
+
+import (
+	"encoding/json"
+	"time"
+)
+
+const (
+	ModerationStatusClean       = "clean"
+	ModerationStatusFlaggedSoft = "flagged_soft"
+	ModerationStatusRejectHard  = "reject_hard"
+)
+
+type Memory struct {
+	ID                string    `json:"id"`
+	Project           string    `json:"project"`
+	Content           string    `json:"content"`
+	Category          string    `json:"category"`
+	Owner             string    `json:"owner"`
+	Importance        int       `json:"importance"`
+	ModerationStatus  string    `json:"moderation_status"`
+	ModerationReasons []string  `json:"moderation_reasons"`
+	ReviewRequired    bool      `json:"review_required"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+type Skill struct {
+	ID                string    `json:"id"`
+	Project           string    `json:"project"`
+	Name              string    `json:"name"`
+	Description       string    `json:"description"`
+	ModerationStatus  string    `json:"moderation_status"`
+	ModerationReasons []string  `json:"moderation_reasons"`
+	ReviewRequired    bool      `json:"review_required"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+type ContextNode struct {
+	URI               string    `json:"uri"`
+	Project           string    `json:"project"`
+	ParentURI         *string   `json:"parent_uri,omitempty"`
+	Name              string    `json:"name"`
+	Abstract          string    `json:"abstract"`
+	Overview          string    `json:"overview,omitempty"`
+	Content           string    `json:"content,omitempty"`
+	ModerationStatus  string    `json:"moderation_status"`
+	ModerationReasons []string  `json:"moderation_reasons"`
+	ReviewRequired    bool      `json:"review_required"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+type MemoryCreateInput struct {
+	Project           string
+	Content           string
+	Category          string
+	Owner             string
+	Importance        int
+	Metadata          json.RawMessage
+	ModerationStatus  string
+	ModerationReasons []string
+	ReviewRequired    bool
+}
+
+type MemoryUpdateInput struct {
+	ID         string
+	Content    string
+	Category   string
+	Owner      string
+	Importance int
+}
+
+type SkillCreateInput struct {
+	Project           string
+	Name              string
+	Description       string
+	Metadata          json.RawMessage
+	ModerationStatus  string
+	ModerationReasons []string
+	ReviewRequired    bool
+}
+
+type SkillUpdateInput struct {
+	ID          string
+	Name        string
+	Description string
+}
+
+type ContextCreateInput struct {
+	URI               string
+	Project           string
+	ParentURI         *string
+	Name              string
+	Abstract          string
+	Overview          string
+	Content           string
+	Metadata          json.RawMessage
+	ModerationStatus  string
+	ModerationReasons []string
+	ReviewRequired    bool
+}
+
+type ContextUpdateInput struct {
+	URI      string
+	Name     string
+	Abstract string
+	Overview string
+	Content  string
+}
+
+type SearchOptions struct {
+	Query         string  `json:"query"`
+	Project       string  `json:"project"`
+	Store         string  `json:"store"`
+	TopK          int     `json:"topK"`
+	MinScore      float64 `json:"minScore"`
+	Highlight     bool    `json:"highlight"`
+	Fuzziness     string  `json:"fuzziness"`
+	PhraseBoost   float64 `json:"phraseBoost"`
+	WeightVector  float64 `json:"weightVector"`
+	WeightKeyword float64 `json:"weightKeyword"`
+	WeightRecency float64 `json:"weightRecency"`
+	WeightImp     float64 `json:"weightImportance"`
+	RecencyScale  string  `json:"recencyScale"`
+	RecencyDecay  float64 `json:"recencyDecay"`
+}
+
+type VibeQueryResult struct {
+	Reasoning string             `json:"reasoning"`
+	Results   []VibeSearchGroup `json:"results"`
+}
+
+type VibeSearchGroup struct {
+	Store string           `json:"store"`
+	Query string           `json:"query"`
+	Items []map[string]any `json:"items"`
+}
+
+type VibeMutationPlan struct {
+	Reasoning  string            `json:"reasoning"`
+	Operations []VibeMutationOp  `json:"operations"`
+}
+
+type VibeMutationOp struct {
+	Op          string         `json:"op"`
+	Target      string         `json:"target,omitempty"`
+	Description string         `json:"description"`
+	Data        map[string]any `json:"data"`
+}
+
+type ModerationEvent struct {
+	ID               int64     `json:"id"`
+	EntityType       string    `json:"entity_type"`
+	EntityID         string    `json:"entity_id"`
+	Project          string    `json:"project"`
+	Decision         string    `json:"decision"`
+	Reasons          []string  `json:"reasons"`
+	ReviewStatus     string    `json:"review_status"`
+	ReviewerDecision string    `json:"reviewer_decision,omitempty"`
+	ReviewRequired   bool      `json:"review_required"`
+	PolicyVersion    string    `json:"policy_version"`
+	CreatedAt        time.Time `json:"created_at"`
+	ReviewedAt       time.Time `json:"reviewed_at,omitempty"`
+	Reviewer         string    `json:"reviewer,omitempty"`
+}
+
+type ModerationReviewInput struct {
+	EventID   int64
+	Decision  string
+	Reviewer  string
+	Notes     string
+	UpdatedBy string
+}

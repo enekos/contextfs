@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll } from "vitest";
-import { describeStatements } from "../src/ast/nlDescriber";
-import { ParserPool } from "../src/ast/parserPool";
+import { describeStatements } from "../mairu/contextfs/src/ast/nlDescriber";
+import { ParserPool } from "../mairu/contextfs/src/ast/parserPool";
 import { Parser } from "web-tree-sitter";
 
 let tsParser: InstanceType<typeof Parser>;

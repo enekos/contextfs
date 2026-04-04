@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { TsxDescriber } from "../src/ast/tsxDescriber";
+import { TsxDescriber } from "../mairu/contextfs/src/ast/tsxDescriber";
 
 describe("TsxDescriber", () => {
   const describer = new TsxDescriber();

@@ -2,8 +2,8 @@ import { describe, expect, it, vi, beforeAll } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { CodebaseDaemon } from "../src/daemon";
-import { ParserPool } from "../src/ast/parserPool";
+import { CodebaseDaemon } from "../mairu/contextfs/src/daemon";
+import { ParserPool } from "../mairu/contextfs/src/ast/parserPool";
 
 beforeAll(async () => {
   await ParserPool.init();

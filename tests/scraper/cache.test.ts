@@ -12,13 +12,13 @@ describe("ScrapeCache", () => {
   });
 
   it("loads empty cache when file does not exist", async () => {
-    const { ScrapeCache } = await import("../../src/scraper/cache");
+    const { ScrapeCache } = await import("../../mairu/contextfs/src/scraper/cache");
     const cache = new ScrapeCache(tmpCacheFile);
     expect(cache.get("https://example.com")).toBeUndefined();
   });
 
   it("persists and loads cache entries", async () => {
-    const { ScrapeCache } = await import("../../src/scraper/cache");
+    const { ScrapeCache } = await import("../../mairu/contextfs/src/scraper/cache");
     const cache = new ScrapeCache(tmpCacheFile);
     cache.set("https://example.com/page", {
       contentHash: "abc123",
@@ -34,7 +34,7 @@ describe("ScrapeCache", () => {
   });
 
   it("isUnchanged returns true when content hash matches cached", async () => {
-    const { ScrapeCache } = await import("../../src/scraper/cache");
+    const { ScrapeCache } = await import("../../mairu/contextfs/src/scraper/cache");
     const cache = new ScrapeCache(tmpCacheFile);
     const content = "hello world";
     const hash = createHash("sha1").update(content).digest("hex");
@@ -48,7 +48,7 @@ describe("ScrapeCache", () => {
   });
 
   it("isUnchanged returns false for uncached URL", async () => {
-    const { ScrapeCache } = await import("../../src/scraper/cache");
+    const { ScrapeCache } = await import("../../mairu/contextfs/src/scraper/cache");
     const cache = new ScrapeCache(tmpCacheFile);
     expect(cache.isUnchanged("https://new-url.com/", "any content")).toBe(false);
   });

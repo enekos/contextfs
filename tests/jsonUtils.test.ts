@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractJsonObject, extractJsonArray } from "../src/core/jsonUtils";
+import { extractJsonObject, extractJsonArray } from "../mairu/contextfs/src/core/jsonUtils";
 
 describe("jsonUtils", () => {
   describe("extractJsonObject", () => {

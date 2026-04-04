@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { TypeScriptDescriber } from "../src/ast/typescriptDescriber";
+import { TypeScriptDescriber } from "../mairu/contextfs/src/ast/typescriptDescriber";
 
 describe("TypeScriptDescriber", () => {
   const describer = new TypeScriptDescriber();

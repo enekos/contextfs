@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { VueDescriber } from "../src/ast/vueDescriber";
+import { VueDescriber } from "../mairu/contextfs/src/ast/vueDescriber";
 
 describe("VueDescriber", () => {
   const describer = new VueDescriber();

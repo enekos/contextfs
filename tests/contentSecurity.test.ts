@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scanContent } from "../src/core/contentSecurity";
+import { scanContent } from "../mairu/contextfs/src/core/contentSecurity";
 
 describe("scanContent", () => {
   it("returns safe for benign content", () => {

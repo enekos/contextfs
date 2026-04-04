@@ -8,8 +8,8 @@ vi.mock("@google/genai", () => ({
   })),
 }));
 
-vi.mock("../src/core/config", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../src/core/config")>();
+vi.mock("../mairu/contextfs/src/core/config", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../mairu/contextfs/src/core/config")>();
   return {
     ...original,
     config: {
@@ -31,7 +31,7 @@ const mockCm = {
   searchContext: mockSearchContext,
 } as any;
 
-import { planFlush, summarizeSearchResults } from "../src/llm/vibeEngine";
+import { planFlush, summarizeSearchResults } from "../mairu/contextfs/src/llm/vibeEngine";
 
 describe("planFlush", () => {
   beforeEach(() => vi.clearAllMocks());

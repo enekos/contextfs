@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assertEmbeddingDimension, config } from "../src/core/config";
+import { assertEmbeddingDimension, config } from "../mairu/contextfs/src/core/config";
 
 describe("assertEmbeddingDimension", () => {
   const dimension = config.embedding.dimension;
@@ -38,7 +38,7 @@ describe("config.embedding", () => {
 
 describe("dream config", () => {
   it("has default dream settings", async () => {
-    const { config } = await import("../src/core/config");
+    const { config } = await import("../mairu/contextfs/src/core/config");
     expect(config.dream.threshold).toBe(25);
     expect(config.dream.cooldownMs).toBe(4 * 60 * 60 * 1000);
     expect(config.dream.idleTimeoutMs).toBe(30 * 60 * 1000);
@@ -53,7 +53,7 @@ describe("dream config", () => {
 
     const { vi } = await import("vitest");
     vi.resetModules();
-    const { config } = await import("../src/core/config");
+    const { config } = await import("../mairu/contextfs/src/core/config");
     expect(config.dream.threshold).toBe(50);
     expect(config.dream.cooldownMs).toBe(2 * 60 * 60 * 1000);
     expect(config.dream.idleTimeoutMs).toBe(15 * 60 * 1000);

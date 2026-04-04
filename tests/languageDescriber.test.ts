@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { LanguageDescriber, FileGraphResult, LogicSymbol } from "../src/ast/languageDescriber";
-import { sortSymbols } from "../src/ast/languageDescriber";
-import { TypeScriptDescriber } from "../src/ast/typescriptDescriber";
+import type { LanguageDescriber, FileGraphResult, LogicSymbol } from "../mairu/contextfs/src/ast/languageDescriber";
+import { sortSymbols } from "../mairu/contextfs/src/ast/languageDescriber";
+import { TypeScriptDescriber } from "../mairu/contextfs/src/ast/typescriptDescriber";
 
 describe("LanguageDescriber interface", () => {
   it("TypeScriptDescriber implements LanguageDescriber", () => {

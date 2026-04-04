@@ -4,7 +4,7 @@ vi.mock("dotenv", () => ({
   config: vi.fn(),
 }));
 
-vi.mock("../src/storage/contextManager", () => ({
+vi.mock("../mairu/contextfs/src/storage/contextManager", () => ({
   ContextManager: vi.fn().mockImplementation((url, apiKey) => {
     return { url, apiKey };
   }),
@@ -29,7 +29,7 @@ describe("client", () => {
     process.env.MEILI_URL = "http://localhost:7700";
     delete process.env.MEILI_API_KEY;
 
-    const { createContextManager } = await import("../src/storage/client");
+    const { createContextManager } = await import("../mairu/contextfs/src/storage/client");
     const manager = createContextManager() as any;
 
     expect(manager.url).toBe("http://localhost:7700");
@@ -40,7 +40,7 @@ describe("client", () => {
     process.env.MEILI_URL = "http://localhost:7700";
     process.env.MEILI_API_KEY = "my-secret-key";
 
-    const { createContextManager } = await import("../src/storage/client");
+    const { createContextManager } = await import("../mairu/contextfs/src/storage/client");
     const manager = createContextManager() as any;
 
     expect(manager.url).toBe("http://localhost:7700");
@@ -51,7 +51,7 @@ describe("client", () => {
     process.env.MEILI_URL = "http://custom-host:7700";
     delete process.env.MEILI_API_KEY;
 
-    const { createContextManager } = await import("../src/storage/client");
+    const { createContextManager } = await import("../mairu/contextfs/src/storage/client");
     const manager = createContextManager() as any;
 
     expect(manager.url).toBe("http://custom-host:7700");

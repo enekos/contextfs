@@ -1,0 +1,39 @@
+name: Mairu CI
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'mairu/**'
+      - '.github/workflows/mairu-ci.yml'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'mairu/**'
+      - '.github/workflows/mairu-ci.yml'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./mairu
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: mairu/go.mod
+          cache-dependency-path: mairu/go.sum
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Test
+        run: go test -v ./...

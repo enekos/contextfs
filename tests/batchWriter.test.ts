@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../src/storage/embedder", () => ({
+vi.mock("../mairu/contextfs/src/storage/embedder", () => ({
   Embedder: {
     getEmbeddings: vi.fn().mockImplementation((texts: string[]) =>
       Promise.resolve(texts.map(() => Array(3072).fill(0)))
@@ -33,8 +33,8 @@ vi.mock("meilisearch", () => ({
   })),
 }));
 
-vi.mock("../src/core/config", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../src/core/config")>();
+vi.mock("../mairu/contextfs/src/core/config", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../mairu/contextfs/src/core/config")>();
   return {
     ...original,
     config: {
@@ -48,9 +48,9 @@ vi.mock("../src/core/config", async (importOriginal) => {
   };
 });
 
-import { BatchWriter } from "../src/storage/batchWriter";
-import { MeilisearchDB } from "../src/storage/meilisearchDB";
-import { Embedder } from "../src/storage/embedder";
+import { BatchWriter } from "../mairu/contextfs/src/storage/batchWriter";
+import { MeilisearchDB } from "../mairu/contextfs/src/storage/meilisearchDB";
+import { Embedder } from "../mairu/contextfs/src/storage/embedder";
 
 describe("BatchWriter", () => {
   let db: MeilisearchDB;

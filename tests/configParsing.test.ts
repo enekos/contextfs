@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parsePositiveInt, parseBoolean, parseNonNegativeInt } from "../src/core/configParsing";
+import { parsePositiveInt, parseBoolean, parseNonNegativeInt } from "../mairu/contextfs/src/core/configParsing";
 
 describe("parsePositiveInt", () => {
   it("returns undefined for undefined", () => {

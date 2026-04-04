@@ -9,12 +9,12 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
-      include: ["src/**/*.ts"],
+      include: ["mairu/contextfs/src/**/*.ts"],
     },
   },
   resolve: {
     alias: {
-      "@": resolve(__dirname, "src"),
+      "@": resolve(__dirname, "mairu/contextfs/src"),
     },
   },
 });

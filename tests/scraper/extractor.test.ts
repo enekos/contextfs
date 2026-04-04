@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractContent } from "../../src/scraper/extractor";
+import { extractContent } from "../../mairu/contextfs/src/scraper/extractor";
 
 const simpleHtml = `
 <html>
