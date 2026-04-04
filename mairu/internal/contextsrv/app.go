@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"mairu/internal/llm"
 )
 
 type Config struct {
@@ -53,9 +55,23 @@ func NewApp(cfg Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	indexer := NewMeiliIndexer(cfg.MeiliURL, cfg.MeiliAPIKey)
+
+	geminiKey := os.Getenv("GEMINI_API_KEY")
+	var geminiClient *llm.GeminiProvider
+	if geminiKey != "" {
+		client, err := llm.NewGeminiProvider(context.Background(), geminiKey)
+		if err == nil {
+			geminiClient = client
+		}
+	}
+
+	indexer := NewMeiliIndexer(cfg.MeiliURL, cfg.MeiliAPIKey, geminiClient)
 	_ = indexer.EnsureIndexes()
-	svc := NewServiceWithSearch(repo, indexer)
+	var llmClient LLMClient
+	if geminiClient != nil {
+		llmClient = geminiClient
+	}
+	svc := NewServiceWithSearch(repo, indexer, llmClient)
 	handler := NewHandler(svc, cfg.AuthToken)
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
@@ -65,7 +81,7 @@ func NewApp(cfg Config) (*App, error) {
 	return &App{
 		cfg:       cfg,
 		repo:      repo,
-		projector: NewProjector(repo, indexer),
+		projector: NewProjector(repo, indexer, geminiClient),
 		server:    srv,
 	}, nil
 }

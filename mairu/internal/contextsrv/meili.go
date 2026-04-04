@@ -1,6 +1,7 @@
 package contextsrv
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -17,15 +18,17 @@ const (
 )
 
 type MeiliIndexer struct {
-	client *meilisearch.Client
+	client   *meilisearch.Client
+	embedder Embedder
 }
 
-func NewMeiliIndexer(host, apiKey string) *MeiliIndexer {
+func NewMeiliIndexer(host, apiKey string, embedder Embedder) *MeiliIndexer {
 	return &MeiliIndexer{
 		client: meilisearch.NewClient(meilisearch.ClientConfig{
 			Host:   host,
 			APIKey: apiKey,
 		}),
+		embedder: embedder,
 	}
 }
 
@@ -104,22 +107,28 @@ func (m *MeiliIndexer) Search(opts SearchOptions) (map[string]any, error) {
 		return out, nil
 	}
 
+	var queryEmbedding []float32
+	if m.embedder != nil {
+		emb, _ := m.embedder.GetEmbedding(context.Background(), opts.Query)
+		queryEmbedding = emb
+	}
+
 	if store == "all" || store == "memories" {
-		res, err := m.searchIndex(meiliMemoriesIndex, opts, []string{"content"}, topK)
+		res, err := m.searchIndex(meiliMemoriesIndex, opts, []string{"content"}, topK, queryEmbedding)
 		if err != nil {
 			return nil, err
 		}
 		out["memories"] = res
 	}
 	if store == "all" || store == "skills" {
-		res, err := m.searchIndex(meiliSkillsIndex, opts, []string{"name", "description"}, topK)
+		res, err := m.searchIndex(meiliSkillsIndex, opts, []string{"name", "description"}, topK, queryEmbedding)
 		if err != nil {
 			return nil, err
 		}
 		out["skills"] = res
 	}
 	if store == "all" || store == "context" {
-		res, err := m.searchIndex(meiliNodesIndex, opts, []string{"name", "abstract", "content"}, topK)
+		res, err := m.searchIndex(meiliNodesIndex, opts, []string{"name", "abstract", "content"}, topK, queryEmbedding)
 		if err != nil {
 			return nil, err
 		}
@@ -128,12 +137,24 @@ func (m *MeiliIndexer) Search(opts SearchOptions) (map[string]any, error) {
 	return out, nil
 }
 
-func (m *MeiliIndexer) searchIndex(index string, opts SearchOptions, fields []string, limit int) ([]map[string]any, error) {
+func (m *MeiliIndexer) searchIndex(index string, opts SearchOptions, fields []string, limit int, queryEmbedding []float32) ([]map[string]any, error) {
+	fetchLimit := limit * 2 // CANDIDATE_MULTIPLIER equivalent
+	if fetchLimit < 20 {
+		fetchLimit = 20
+	}
 	req := &meilisearch.SearchRequest{
-		Limit: int64(limit),
+		Limit:            int64(fetchLimit),
+		ShowRankingScore: true,
 	}
 	if opts.Project != "" {
 		req.Filter = fmt.Sprintf(`project = "%s"`, escapeFilterValue(opts.Project))
+	}
+	if len(queryEmbedding) > 0 {
+		emb64 := make([]float64, len(queryEmbedding))
+		for i, v := range queryEmbedding {
+			emb64[i] = float64(v)
+		}
+		req.Vector = emb64
 	}
 	resp, err := m.client.Index(index).Search(opts.Query, req)
 	if err != nil {

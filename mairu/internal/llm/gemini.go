@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/generative-ai-go/genai"
@@ -99,4 +100,28 @@ func (g *GeminiProvider) SendFunctionResponsesStream(ctx context.Context, respon
 		})
 	}
 	return g.session.SendMessageStream(ctx, parts...)
+}
+
+func (g *GeminiProvider) GenerateJSON(ctx context.Context, system, user string) (map[string]any, error) {
+	model := g.client.GenerativeModel(g.modelName)
+	model.ResponseMIMEType = "application/json"
+	model.SystemInstruction = &genai.Content{
+		Parts: []genai.Part{genai.Text(system)},
+	}
+	resp, err := model.GenerateContent(ctx, genai.Text(user))
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("empty response")
+	}
+	part := resp.Candidates[0].Content.Parts[0]
+	if txt, ok := part.(genai.Text); ok {
+		var out map[string]any
+		if err := json.Unmarshal([]byte(txt), &out); err != nil {
+			return nil, fmt.Errorf("failed to parse JSON: %w", err)
+		}
+		return out, nil
+	}
+	return nil, fmt.Errorf("unexpected part type")
 }

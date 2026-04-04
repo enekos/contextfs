@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mairu/internal/prompts"
 	"math"
 	"strings"
 )
@@ -57,6 +58,7 @@ type Repository interface {
 type AppService struct {
 	repo          Repository
 	searchBackend SearchBackend
+	llmClient     LLMClient
 }
 
 func NewService(repo Repository) *AppService {
@@ -68,8 +70,8 @@ type SearchBackend interface {
 	ClusterStats() map[string]any
 }
 
-func NewServiceWithSearch(repo Repository, backend SearchBackend) *AppService {
-	return &AppService{repo: repo, searchBackend: backend}
+func NewServiceWithSearch(repo Repository, backend SearchBackend, llmClient LLMClient) *AppService {
+	return &AppService{repo: repo, searchBackend: backend, llmClient: llmClient}
 }
 
 func (s *AppService) Health() map[string]any {
@@ -245,6 +247,44 @@ func (s *AppService) VibeQuery(prompt, project string, topK int) (VibeQueryResul
 	if strings.TrimSpace(prompt) == "" {
 		return VibeQueryResult{}, fmt.Errorf("prompt is required")
 	}
+
+	if s.llmClient != nil {
+		if sys, err := prompts.Get("vibe_query_planner", nil); err == nil {
+			res, err := s.llmClient.GenerateJSON(context.Background(), sys, prompt)
+			if err == nil {
+				b, _ := json.Marshal(res)
+				var plan struct {
+					Reasoning string `json:"reasoning"`
+					Queries   []struct {
+						Store string `json:"store"`
+						Query string `json:"query"`
+					} `json:"queries"`
+				}
+				if err := json.Unmarshal(b, &plan); err == nil && len(plan.Queries) > 0 {
+					var results []VibeSearchGroup
+					for _, q := range plan.Queries {
+						search, _ := s.Search(SearchOptions{
+							Query:   q.Query,
+							Project: project,
+							Store:   q.Store,
+							TopK:    topK,
+						})
+						var items []map[string]any
+						if q.Store == "memory" {
+							items = toAnyMapSlice(search["memories"])
+						} else if q.Store == "skill" {
+							items = toAnyMapSlice(search["skills"])
+						} else {
+							items = toAnyMapSlice(search["contextNodes"])
+						}
+						results = append(results, VibeSearchGroup{Store: q.Store, Query: q.Query, Items: items})
+					}
+					return VibeQueryResult{Reasoning: plan.Reasoning, Results: results}, nil
+				}
+			}
+		}
+	}
+
 	search, err := s.Search(SearchOptions{
 		Query:   prompt,
 		Project: project,
@@ -271,6 +311,20 @@ func (s *AppService) PlanVibeMutation(prompt, project string, topK int) (VibeMut
 	if topK <= 0 {
 		topK = 5
 	}
+
+	if s.llmClient != nil {
+		if sys, err := prompts.Get("vibe_mutation_planner", nil); err == nil {
+			res, err := s.llmClient.GenerateJSON(context.Background(), sys, prompt)
+			if err == nil {
+				b, _ := json.Marshal(res)
+				var llmPlan VibeMutationPlan
+				if err := json.Unmarshal(b, &llmPlan); err == nil && len(llmPlan.Operations) > 0 {
+					return llmPlan, nil
+				}
+			}
+		}
+	}
+
 	plan := VibeMutationPlan{
 		Reasoning: "Generated a conservative mutation plan from plain-English intent.",
 	}

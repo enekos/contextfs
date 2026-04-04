@@ -53,3 +53,17 @@ func TestGetUnknownPrompt(t *testing.T) {
 		t.Errorf("expected error for unknown prompt, got nil")
 	}
 }
+
+func TestRenderVibeQueryPlanner(t *testing.T) {
+	out := Render("vibe_query_planner", nil)
+	if !strings.Contains(out, "You are a search planner") {
+		t.Errorf("vibe_query_planner prompt missing expected string, got:\n%s", out)
+	}
+}
+
+func TestRenderVibeMutationPlanner(t *testing.T) {
+	out := Render("vibe_mutation_planner", nil)
+	if !strings.Contains(out, "You are a mutation planner") {
+		t.Errorf("vibe_mutation_planner prompt missing expected string, got:\n%s", out)
+	}
+}

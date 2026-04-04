@@ -71,13 +71,18 @@ func (r *PostgresRepository) MarkOutboxFailed(ctx context.Context, id int64, ret
 	return err
 }
 
-type Projector struct {
-	repo    *PostgresRepository
-	indexer *MeiliIndexer
+type Embedder interface {
+	GetEmbedding(ctx context.Context, text string) ([]float32, error)
 }
 
-func NewProjector(repo *PostgresRepository, indexer *MeiliIndexer) *Projector {
-	return &Projector{repo: repo, indexer: indexer}
+type Projector struct {
+	repo     *PostgresRepository
+	indexer  *MeiliIndexer
+	embedder Embedder
+}
+
+func NewProjector(repo *PostgresRepository, indexer *MeiliIndexer, embedder Embedder) *Projector {
+	return &Projector{repo: repo, indexer: indexer, embedder: embedder}
 }
 
 func (p *Projector) RunOnce(ctx context.Context, batchSize int) (int, error) {
@@ -108,6 +113,35 @@ func (p *Projector) processJob(ctx context.Context, job OutboxJob) error {
 		if err := json.Unmarshal(job.Payload, &payload); err != nil {
 			return fmt.Errorf("bad payload: %w", err)
 		}
+		
+		// Extract text to embed
+		var textToEmbed string
+		switch job.EntityType {
+		case "memory":
+			if content, ok := payload["content"].(string); ok {
+				textToEmbed = content
+			}
+		case "skill":
+			name, _ := payload["name"].(string)
+			desc, _ := payload["description"].(string)
+			textToEmbed = name + ": " + desc
+		case "context_node":
+			name, _ := payload["name"].(string)
+			abstract, _ := payload["abstract"].(string)
+			content, _ := payload["content"].(string)
+			textToEmbed = name + "\n" + abstract + "\n" + content
+		}
+		
+		if textToEmbed != "" && p.embedder != nil {
+			emb, err := p.embedder.GetEmbedding(ctx, textToEmbed)
+			if err != nil {
+				return fmt.Errorf("embedding failed: %w", err)
+			}
+			payload["_vectors"] = map[string]any{
+				"default": emb,
+			}
+		}
+
 		return p.indexer.Upsert(job.EntityType, payload)
 	default:
 		return fmt.Errorf("unsupported op_type %q", job.OpType)
