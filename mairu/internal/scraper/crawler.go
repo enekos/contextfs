@@ -125,7 +125,6 @@ func fetchPage(targetURL string) (*CrawledPage, error) {
 }
 
 // Crawl performs a breadth-first search of the given seed URL.
-// Since Go doesn't have async generators like TS, we use channels.
 func Crawl(options CrawlOptions, out chan<- CrawledPage) {
 	defer close(out)
 
@@ -137,68 +136,73 @@ func Crawl(options CrawlOptions, out chan<- CrawledPage) {
 	queue := []queueItem{{url: options.SeedURL, depth: 0}}
 	pageCount := 0
 
-	for len(queue) > 0 && pageCount < options.MaxPages {
-		currentLevel := queue
-		queue = nil
+	concurrency := options.Concurrency
+	if concurrency <= 0 {
+		concurrency = 1
+	}
 
-		var toProcess []queueItem
-		for _, item := range currentLevel {
+	for len(queue) > 0 && pageCount < options.MaxPages {
+		var currentLevel []queueItem
+		// De-duplicate within the queue level
+		for _, item := range queue {
 			if !visited[item.url] {
 				visited[item.url] = true
-				toProcess = append(toProcess, item)
+				currentLevel = append(currentLevel, item)
 			}
 		}
+		queue = nil
 
-		concurrency := options.Concurrency
-		if concurrency <= 0 {
-			concurrency = 1
-		}
+		// Process current level using a semaphore for concurrency
+		sem := make(chan struct{}, concurrency)
+		var wg sync.WaitGroup
+		resultsChan := make(chan *CrawledPage, len(currentLevel))
 
-		for i := 0; i < len(toProcess); i += concurrency {
+		for _, item := range currentLevel {
 			if pageCount >= options.MaxPages {
 				break
 			}
-			end := i + concurrency
-			if end > len(toProcess) {
-				end = len(toProcess)
-			}
-			chunk := toProcess[i:end]
+			wg.Add(1)
+			go func(qItem queueItem) {
+				defer wg.Done()
+				sem <- struct{}{}        // acquire
+				defer func() { <-sem }() // release
 
-			var wg sync.WaitGroup
-			results := make([]*CrawledPage, len(chunk))
-			for j, item := range chunk {
-				wg.Add(1)
-				go func(idx int, qItem queueItem) {
-					defer wg.Done()
-					page, err := fetchPage(qItem.url)
-					if err == nil && page != nil {
-						page.Depth = qItem.depth
-						results[idx] = page
-					}
-				}(j, item)
-			}
+				page, err := fetchPage(qItem.url)
+				if err == nil && page != nil {
+					page.Depth = qItem.depth
+					resultsChan <- page
+				} else {
+					resultsChan <- nil
+				}
+			}(item)
+		}
+
+		// Wait in a separate goroutine and close results channel
+		go func() {
 			wg.Wait()
+			close(resultsChan)
+		}()
 
-			for _, page := range results {
-				if page == nil || pageCount >= options.MaxPages {
-					continue
-				}
-				page.Links = filterLinks(page.Links, options.SeedURL, options.URLPattern)
-				pageCount++
-				out <- *page
+		// Process results as they come in
+		for page := range resultsChan {
+			if page == nil || pageCount >= options.MaxPages {
+				continue
+			}
+			page.Links = filterLinks(page.Links, options.SeedURL, options.URLPattern)
+			pageCount++
+			out <- *page
 
-				if page.Depth < options.MaxDepth {
-					for _, link := range page.Links {
-						if !visited[link] && pageCount < options.MaxPages {
-							queue = append(queue, queueItem{url: link, depth: page.Depth + 1})
-						}
+			if page.Depth < options.MaxDepth {
+				for _, link := range page.Links {
+					if !visited[link] && pageCount < options.MaxPages {
+						queue = append(queue, queueItem{url: link, depth: page.Depth + 1})
 					}
 				}
 			}
+		}
 
-			if options.DelayMs > 0 && len(queue) > 0 {
-				time.Sleep(time.Duration(options.DelayMs) * time.Millisecond)
-			}
+		if options.DelayMs > 0 && len(queue) > 0 {
+			time.Sleep(time.Duration(options.DelayMs) * time.Millisecond)
 		}
 	}
 }
