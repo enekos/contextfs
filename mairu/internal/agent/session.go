@@ -15,9 +15,17 @@ import (
 	"mairu/internal/llm"
 )
 
+type SavedPart struct {
+	Type     string         `json:"type"`                // "text", "function_call", "function_response"
+	Text     string         `json:"text,omitempty"`      // For "text" type
+	FuncName string         `json:"func_name,omitempty"` // For function call/response
+	FuncArgs map[string]any `json:"func_args,omitempty"` // For function call
+	FuncResp map[string]any `json:"func_resp,omitempty"` // For function response
+}
+
 type SavedMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role  string      `json:"role"`
+	Parts []SavedPart `json:"parts"`
 }
 
 var sessionNamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -105,11 +113,31 @@ func migrateLegacySessionsFile(sessionsDir string) error {
 		return err
 	}
 
-	var legacyMessages []SavedMessage
+	type LegacySavedMessage struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+
+	var legacyMessages []LegacySavedMessage
 	if err := json.Unmarshal(legacyData, &legacyMessages); err == nil {
-		defaultPath := filepath.Join(sessionsDir, "default.json")
-		if writeErr := os.WriteFile(defaultPath, legacyData, 0644); writeErr != nil {
-			return writeErr
+		var migrated []SavedMessage
+		for _, lm := range legacyMessages {
+			migrated = append(migrated, SavedMessage{
+				Role: lm.Role,
+				Parts: []SavedPart{
+					{
+						Type: "text",
+						Text: lm.Content,
+					},
+				},
+			})
+		}
+		migratedData, err := json.MarshalIndent(migrated, "", "  ")
+		if err == nil {
+			defaultPath := filepath.Join(sessionsDir, "default.json")
+			if writeErr := os.WriteFile(defaultPath, migratedData, 0644); writeErr != nil {
+				return writeErr
+			}
 		}
 	}
 
@@ -148,16 +176,32 @@ func (a *Agent) SaveSession(sessionName string) error {
 
 	for _, c := range history {
 		if c.Role == "user" || c.Role == "model" {
-			var textContent string
+			var savedParts []SavedPart
 			for _, p := range c.Parts {
-				if t, ok := p.(genai.Text); ok {
-					textContent += string(t)
+				switch v := p.(type) {
+				case genai.Text:
+					savedParts = append(savedParts, SavedPart{
+						Type: "text",
+						Text: string(v),
+					})
+				case genai.FunctionCall:
+					savedParts = append(savedParts, SavedPart{
+						Type:     "function_call",
+						FuncName: v.Name,
+						FuncArgs: v.Args,
+					})
+				case genai.FunctionResponse:
+					savedParts = append(savedParts, SavedPart{
+						Type:     "function_response",
+						FuncName: v.Name,
+						FuncResp: v.Response,
+					})
 				}
 			}
-			if textContent != "" {
+			if len(savedParts) > 0 {
 				saved = append(saved, SavedMessage{
-					Role:    c.Role,
-					Content: textContent,
+					Role:  c.Role,
+					Parts: savedParts,
 				})
 			}
 		}
@@ -191,10 +235,29 @@ func (a *Agent) LoadSession(sessionName string) error {
 
 	var history []*genai.Content
 	for _, m := range saved {
-		history = append(history, &genai.Content{
-			Role:  m.Role,
-			Parts: []genai.Part{genai.Text(m.Content)},
-		})
+		var genaiParts []genai.Part
+		for _, sp := range m.Parts {
+			switch sp.Type {
+			case "text":
+				genaiParts = append(genaiParts, genai.Text(sp.Text))
+			case "function_call":
+				genaiParts = append(genaiParts, genai.FunctionCall{
+					Name: sp.FuncName,
+					Args: sp.FuncArgs,
+				})
+			case "function_response":
+				genaiParts = append(genaiParts, genai.FunctionResponse{
+					Name:     sp.FuncName,
+					Response: sp.FuncResp,
+				})
+			}
+		}
+		if len(genaiParts) > 0 {
+			history = append(history, &genai.Content{
+				Role:  m.Role,
+				Parts: genaiParts,
+			})
+		}
 	}
 
 	a.llm.SetHistory(history)

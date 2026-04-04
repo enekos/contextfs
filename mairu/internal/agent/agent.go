@@ -74,21 +74,31 @@ type AgentEvent struct {
 func (a *Agent) loadContextFiles() string {
 	var contextFiles string
 	filesToTry := []string{"SYSTEM.md", "AGENTS.md", "CLAUDE.md"}
+
+	contextFiles += "\n\n# Project Context\n\nProject-specific instructions and guidelines:\n\n"
+
+	foundAny := false
 	for _, file := range filesToTry {
 		// Try root
 		content, err := os.ReadFile(filepath.Join(a.GetRoot(), file))
 		if err == nil {
-			contextFiles += "\n\n=== " + file + " ===\n" + string(content)
+			contextFiles += "## " + file + "\n\n" + string(content) + "\n\n"
+			foundAny = true
 		} else {
 			// Try cwd
 			cwd, _ := os.Getwd()
 			if cwd != a.GetRoot() {
 				content, err := os.ReadFile(filepath.Join(cwd, file))
 				if err == nil {
-					contextFiles += "\n\n=== " + file + " (local) ===\n" + string(content)
+					contextFiles += "## " + file + " (local)\n\n" + string(content) + "\n\n"
+					foundAny = true
 				}
 			}
 		}
+	}
+
+	if !foundAny {
+		return ""
 	}
 	return contextFiles
 }
@@ -119,8 +129,11 @@ IMPORTANT:
 
 		contextFiles := a.loadContextFiles()
 		if contextFiles != "" {
-			systemPrompt += "\n\nProject Instructions from Context Files:" + contextFiles
+			systemPrompt += contextFiles
 		}
+
+		cwd, _ := os.Getwd()
+		systemPrompt += fmt.Sprintf("\n\nCurrent working directory: %s", cwd)
 
 		fullPrompt = systemPrompt + "\n\nUser Request: " + prompt
 	}

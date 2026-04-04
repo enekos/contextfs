@@ -101,9 +101,9 @@ func (a *Agent) SearchCodebase(query string) (string, error) {
 		}
 	}
 
-	res := string(out)
-	if len(res) > 5000 {
-		res = res[:5000] + "\n...[Output truncated]"
+	res := StripANSI(string(out))
+	if len(res) > 10000 {
+		res = res[:10000] + "\n...[Output truncated, too many matches]"
 	}
 
 	if res == "" {

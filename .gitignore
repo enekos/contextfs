@@ -48,3 +48,4 @@ mairu/ui/playwright-report/
 mairu/contextfs/.tools/
 mairu/contextfs/.data/
 mairu/contextfs/.logs/
+.worktrees/

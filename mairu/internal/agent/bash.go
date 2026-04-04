@@ -4,8 +4,15 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"time"
 )
+
+var ansiPattern = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
+
+func StripANSI(str string) string {
+	return ansiPattern.ReplaceAllString(str, "")
+}
 
 // RunBash executes a shell command with a timeout and returns its output.
 func (a *Agent) RunBash(command string, timeoutMs int) (string, error) {
@@ -38,8 +45,8 @@ func (a *Agent) RunBash(command string, timeoutMs int) (string, error) {
 		}
 		return "", fmt.Errorf("command timed out after %dms", timeoutMs)
 	case err := <-done:
-		outStr := stdout.String()
-		errStr := stderr.String()
+		outStr := StripANSI(stdout.String())
+		errStr := StripANSI(stderr.String())
 
 		result := ""
 		if outStr != "" {
@@ -53,9 +60,9 @@ func (a *Agent) RunBash(command string, timeoutMs int) (string, error) {
 			result += fmt.Sprintf("\nExited with error: %v", err)
 		}
 
-		// Truncate if output is too long (e.g. max 5000 chars)
-		if len(result) > 5000 {
-			result = result[:5000] + "\n...[Output truncated]"
+		// Truncate if output is too long (max 10000 chars, tail truncation)
+		if len(result) > 10000 {
+			result = result[:10000] + "\n...[Output truncated, run command redirecting to file to see full output]"
 		}
 
 		return result, nil
