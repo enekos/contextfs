@@ -33,11 +33,14 @@ var ignoredPathSegment = map[string]bool{
 	"node_modules": true, "dist": true, "build": true,
 }
 
+// Manager defines the interface that the Daemon uses to persist context nodes
+// created by analyzing files in the workspace.
 type Manager interface {
 	UpsertFileContextNode(ctx context.Context, uri, name, abstractText, overviewText, content, parentURI, project string, metadata map[string]any) error
 	DeleteContextNode(ctx context.Context, uri string) error
 }
 
+// Options configures the background Daemon behavior for processing files.
 type Options struct {
 	MaxFileSizeBytes     int64
 	ProcessingDebounceMs int
@@ -55,6 +58,9 @@ type cacheFile struct {
 	Files   map[string]cacheEntry `json:"files"`
 }
 
+// Daemon monitors a directory for file changes and asynchronously processes
+// them using AST parsing to extract and maintain natural language descriptions
+// in the context graph database.
 type Daemon struct {
 	manager  Manager
 	project  string
@@ -73,6 +79,8 @@ type Daemon struct {
 	describers []ast.LanguageDescriber
 }
 
+// New creates a new Daemon instance that watches a specified directory.
+// It initializes the AST parsers, loads the local cache, and configures the processing pool.
 func New(manager Manager, project, watchDir string, opts Options) *Daemon {
 	maxSize := opts.MaxFileSizeBytes
 	if maxSize <= 0 {

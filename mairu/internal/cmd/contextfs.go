@@ -238,6 +238,8 @@ func searchParamsFromFlags(cmd *cobra.Command, query, store, project string) map
 	return params
 }
 
+// newMemoryCmd creates the "memory" subcommand which allows users and agents
+// to store, search, list, update, and delete atomic facts (memories).
 func newMemoryCmd() *cobra.Command {
 	var project string
 	cmd := &cobra.Command{
@@ -356,6 +358,7 @@ func newMemoryCmd() *cobra.Command {
 	return cmd
 }
 
+// newSkillCmd creates the "skill" subcommand for managing and retrieving agent skills.
 func newSkillCmd() *cobra.Command {
 	var project string
 	cmd := &cobra.Command{
@@ -433,6 +436,8 @@ func newSkillCmd() *cobra.Command {
 	return cmd
 }
 
+// newCodeCmd creates the "code" subcommand, enabling semantic and exact search
+// against ingested codebase context nodes.
 func newCodeCmd() *cobra.Command {
 	var project string
 	cmd := &cobra.Command{
@@ -532,6 +537,8 @@ func newCodeCmd() *cobra.Command {
 	return cmd
 }
 
+// newNodeCmd creates the "node" subcommand which provides operations for
+// hierarchical context nodes (e.g. documentation, structured knowledge).
 func newNodeCmd() *cobra.Command {
 	var project string
 	cmd := &cobra.Command{
@@ -919,6 +926,8 @@ func newNudgeCmd() *cobra.Command {
 	return cmd
 }
 
+// newIngestCmd creates the "ingest" subcommand, taking raw text inputs and
+// using the LLM to structure them into hierarchical context nodes.
 func newIngestCmd() *cobra.Command {
 	var project, baseURI, textStr string
 	var yes, noRouter bool

@@ -10,6 +10,8 @@ import (
 	"mairu/internal/llm"
 )
 
+// Config defines configuration parameters for starting the Context Server.
+// It includes server settings, database connections, API keys, and projector configuration.
 type Config struct {
 	Port            int
 	PostgresDSN     string
@@ -43,6 +45,8 @@ func LoadConfig() Config {
 	return cfg
 }
 
+// App represents the Context Server application instance.
+// It bundles the configuration, repository, projector, and HTTP server to manage the application lifecycle.
 type App struct {
 	cfg       Config
 	repo      *PostgresRepository
@@ -50,6 +54,8 @@ type App struct {
 	server    *http.Server
 }
 
+// NewApp initializes and returns a new App instance using the provided Config.
+// It sets up the repository, LLM provider, indexing service, handler, and an HTTP server.
 func NewApp(cfg Config) (*App, error) {
 	var repo *PostgresRepository
 	var err error
@@ -102,6 +108,8 @@ func NewApp(cfg Config) (*App, error) {
 	}, nil
 }
 
+// Start begins the execution of the application.
+// It starts the background projector (if enabled) and listens on the configured HTTP port.
 func (a *App) Start(ctx context.Context) error {
 	if a.cfg.EnableProjector && a.projector != nil {
 		go a.runProjector(ctx)
@@ -109,6 +117,8 @@ func (a *App) Start(ctx context.Context) error {
 	return a.server.ListenAndServe()
 }
 
+// runProjector runs an infinite loop, triggering the projector periodically
+// according to the configuration. It exits when the provided context is done.
 func (a *App) runProjector(ctx context.Context) {
 	t := time.NewTicker(a.cfg.ProjectorEvery)
 	defer t.Stop()
@@ -122,6 +132,7 @@ func (a *App) runProjector(ctx context.Context) {
 	}
 }
 
+// Shutdown gracefully stops the server and closes the underlying repository.
 func (a *App) Shutdown(ctx context.Context) error {
 	if a.repo != nil {
 		_ = a.repo.Close()

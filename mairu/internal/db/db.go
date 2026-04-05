@@ -15,16 +15,21 @@ const (
 	symbolsPrimaryKey = "id"
 )
 
+// DB provides an interface to the underlying database (Meilisearch) for storing
+// and retrieving project symbols.
 type DB struct {
 	client meilisearch.ServiceManager
 	root   string
 }
 
+// Config specifies the connection parameters for the database.
 type Config struct {
 	MeiliURL    string
 	MeiliAPIKey string
 }
 
+// InitDB initializes a new database connection and ensures the necessary indexes are created.
+// It accepts an optional configuration struct to override default environment variables.
 func InitDB(projectRoot string, cfg ...Config) (*DB, error) {
 	var provided Config
 	if len(cfg) > 0 {
@@ -78,10 +83,13 @@ func (db *DB) migrate() error {
 	return nil
 }
 
+// Root returns the root path of the project associated with this database instance.
 func (db *DB) Root() string {
 	return db.root
 }
 
+// UpsertFile registers a file with its content hash, returning its identifier.
+// Currently, it simply validates the path and returns it as the ID.
 func (db *DB) UpsertFile(path string, hash string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return "", errors.New("path cannot be empty")
@@ -90,6 +98,7 @@ func (db *DB) UpsertFile(path string, hash string) (string, error) {
 	return path, nil
 }
 
+// InsertSymbol records a new code symbol in the database with its location metadata.
 func (db *DB) InsertSymbol(id, fileID, name, kind string, exported bool, startRow, startCol, endRow, endCol uint32) error {
 	if db == nil || db.client == nil {
 		return errors.New("database client is not initialized")
@@ -111,6 +120,8 @@ func (db *DB) InsertSymbol(id, fileID, name, kind string, exported bool, startRo
 	return err
 }
 
+// Close gracefully releases any database resources.
+// Note: As Meilisearch is HTTP-based, this is largely a no-op.
 func (db *DB) Close() error {
 	// Meilisearch client uses HTTP, no connection to close
 	return nil

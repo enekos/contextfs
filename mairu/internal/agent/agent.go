@@ -211,7 +211,8 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 
 	var result map[string]any
 
-	if funcCall.Name == "read_symbol" {
+	switch funcCall.Name {
+	case "read_symbol":
 		symName, _ := funcCall.Args["symbol_name"].(string)
 		locations, err := a.db.FindSymbol(symName)
 
@@ -226,7 +227,8 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 				result = map[string]any{"content": content}
 			}
 		}
-	} else if funcCall.Name == "replace_block" {
+
+	case "replace_block":
 		filePath, _ := funcCall.Args["file_path"].(string)
 		oldCode, _ := funcCall.Args["old_code"].(string)
 		newCode, _ := funcCall.Args["new_code"].(string)
@@ -255,7 +257,8 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 				result = map[string]any{"status": "success", "verification": "passed"}
 			}
 		}
-	} else if funcCall.Name == "multi_edit" {
+
+	case "multi_edit":
 		filePath, _ := funcCall.Args["file_path"].(string)
 		startLineFloat, _ := funcCall.Args["start_line"].(float64)
 		endLineFloat, _ := funcCall.Args["end_line"].(float64)
@@ -276,7 +279,8 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 			}
 			result = map[string]any{"status": "success"}
 		}
-	} else if funcCall.Name == "bash" {
+
+	case "bash":
 		command, _ := funcCall.Args["command"].(string)
 		timeoutMsFloat, ok := funcCall.Args["timeout_ms"].(float64)
 		var timeout int
@@ -295,7 +299,8 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 				outChan <- AgentEvent{Type: "diff", Content: fmt.Sprintf("```diff\n%s\n```", out)}
 			}
 		}
-	} else if funcCall.Name == "read_file" {
+
+	case "read_file":
 		filePath, _ := funcCall.Args["file_path"].(string)
 
 		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("📄 Reading file: %s", filePath)}
@@ -305,7 +310,8 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 		} else {
 			result = map[string]any{"content": content}
 		}
-	} else if funcCall.Name == "write_file" {
+
+	case "write_file":
 		filePath, _ := funcCall.Args["file_path"].(string)
 		content, _ := funcCall.Args["content"].(string)
 
@@ -332,7 +338,8 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 				result = map[string]any{"status": "success", "verification": "passed"}
 			}
 		}
-	} else if funcCall.Name == "find_files" {
+
+	case "find_files":
 		pattern, _ := funcCall.Args["pattern"].(string)
 
 		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🔍 Finding files: %s", pattern)}
@@ -342,7 +349,8 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 		} else {
 			result = map[string]any{"files": files}
 		}
-	} else if funcCall.Name == "search_codebase" {
+
+	case "search_codebase":
 		query, _ := funcCall.Args["query"].(string)
 
 		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🔎 Searching for: %s", query)}
@@ -352,7 +360,8 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 		} else {
 			result = map[string]any{"matches": matches}
 		}
-	} else if funcCall.Name == "delegate_task" {
+
+	case "delegate_task":
 		task, _ := funcCall.Args["task_description"].(string)
 		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🤖 Delegating task: %s", task)}
 
@@ -386,7 +395,8 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 			result = map[string]any{"result": subResult}
 			subAgent.Close()
 		}
-	} else if funcCall.Name == "fetch_url" {
+
+	case "fetch_url":
 		urlToFetch, _ := funcCall.Args["url"].(string)
 		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🌐 Fetching URL: %s", urlToFetch)}
 
@@ -396,7 +406,8 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 		} else {
 			result = map[string]any{"content": content}
 		}
-	} else if funcCall.Name == "delete_file" {
+
+	case "delete_file":
 		pathToDelete, _ := funcCall.Args["path"].(string)
 		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🗑️ Deleting: %s", pathToDelete)}
 		err := os.RemoveAll(pathToDelete)
@@ -405,7 +416,8 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 		} else {
 			result = map[string]any{"status": "success"}
 		}
-	} else {
+
+	default:
 		result = map[string]any{"error": "unknown function"}
 	}
 

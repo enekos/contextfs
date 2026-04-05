@@ -82,6 +82,7 @@ type MemoryCreateInput struct {
 	ReviewRequired    bool
 }
 
+// MemoryUpdateInput holds the data required to update an existing Memory.
 type MemoryUpdateInput struct {
 	ID         string
 	Content    string
@@ -90,6 +91,7 @@ type MemoryUpdateInput struct {
 	Importance int
 }
 
+// SkillCreateInput holds the data required to create a new Skill.
 type SkillCreateInput struct {
 	Project           string
 	Name              string
@@ -100,12 +102,14 @@ type SkillCreateInput struct {
 	ReviewRequired    bool
 }
 
+// SkillUpdateInput holds the data required to update an existing Skill.
 type SkillUpdateInput struct {
 	ID          string
 	Name        string
 	Description string
 }
 
+// ContextCreateInput holds the data required to create a new ContextNode.
 type ContextCreateInput struct {
 	URI               string
 	Project           string
@@ -120,6 +124,7 @@ type ContextCreateInput struct {
 	ReviewRequired    bool
 }
 
+// ContextUpdateInput holds the data required to update an existing ContextNode.
 type ContextUpdateInput struct {
 	URI      string
 	Name     string
@@ -128,6 +133,7 @@ type ContextUpdateInput struct {
 	Content  string
 }
 
+// SearchOptions defines the configuration and weights used when performing a search.
 type SearchOptions struct {
 	Query         string             `json:"query"`
 	Project       string             `json:"project"`
@@ -146,22 +152,26 @@ type SearchOptions struct {
 	RecencyDecay  float64            `json:"recencyDecay"`
 }
 
+// VibeQueryResult represents the output of a natural language read operation (vibe query).
 type VibeQueryResult struct {
 	Reasoning string            `json:"reasoning"`
 	Results   []VibeSearchGroup `json:"results"`
 }
 
+// VibeSearchGroup groups search results for a specific internal tool execution.
 type VibeSearchGroup struct {
 	Store string           `json:"store"`
 	Query string           `json:"query"`
 	Items []map[string]any `json:"items"`
 }
 
+// VibeMutationPlan represents the LLM-generated plan for mutating the context space.
 type VibeMutationPlan struct {
 	Reasoning  string           `json:"reasoning"`
 	Operations []VibeMutationOp `json:"operations"`
 }
 
+// VibeMutationOp defines a single operation within a vibe mutation plan.
 type VibeMutationOp struct {
 	Op          string         `json:"op"`
 	Target      string         `json:"target,omitempty"`
@@ -169,6 +179,7 @@ type VibeMutationOp struct {
 	Data        map[string]any `json:"data"`
 }
 
+// ModerationEvent records the outcome of evaluating content against safety and moderation policies.
 type ModerationEvent struct {
 	ID               int64     `json:"id"`
 	EntityType       string    `json:"entity_type"`
@@ -185,6 +196,7 @@ type ModerationEvent struct {
 	Reviewer         string    `json:"reviewer,omitempty"`
 }
 
+// ModerationReviewInput holds the required fields to manually review a flagged moderation event.
 type ModerationReviewInput struct {
 	EventID   int64
 	Decision  string

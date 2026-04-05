@@ -92,13 +92,8 @@ func (a *Agent) SearchCodebase(query string) (string, error) {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		// If ripgrep fails, maybe it's not installed. Fallback to grep.
-		cmd = exec.Command("grep", "-rn", query, ".")
-		cmd.Dir = a.db.Root()
-		out, err = cmd.CombinedOutput()
-		if err != nil && len(out) == 0 {
-			return "", fmt.Errorf("search failed or no results found")
-		}
+		// If ripgrep fails, maybe it's not installed. Fallback to our concurrent Go search.
+		return a.fallbackSearch(query)
 	}
 
 	res := StripANSI(string(out))

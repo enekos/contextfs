@@ -13,12 +13,15 @@ type LogicSymbol struct {
 	Doc      string
 }
 
+// LogicEdge represents a relationship between two LogicSymbols, such as a function call.
 type LogicEdge struct {
 	From string
 	To   string
 	Kind string
 }
 
+// FileGraph is the result of parsing a source file. It contains the symbols,
+// their relationships, and human-readable natural language descriptions.
 type FileGraph struct {
 	FileSummary        string
 	Symbols            []LogicSymbol
@@ -27,6 +30,8 @@ type FileGraph struct {
 	SymbolDescriptions map[string]string
 }
 
+// LanguageDescriber is the interface that must be implemented to support AST
+// extraction and natural language description generation for a specific programming language.
 type LanguageDescriber interface {
 	LanguageID() string
 	Extensions() []string
@@ -41,6 +46,8 @@ var (
 	reCalls  = regexp.MustCompile(`([A-Za-z_]\w*)\s*\(`)
 )
 
+// BaseExtract provides a fallback regex-based extraction mechanism for languages
+// that do not have a robust Tree-sitter implementation yet.
 func BaseExtract(source string) FileGraph {
 	symbols := []LogicSymbol{}
 	for _, m := range reFunc.FindAllStringSubmatch(source, -1) {
