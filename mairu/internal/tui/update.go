@@ -1,0 +1,814 @@
+package tui
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"github.com/atotto/clipboard"
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
+
+	"mairu/internal/agent"
+)
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		tiCmd tea.Cmd
+		vpCmd tea.Cmd
+		spCmd tea.Cmd
+		lsCmd tea.Cmd
+		cmds  []tea.Cmd
+	)
+
+	// === Autocomplete interception ===
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && len(m.filteredCommands) > 0 {
+		switch keyMsg.Type {
+		case tea.KeyUp:
+			m.autocompleteIndex--
+			if m.autocompleteIndex < 0 {
+				m.autocompleteIndex = len(m.filteredCommands) - 1
+			}
+			return m, nil
+		case tea.KeyDown:
+			m.autocompleteIndex++
+			if m.autocompleteIndex >= len(m.filteredCommands) {
+				m.autocompleteIndex = 0
+			}
+			return m, nil
+		case tea.KeyTab:
+			m.textarea.SetValue(m.filteredCommands[m.autocompleteIndex].Name + " ")
+			m.textarea.SetCursor(len(m.textarea.Value()))
+			m.filteredCommands = nil
+			return m, nil
+		case tea.KeyEsc:
+			m.filteredCommands = nil
+			return m, nil
+		}
+	}
+
+	if m.showList {
+		switch msg := msg.(type) {
+		case tea.WindowSizeMsg:
+			m.width = msg.Width
+			m.height = msg.Height
+			m.listModel.SetSize(msg.Width, msg.Height)
+			return m, nil
+		case tea.KeyMsg:
+			switch msg.Type {
+			case tea.KeyEsc, tea.KeyCtrlC:
+				m.showList = false
+				return m, nil
+			case tea.KeyEnter:
+				m.showList = false
+				selectedItem := m.listModel.SelectedItem()
+				if selectedItem != nil {
+					if m.listType == "session" {
+						sessionName := selectedItem.(listItem).title
+						m.agent.SaveSession("current")
+						err := m.agent.LoadSession(sessionName)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to load session: " + err.Error()})
+						} else {
+							m.messages = []ChatMessage{{Role: "System", Content: "Loaded session: " + sessionName}}
+							for _, text := range m.agent.GetHistoryText() {
+								if strings.HasPrefix(text, "You: ") {
+									m.messages = append(m.messages, ChatMessage{Role: "You", Content: strings.TrimPrefix(text, "You: ")})
+								} else if strings.HasPrefix(text, "Mairu: ") {
+									m.messages = append(m.messages, ChatMessage{Role: "Mairu", Content: strings.TrimPrefix(text, "Mairu: ")})
+								}
+							}
+						}
+						m.renderMessages()
+						m.viewport.GotoBottom()
+					} else if m.listType == "model" {
+						modelName := selectedItem.(listItem).title
+						m.agent.SetModel(modelName)
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Switched model to: " + modelName})
+						m.renderMessages()
+						m.viewport.GotoBottom()
+					}
+				}
+				return m, nil
+			}
+		}
+		m.listModel, lsCmd = m.listModel.Update(msg)
+		return m, lsCmd
+	}
+
+	m.textarea, tiCmd = m.textarea.Update(msg)
+	m.viewport, vpCmd = m.viewport.Update(msg)
+	m.spinner, spCmd = m.spinner.Update(msg)
+	cmds = append(cmds, tiCmd, vpCmd, spCmd)
+
+	if _, ok := msg.(tea.KeyMsg); ok {
+		val := m.textarea.Value()
+		if strings.HasPrefix(val, "/") {
+			m.filteredCommands = nil
+			for _, cmd := range allSlashCommands {
+				if strings.HasPrefix(cmd.Name, val) {
+					m.filteredCommands = append(m.filteredCommands, cmd)
+				}
+			}
+			if m.autocompleteIndex >= len(m.filteredCommands) {
+				m.autocompleteIndex = 0
+			}
+		} else {
+			m.filteredCommands = nil
+		}
+	}
+
+	switch msg := msg.(type) {
+	case animTickMsg:
+		if m.showAnim {
+			m.animFrame++
+			if m.animFrame > 20 {
+				m.showAnim = false
+				m.recomputeLayout()
+				m.renderMessages()
+				return m, nil
+			}
+			return m, tickAnim()
+		}
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.listModel.SetSize(msg.Width, msg.Height)
+		m.recomputeLayout()
+		m.renderMessages()
+		m.autoScroll()
+
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionPress {
+			if msg.Button == tea.MouseButtonWheelUp {
+				m.followMode = false
+			} else if msg.Button == tea.MouseButtonWheelDown {
+				if m.viewport.AtBottom() {
+					m.followMode = true
+				}
+			}
+		}
+
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyCtrlC, tea.KeyCtrlD:
+			return m, tea.Quit
+		case tea.KeyPgUp:
+			m.viewport.HalfPageUp()
+			m.followMode = false
+			return m, nil
+		case tea.KeyPgDown:
+			m.viewport.HalfPageDown()
+			m.followMode = false
+			return m, nil
+		case tea.KeyHome:
+			m.viewport.GotoTop()
+			m.followMode = false
+			return m, nil
+		case tea.KeyEnd:
+			m.followMode = true
+			m.viewport.GotoBottom()
+			return m, nil
+		case tea.KeyCtrlF:
+			m.followMode = !m.followMode
+			if m.followMode {
+				m.viewport.GotoBottom()
+				m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Follow mode enabled."})
+			} else {
+				m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Follow mode paused. Use End or Ctrl+F to resume."})
+			}
+			m.renderMessages()
+			m.autoScroll()
+			return m, nil
+		case tea.KeyCtrlE:
+			if m.sidebarMode == "session" {
+				m.sidebarMode = "explore"
+				m.selectedMessage = clampMessageIndex(len(m.messages)-1, 0, len(m.messages))
+			} else {
+				m.sidebarMode = "session"
+			}
+			return m, nil
+		case tea.KeyCtrlJ:
+			if m.sidebarMode == "explore" {
+				m.selectedMessage = clampMessageIndex(m.selectedMessage, 1, len(m.messages))
+				m.jumpToSelectedMessage()
+				m.followMode = false
+				return m, nil
+			}
+		case tea.KeyCtrlK:
+			if m.sidebarMode == "explore" {
+				m.selectedMessage = clampMessageIndex(m.selectedMessage, -1, len(m.messages))
+				m.jumpToSelectedMessage()
+				m.followMode = false
+				return m, nil
+			}
+		case tea.KeyCtrlP:
+			models := []string{
+				"gemini-3.1-flash-lite-preview",
+				"gemini-3.1-pro-preview",
+				"gemini-1.5-pro-latest",
+				"gemini-1.5-flash-latest",
+				"gemini-2.0-flash-exp",
+				"gemini-2.0-pro-exp",
+			}
+			current := m.agent.GetModelName()
+			idx := 0
+			for i, mod := range models {
+				if mod == current {
+					idx = i
+					break
+				}
+			}
+			idx = (idx + 1) % len(models)
+			newMod := models[idx]
+			m.agent.SetModel(newMod)
+			m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Switched model to: " + newMod})
+			m.renderMessages()
+			m.autoScroll()
+			return m, nil
+		case tea.KeyCtrlL:
+			m.messages = []ChatMessage{{Role: "System", Content: "Terminal cleared."}}
+			m.renderMessages()
+			m.autoScroll()
+			return m, nil
+		case tea.KeyEnter:
+			if msg.Alt {
+				m.textarea.InsertString("\n")
+				return m, nil
+			}
+			if m.sidebarMode == "explore" {
+				if m.selectedMessage >= 0 && m.selectedMessage < len(m.messages) {
+					m.messages[m.selectedMessage].Expanded = !m.messages[m.selectedMessage].Expanded
+					m.renderMessages()
+					m.jumpToSelectedMessage()
+				}
+				return m, nil
+			}
+			if m.thinking {
+				return m, nil
+			}
+
+			m.filteredCommands = nil
+			v := strings.TrimSpace(m.textarea.Value())
+			m.textarea.Reset()
+
+			if v == "" {
+				return m, nil
+			}
+
+			if strings.HasPrefix(v, "!!") {
+				cmdStr := strings.TrimSpace(strings.TrimPrefix(v, "!!"))
+				m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Running local command: " + cmdStr})
+				m.renderMessages()
+				m.viewport.GotoBottom()
+
+				out, err := m.agent.RunBash(cmdStr, 60000, nil)
+				if err != nil {
+					m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Command failed: " + err.Error() + "\n" + out})
+				} else {
+					m.messages = append(m.messages, ChatMessage{Role: "System", Content: "```\n" + out + "\n```"})
+				}
+				m.renderMessages()
+				m.viewport.GotoBottom()
+				return m, nil
+			} else if strings.HasPrefix(v, "!") {
+				cmdStr := strings.TrimSpace(strings.TrimPrefix(v, "!"))
+				m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Running command and appending to prompt: " + cmdStr})
+				m.renderMessages()
+				m.viewport.GotoBottom()
+
+				out, err := m.agent.RunBash(cmdStr, 60000, nil)
+				if err != nil {
+					v += fmt.Sprintf("\n\nCommand `!%s` failed: %v\nOutput: %s", cmdStr, err, out)
+				} else {
+					v += fmt.Sprintf("\n\nOutput of `!%s`:\n```\n%s\n```", cmdStr, out)
+				}
+			}
+
+			fileRegex := regexp.MustCompile(`@([a-zA-Z0-9_./-]+)`)
+			matches := fileRegex.FindAllStringSubmatch(v, -1)
+			if len(matches) > 0 {
+				for _, match := range matches {
+					filePath := match[1]
+					content, err := os.ReadFile(filepath.Join(m.agent.GetRoot(), filePath))
+					if err != nil {
+						content, err = os.ReadFile(filePath)
+					}
+					if err == nil {
+						v += fmt.Sprintf("\n\nFile: %s\n```\n%s\n```", filePath, string(content))
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: fmt.Sprintf("Could not read file @%s: %v", filePath, err)})
+					}
+				}
+			}
+
+			if strings.HasPrefix(v, "/") {
+				cmdParts := strings.Fields(v)
+				command := cmdParts[0]
+
+				switch command {
+				case "/copy":
+					var lastMairu string
+					for i := len(m.messages) - 1; i >= 0; i-- {
+						if m.messages[i].Role == "Mairu" {
+							lastMairu = m.messages[i].Content
+							break
+						}
+					}
+					if lastMairu != "" {
+						err := clipboard.WriteAll(lastMairu)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to copy to clipboard: " + err.Error()})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Copied last response to clipboard."})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "No response to copy."})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/exit", "/quit":
+					return m, tea.Quit
+				case "/clear":
+					m.messages = []ChatMessage{{Role: "System", Content: "Terminal cleared."}}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/help":
+					helpText := `**Available Commands:**
+- /help: Show this help message
+- /clear: Clear the terminal screen (or Ctrl+L)
+- /copy: Copy last response to clipboard
+- /models: Open model selector
+- /model <name>: Switch to a specific model
+- /sessions: Open session selector
+- /session <name>: Load a specific session
+- /memory <search|read|store|write> <text>: Interact with contextfs memory
+- /node <search|read|ls|store|write> <text|uri|args>: Interact with contextfs nodes
+- /vibe <query>: Run contextfs vibe-query
+- /remember <text>: Run contextfs vibe-mutation
+- /save <name>: Save the current session
+- /fork <name>: Fork the current session to a new name
+- /reset or /new: Start a fresh session and clear context
+- /compact: Summarize history to save tokens
+- /export <file>: Export conversation to a file
+- /explore: Toggle explore sidebar (message navigator + tool drilldown)
+- /jump <n>: Jump to message number n
+- /exit or /quit: Exit Mairu
+
+**Navigation**
+- PgUp/PgDown: Scroll chat by half-page
+- Home/End: Jump top/bottom
+- Ctrl+F: Toggle follow mode during streaming
+- Ctrl+E: Toggle session/explore sidebar
+- Ctrl+J / Ctrl+K: Next/previous message (explore mode)`
+					m.messages = append(m.messages, ChatMessage{Role: "System", Content: helpText})
+					m.renderMessages()
+					m.autoScroll()
+					return m, nil
+				case "/fork":
+					if len(cmdParts) > 1 {
+						newName := cmdParts[1]
+						err := m.agent.SaveSession(newName)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to fork session: " + err.Error()})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Forked session to: " + newName})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /fork <name>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/save":
+					if len(cmdParts) > 1 {
+						sessionName := cmdParts[1]
+						err := m.agent.SaveSession(sessionName)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to save session: " + err.Error()})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Session saved as: " + sessionName})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /save <name>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/reset", "/new":
+					m.agent.ResetSession()
+					m.messages = []ChatMessage{{Role: "System", Content: "Session reset. Starting fresh context."}}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/compact", "/squash":
+					m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Compacting context... please wait."})
+					m.renderMessages()
+					m.viewport.GotoBottom()
+
+					// Simple spinner update while it happens synchronously
+					err := m.agent.CompactContext()
+					if err != nil {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to compact: " + err.Error()})
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Context compacted successfully!"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/export":
+					if len(cmdParts) > 1 {
+						fileName := cmdParts[1]
+						history := m.agent.GetHistoryText()
+						content := strings.Join(history, "\n\n")
+						err := os.WriteFile(fileName, []byte(content), 0644)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to export: " + err.Error()})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Conversation exported to: " + fileName})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /export <filename>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/memory":
+					if len(cmdParts) >= 3 {
+						subCmd := cmdParts[1]
+						args := strings.Join(cmdParts[2:], " ")
+						projectName := filepath.Base(m.agent.GetRoot())
+
+						var out []byte
+						var err error
+						if subCmd == "search" || subCmd == "read" {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Searching memory: " + args})
+							out, err = m.contextGet("/api/search", map[string]string{
+								"q":       args,
+								"type":    "memory",
+								"topK":    "5",
+								"project": projectName,
+							})
+						} else if subCmd == "store" || subCmd == "write" {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Storing memory: " + args})
+							out, err = m.contextPost("/api/memories", map[string]any{
+								"project":    projectName,
+								"content":    args,
+								"category":   "observation",
+								"owner":      "user",
+								"importance": 5,
+							})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /memory <search|read|store|write> <text>"})
+							m.renderMessages()
+							m.viewport.GotoBottom()
+							return m, nil
+						}
+
+						m.renderMessages()
+						m.viewport.GotoBottom()
+
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Memory operation failed: " + err.Error()})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "```json\n" + prettyJSON(out) + "\n```"})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /memory <search|read|store|write> <text>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+
+				case "/node":
+					if len(cmdParts) >= 3 {
+						subCmd := cmdParts[1]
+						args := strings.Join(cmdParts[2:], " ")
+						projectName := filepath.Base(m.agent.GetRoot())
+
+						var out []byte
+						var err error
+						if subCmd == "search" || subCmd == "read" {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Searching nodes: " + args})
+							out, err = m.contextGet("/api/search", map[string]string{
+								"q":       args,
+								"type":    "context",
+								"topK":    "5",
+								"project": projectName,
+							})
+						} else if subCmd == "ls" {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Listing node: " + args})
+							out, err = m.contextGet("/api/context", map[string]string{
+								"project":   projectName,
+								"parentUri": args,
+							})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /node <search|read|ls> <text|uri>"})
+							m.renderMessages()
+							m.viewport.GotoBottom()
+							return m, nil
+						}
+
+						m.renderMessages()
+						m.viewport.GotoBottom()
+
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Node operation failed: " + err.Error()})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "```json\n" + prettyJSON(out) + "\n```"})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /node <search|read|ls> <text|uri>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+
+				case "/vibe":
+					if len(cmdParts) > 1 {
+						args := strings.Join(cmdParts[1:], " ")
+						projectName := filepath.Base(m.agent.GetRoot())
+
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Vibe querying: " + args})
+						m.renderMessages()
+						m.viewport.GotoBottom()
+
+						out, err := m.contextPost("/api/vibe/query", map[string]any{
+							"prompt":  args,
+							"project": projectName,
+							"topK":    5,
+						})
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Vibe query failed: " + err.Error()})
+						} else {
+							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "```json\n" + prettyJSON(out) + "\n```"})
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /vibe <query>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+
+				case "/remember":
+					if len(cmdParts) > 1 {
+						args := strings.Join(cmdParts[1:], " ")
+						projectName := filepath.Base(m.agent.GetRoot())
+
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Remembering: " + args})
+						m.renderMessages()
+						m.viewport.GotoBottom()
+
+						planOut, err := m.contextPost("/api/vibe/mutation/plan", map[string]any{
+							"prompt":  args,
+							"project": projectName,
+							"topK":    5,
+						})
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Vibe planning failed: " + err.Error()})
+						} else {
+							var plan struct {
+								Operations []map[string]any `json:"operations"`
+							}
+							if err := json.Unmarshal(planOut, &plan); err != nil {
+								m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to parse mutation plan: " + err.Error()})
+							} else {
+								execOut, execErr := m.contextPost("/api/vibe/mutation/execute", map[string]any{
+									"project":    projectName,
+									"operations": plan.Operations,
+								})
+								if execErr != nil {
+									m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Vibe mutation failed: " + execErr.Error()})
+								} else {
+									m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Knowledge stored successfully:\n```json\n" + prettyJSON(execOut) + "\n```"})
+								}
+							}
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /remember <fact or rule>"})
+					}
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/models":
+					m.listType = "model"
+					m.showList = true
+					var items []list.Item
+					models := []string{
+						"gemini-3.1-flash-lite-preview",
+						"gemini-3.1-pro-preview",
+						"gemini-1.5-pro-latest",
+						"gemini-1.5-flash-latest",
+						"gemini-2.0-flash-exp",
+						"gemini-2.0-pro-exp",
+					}
+					for _, mod := range models {
+						items = append(items, listItem{title: mod, desc: "Gemini Model"})
+					}
+					m.listModel.SetItems(items)
+					m.listModel.Title = "Select Model (Current: " + m.agent.GetModelName() + ")"
+					return m, nil
+				case "/model":
+					if len(cmdParts) > 1 {
+						modelName := cmdParts[1]
+						m.agent.SetModel(modelName)
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Switched model to: " + modelName})
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /model <name>"})
+					}
+					m.renderMessages()
+					m.autoScroll()
+					return m, nil
+				case "/explore":
+					if m.sidebarMode == "session" {
+						m.sidebarMode = "explore"
+						m.selectedMessage = clampMessageIndex(len(m.messages)-1, 0, len(m.messages))
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Explore sidebar enabled. Use Ctrl+J / Ctrl+K to jump between messages."})
+					} else {
+						m.sidebarMode = "session"
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Explore sidebar hidden."})
+					}
+					m.renderMessages()
+					m.autoScroll()
+					return m, nil
+				case "/jump":
+					if len(cmdParts) > 1 {
+						idx, err := strconv.Atoi(cmdParts[1])
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /jump <message-number>"})
+						} else {
+							target := idx - 1
+							if target < 0 || target >= len(m.messages) {
+								m.messages = append(m.messages, ChatMessage{Role: "Error", Content: fmt.Sprintf("Message %d is out of range.", idx)})
+							} else {
+								m.selectedMessage = target
+								m.jumpToSelectedMessage()
+								m.followMode = false
+							}
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /jump <message-number>"})
+					}
+					m.renderMessages()
+					return m, nil
+				case "/sessions":
+					m.listType = "session"
+					m.showList = true
+					sessions, _ := m.agent.ListSessions()
+					var items []list.Item
+					for _, s := range sessions {
+						items = append(items, listItem{title: s, desc: "Saved session"})
+					}
+					m.listModel.SetItems(items)
+					m.listModel.Title = "Select Session"
+					return m, nil
+				case "/session":
+					if len(cmdParts) > 1 {
+						sessionName := cmdParts[1]
+						m.agent.SaveSession("current")
+						err := m.agent.LoadSession(sessionName)
+						if err != nil {
+							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to load session: " + err.Error()})
+						} else {
+							m.messages = []ChatMessage{{Role: "System", Content: "Loaded session: " + sessionName}}
+							for _, text := range m.agent.GetHistoryText() {
+								if strings.HasPrefix(text, "You: ") {
+									m.messages = append(m.messages, ChatMessage{Role: "You", Content: strings.TrimPrefix(text, "You: ")})
+								} else if strings.HasPrefix(text, "Mairu: ") {
+									m.messages = append(m.messages, ChatMessage{Role: "Mairu", Content: strings.TrimPrefix(text, "Mairu: ")})
+								}
+							}
+						}
+					} else {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /session <name>"})
+					}
+					m.renderMessages()
+					m.autoScroll()
+					return m, nil
+				default:
+					m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Unknown command: " + command + "\nType /help for a list of commands."})
+					m.renderMessages()
+					m.autoScroll()
+					return m, nil
+				}
+			}
+
+			// Adjust textarea height dynamically if text was multiple lines
+			taHeight := m.textarea.Height()
+			newHeight := m.height - taHeight - 2
+			if newHeight < 5 {
+				newHeight = 5
+			}
+			m.viewport.Height = newHeight
+
+			m.followMode = true
+			m.messages = append(m.messages, ChatMessage{Role: "You", Content: v})
+			m.renderMessages()
+			m.autoScroll()
+
+			m.thinking = true
+			m.currentResponse = ""
+			m.toolEvents = nil
+
+			m.activeStream = make(chan agent.AgentEvent)
+			go m.agent.RunStream(v, m.activeStream)
+
+			cmds = append(cmds, waitForStream(m.activeStream))
+		}
+
+	case agentStreamMsg:
+		if msg.Type == "done" {
+			m.thinking = false
+			m.messages = append(m.messages, ChatMessage{
+				Role:       "Mairu",
+				Content:    m.currentResponse,
+				ToolEvents: m.toolEvents,
+				Expanded:   false,
+			})
+			m.currentResponse = ""
+			m.currentBashOutput = ""
+			m.toolEvents = nil
+			m.activeStream = nil
+			m.renderMessages()
+			m.autoScroll()
+		} else if msg.Type == "text" {
+			m.currentBashOutput = ""
+			m.currentResponse += msg.Content
+			m.renderMessages()
+			m.autoScroll()
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "diff" {
+			m.messages = append(m.messages, ChatMessage{Role: "Diff", Content: msg.Content})
+			m.renderMessages()
+			m.autoScroll()
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "log" {
+			// Print to toolLog so it shows up in "Tool Drilldown" inside explore sidebar
+			m.pushToolLog("log", msg.Content)
+			// Don't show log events in main chat, just background sidebar
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "bash_output" {
+			m.pushToolLog("bash", msg.Content)
+			m.currentBashOutput += msg.Content
+			if len(m.currentBashOutput) > 2000 {
+				m.currentBashOutput = m.currentBashOutput[len(m.currentBashOutput)-2000:]
+			}
+			m.renderMessages()
+			m.autoScroll()
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "status" {
+			ev := buildToolStatusEvent(msg.Content)
+			m.toolEvents = append(m.toolEvents, ev)
+			m.pushToolLog("status", ev.Title)
+			m.currentBashOutput = ""
+			m.renderMessages()
+			m.autoScroll()
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "tool_call" {
+			m.currentBashOutput = ""
+			ev := buildToolCallEvent(msg.ToolName, msg.ToolArgs)
+			m.toolEvents = append(m.toolEvents, ev)
+			m.pushToolLog("call", ev.Title)
+			m.renderMessages()
+			m.autoScroll()
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "tool_result" {
+			m.currentBashOutput = ""
+			ev := buildToolResultEvent(msg.ToolName, msg.ToolResult)
+			m.toolEvents = append(m.toolEvents, ev)
+			m.pushToolLog("result", ev.Title)
+			m.renderMessages()
+			m.autoScroll()
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "error" {
+			m.thinking = false
+			m.messages = append(m.messages, ChatMessage{Role: "Error", Content: msg.Content})
+			m.activeStream = nil
+			m.renderMessages()
+			m.autoScroll()
+		}
+
+	case errMsg:
+		m.err = msg
+		return m, nil
+	}
+
+	// Dynamic resizing of textarea based on content
+	lines := strings.Count(m.textarea.Value(), "\n") + 1
+	if lines > 5 {
+		lines = 5
+	}
+	if m.textarea.Height() != lines {
+		m.textarea.SetHeight(lines)
+		m.recomputeLayout()
+		m.autoScroll()
+	}
+
+	return m, tea.Batch(cmds...)
+}

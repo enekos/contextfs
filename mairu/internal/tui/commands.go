@@ -1,0 +1,38 @@
+package tui
+
+type SlashCommand struct {
+	Name        string
+	Description string
+}
+
+var allSlashCommands = []SlashCommand{
+	{"/help", "Show this help message"},
+	{"/clear", "Clear the terminal screen"},
+	{"/copy", "Copy last response to clipboard"},
+	{"/models", "Open model selector"},
+	{"/model", "Switch to a specific model"},
+	{"/sessions", "Open session selector"},
+	{"/session", "Load a specific session"},
+	{"/memory search", "Search contextfs memory"},
+	{"/memory read", "Read contextfs memory"},
+	{"/memory write", "Write fact to contextfs memory"},
+	{"/memory store", "Store fact in contextfs memory"},
+	{"/node search", "Search contextfs nodes"},
+	{"/node read", "Read contextfs nodes"},
+	{"/node ls", "List contextfs node children"},
+	{"/node store", "Store/update a contextfs node"},
+	{"/node write", "Write/update a contextfs node"},
+	{"/vibe", "Run contextfs vibe-query"},
+	{"/remember", "Run contextfs vibe-mutation"},
+	{"/save", "Save the current session"},
+	{"/fork", "Fork the current session to a new name"},
+	{"/reset", "Start a fresh session"},
+	{"/new", "Start a fresh session"},
+	{"/compact", "Summarize history to save tokens"},
+	{"/squash", "Summarize history to save tokens"},
+	{"/export", "Export conversation to a file"},
+	{"/explore", "Toggle explore sidebar"},
+	{"/jump", "Jump to message number n"},
+	{"/exit", "Exit Mairu"},
+	{"/quit", "Exit Mairu"},
+}

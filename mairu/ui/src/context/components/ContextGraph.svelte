@@ -215,23 +215,6 @@
     overflow-y: auto;
   }
   
-  .score-value {
-    font-weight: bold;
-    font-size: 14px;
-  }
   
-  .tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
   
-  .tag {
-    background: var(--bg-main);
-    border: 1px solid var(--border-main);
-    color: var(--text-secondary);
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 11px;
-  }
 </style>
