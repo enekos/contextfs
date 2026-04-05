@@ -64,6 +64,7 @@ type model struct {
 	followMode       bool
 	sidebarMode      string // "session" or "explore"
 	selectedMessage  int
+	selectedEvent    int
 	messageLineStart []int
 	toolLog          []string
 
@@ -131,6 +132,7 @@ func initialModel(a *agent.Agent, sessionName string) model {
 		followMode:      true,
 		sidebarMode:     "session",
 		selectedMessage: -1,
+		selectedEvent:   -1,
 	}
 	m.renderMessages()
 	return m

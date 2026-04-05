@@ -76,15 +76,33 @@ func (m model) renderExploreSidebar(stats sessionStats) string {
 	for i := start; i < len(m.messages); i++ {
 		msg := m.messages[i]
 		prefix := " "
-		if i == m.selectedMessage {
+		if i == m.selectedMessage && m.selectedEvent == -1 {
 			prefix = ">"
+		} else if i == m.selectedMessage {
+			prefix = " "
 		}
-		sb.WriteString(fmt.Sprintf("%s #%d %-6s %s\n",
+
+		roleStr := msg.Role
+		if roleStr == "Mairu" && len(msg.ToolEvents) > 0 {
+			roleStr += fmt.Sprintf(" [%d]", len(msg.ToolEvents))
+		}
+
+		sb.WriteString(fmt.Sprintf("%s #%d %-10s %s\n",
 			prefix,
 			i+1,
-			msg.Role,
-			previewText(msg.Content, 28),
+			roleStr,
+			previewText(msg.Content, 20),
 		))
+
+		if i == m.selectedMessage && len(msg.ToolEvents) > 0 {
+			for j, e := range msg.ToolEvents {
+				evPrefix := "   "
+				if m.selectedEvent == j {
+					evPrefix = " > "
+				}
+				sb.WriteString(fmt.Sprintf("%s %s\n", evPrefix, previewText(e.Title, 30)))
+			}
+		}
 	}
 
 	sb.WriteString("\n")

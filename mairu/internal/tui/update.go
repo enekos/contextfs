@@ -188,22 +188,44 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.sidebarMode == "session" {
 				m.sidebarMode = "explore"
 				m.selectedMessage = clampMessageIndex(len(m.messages)-1, 0, len(m.messages))
+				m.selectedEvent = -1
 			} else {
 				m.sidebarMode = "session"
 			}
 			return m, nil
 		case tea.KeyCtrlJ:
 			if m.sidebarMode == "explore" {
-				m.selectedMessage = clampMessageIndex(m.selectedMessage, 1, len(m.messages))
+				if m.selectedMessage >= 0 && m.selectedMessage < len(m.messages) {
+					msg := m.messages[m.selectedMessage]
+					if m.selectedEvent < len(msg.ToolEvents)-1 {
+						m.selectedEvent++
+					} else if m.selectedMessage < len(m.messages)-1 {
+						m.selectedMessage++
+						m.selectedEvent = -1
+					}
+				} else {
+					m.selectedMessage = clampMessageIndex(m.selectedMessage, 1, len(m.messages))
+					m.selectedEvent = -1
+				}
 				m.jumpToSelectedMessage()
 				m.followMode = false
+				m.renderMessages()
 				return m, nil
 			}
 		case tea.KeyCtrlK:
 			if m.sidebarMode == "explore" {
-				m.selectedMessage = clampMessageIndex(m.selectedMessage, -1, len(m.messages))
+				if m.selectedEvent >= 0 {
+					m.selectedEvent--
+				} else if m.selectedMessage > 0 {
+					m.selectedMessage--
+					m.selectedEvent = len(m.messages[m.selectedMessage].ToolEvents) - 1
+				} else {
+					m.selectedMessage = clampMessageIndex(m.selectedMessage, -1, len(m.messages))
+					m.selectedEvent = -1
+				}
 				m.jumpToSelectedMessage()
 				m.followMode = false
+				m.renderMessages()
 				return m, nil
 			}
 		case tea.KeyCtrlP:
@@ -629,6 +651,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.sidebarMode == "session" {
 						m.sidebarMode = "explore"
 						m.selectedMessage = clampMessageIndex(len(m.messages)-1, 0, len(m.messages))
+						m.selectedEvent = -1
 						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Explore sidebar enabled. Use Ctrl+J / Ctrl+K to jump between messages."})
 					} else {
 						m.sidebarMode = "session"
@@ -648,6 +671,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								m.messages = append(m.messages, ChatMessage{Role: "Error", Content: fmt.Sprintf("Message %d is out of range.", idx)})
 							} else {
 								m.selectedMessage = target
+								m.selectedEvent = -1
 								m.jumpToSelectedMessage()
 								m.followMode = false
 							}

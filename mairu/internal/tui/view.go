@@ -32,11 +32,21 @@ func (m *model) renderMessages() {
 		default:
 			rendered, _ := m.mdRenderer.Render(msg.Content)
 			chunk = agentStyle.Render("● Mairu "+header) + "\n" + rendered + "\n"
-			if msg.Expanded && len(msg.ToolEvents) > 0 {
+			showEvents := msg.Expanded || (m.sidebarMode == "explore" && m.selectedMessage == idx)
+			if showEvents && len(msg.ToolEvents) > 0 {
 				var toolSb strings.Builder
 				toolSb.WriteString("\n")
-				for _, e := range msg.ToolEvents {
-					toolSb.WriteString(renderExpandedToolEventBox(e) + "\n")
+				for eIdx, e := range msg.ToolEvents {
+					isFocused := m.sidebarMode == "explore" && m.selectedMessage == idx && m.selectedEvent == eIdx
+					if msg.Expanded || isFocused {
+						evStr := renderExpandedToolEventBox(e)
+						if isFocused {
+							evStr = lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, false, false, true).BorderForeground(lipgloss.Color("#88c0d0")).PaddingLeft(1).Render(evStr)
+						}
+						toolSb.WriteString(evStr + "\n")
+					} else {
+						toolSb.WriteString(renderToolEventBox(e) + "\n")
+					}
 				}
 				chunk += toolSb.String()
 			}
