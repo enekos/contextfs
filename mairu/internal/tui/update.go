@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -175,9 +175,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			apiPath = "/api/skills"
 			qs = map[string]string{"id": msg.id}
 		}
-		
+
 		if apiPath != "" {
-			req, err := http.NewRequest(http.MethodDelete, m.contextAPIBase() + apiPath, nil)
+			req, err := http.NewRequest(http.MethodDelete, m.contextAPIBase()+apiPath, nil)
 			if err == nil {
 				q := req.URL.Query()
 				for k, v := range qs {
@@ -190,12 +190,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				doContextRequest(req)
 			}
-			
+
 			// Refresh list by triggering /data command internally
 			m.messages = append(m.messages, ChatMessage{Role: "System", Content: fmt.Sprintf("Deleted item %s", msg.id)})
 			m.renderMessages()
 			m.autoScroll()
-			
+
 			// Auto-refresh the view
 			return m, func() tea.Msg {
 				return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/data\n")}
@@ -788,9 +788,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Fetching workspace data..."})
 					m.renderMessages()
 					m.viewport.GotoBottom()
-					
+
 					var cItems, mItems, sItems []list.Item
-					
+
 					// Context Nodes
 					out, err := m.contextGet("/api/context", map[string]string{"limit": "1000"})
 					if err == nil {
@@ -802,17 +802,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						}
 					}
-					
+
 					// Memories
 					out, err = m.contextGet("/api/memories", map[string]string{"limit": "1000"})
 					if err == nil {
-						var mems []struct{
-							ID string `json:"id"`
-							Project string `json:"project"`
-							Content string `json:"content"`
-							Category string `json:"category"`
-							Owner string `json:"owner"`
-							Importance int `json:"importance"`
+						var mems []struct {
+							ID         string `json:"id"`
+							Project    string `json:"project"`
+							Content    string `json:"content"`
+							Category   string `json:"category"`
+							Owner      string `json:"owner"`
+							Importance int    `json:"importance"`
 						}
 						if json.Unmarshal(out, &mems) == nil {
 							for _, mem := range mems {
@@ -823,14 +823,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						}
 					}
-					
+
 					// Skills
 					out, err = m.contextGet("/api/skills", map[string]string{"limit": "1000"})
 					if err == nil {
-						var skills []struct{
-							ID string `json:"id"`
-							Project string `json:"project"`
-							Name string `json:"name"`
+						var skills []struct {
+							ID          string `json:"id"`
+							Project     string `json:"project"`
+							Name        string `json:"name"`
 							Description string `json:"description"`
 						}
 						if json.Unmarshal(out, &skills) == nil {
@@ -841,11 +841,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						}
 					}
-					
+
 					m.dataExplorer = newDataExplorerModel(cItems, mItems, sItems)
 					m.dataExplorer.SetSize(m.width, m.height)
 					m.showGraph = true
-					
+
 					m.renderMessages()
 					m.autoScroll()
 					return m, nil

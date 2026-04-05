@@ -226,7 +226,7 @@ func (m *dataExplorerModel) View() string {
 	var tabs []string
 	activeTabStyle := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, true, false, true).Padding(0, 1)
 	inactiveTabStyle := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, false, true, false).Padding(0, 1)
-	
+
 	for i, t := range m.tabs {
 		if explorerTab(i) == m.activeTab {
 			tabs = append(tabs, activeTabStyle.Render(t))
@@ -250,6 +250,6 @@ func (m *dataExplorerModel) View() string {
 		Render(m.viewport.View())
 
 	content := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
-	
+
 	return lipgloss.JoinVertical(lipgloss.Left, tabRow, content)
 }
