@@ -47,19 +47,17 @@
     return items[Math.floor(Math.random() * items.length)];
   }
 
-  function refreshThinkingText(forcePhrase = false) {
+  function refreshThinkingText() {
     thinkingGlyph = randomFrom(quirkySpinnerFrames);
-    if (forcePhrase || Math.random() < 0.55 || !thinkingPhrase) {
-      thinkingPhrase = randomFrom(xiberokoLoadingPhrases);
-    }
+    thinkingPhrase = randomFrom(xiberokoLoadingPhrases);
   }
 
   function startThinkingTicker() {
     if (thinkingTicker !== null) return;
-    refreshThinkingText(true);
+    refreshThinkingText();
     thinkingTicker = window.setInterval(() => {
-      refreshThinkingText(false);
-    }, 280 + Math.floor(Math.random() * 520));
+      refreshThinkingText();
+    }, 150 + Math.floor(Math.random() * 200));
   }
 
   function stopThinkingTicker() {

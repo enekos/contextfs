@@ -46,7 +46,7 @@ func (m *model) refreshThinkingIndicator(now time.Time, forcePhrase bool) {
 
 	if forcePhrase || m.thinkingPhrase == "" || now.After(m.nextPhraseSwitchAt) {
 		m.thinkingPhrase = xiberokoLoadingPhrases[m.rng.Intn(len(xiberokoLoadingPhrases))]
-		nextMs := 700 + m.rng.Intn(1600) // rotate with jitter, not a fixed cadence
+		nextMs := 150 + m.rng.Intn(200) // fast rotation like claude code
 		m.nextPhraseSwitchAt = now.Add(time.Duration(nextMs) * time.Millisecond)
 	}
 }
