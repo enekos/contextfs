@@ -95,7 +95,7 @@ dashboard-dev:
 
 dashboard:
 	$(MAKE) mairu-build
-	./mairu/bin/mairu-agent context-server -p 8788 & bun run --cwd mairu/ui dev
+	./mairu/bin/mairu-agent context-server -p 8788 & MAIRU_CONTEXT_SERVER_URL=http://localhost:8788 ./mairu/bin/mairu-agent web -p 8080 & bun run --cwd mairu/ui dev
 
 mairu-build:
 	mkdir -p mairu/bin
