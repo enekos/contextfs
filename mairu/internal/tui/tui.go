@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -50,6 +51,11 @@ type model struct {
 	agent     *agent.Agent
 	thinking  bool
 	spinner   spinner.Model
+	rng       *rand.Rand
+
+	thinkingGlyph      string
+	thinkingPhrase     string
+	nextPhraseSwitchAt time.Time
 
 	currentResponse   string
 	currentBashOutput string
@@ -79,6 +85,8 @@ type model struct {
 
 	autocompleteIndex int
 	filteredCommands  []SlashCommand
+
+	activePane workspacePane
 }
 
 type animTickMsg time.Time
@@ -142,7 +150,10 @@ func initialModel(a *agent.Agent, sessionName string) model {
 		sidebarMode:     "session",
 		selectedMessage: -1,
 		selectedEvent:   -1,
+		rng:             rand.New(rand.NewSource(time.Now().UnixNano())),
+		activePane:      paneAgent,
 	}
+	m.refreshThinkingIndicator(time.Now(), true)
 	m.renderMessages()
 	return m
 }
@@ -210,7 +221,7 @@ func (m *model) recomputeLayout() {
 	if viewportWidth < 20 {
 		viewportWidth = 20
 	}
-	viewportHeight := panesHeight - 2
+	viewportHeight := panesHeight - 4 // Reserve rows for pane tabs and breathing room.
 	if viewportHeight < 3 {
 		viewportHeight = 3
 	}

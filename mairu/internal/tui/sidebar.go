@@ -20,6 +20,7 @@ func (m model) renderSidebar() string {
 	sb.WriteString(sidebarHeaderStyle.Render("Session"))
 	sb.WriteString("\n")
 	sb.WriteString(fmt.Sprintf("%s %s\n", sidebarLabelStyle.Render("Model:"), stats.Model))
+	sb.WriteString(fmt.Sprintf("%s %s\n", sidebarLabelStyle.Render("Pane:"), paneLabel(m.activePane)))
 	sb.WriteString(fmt.Sprintf("%s %s\n", sidebarLabelStyle.Render("State:"), stats.StreamState))
 	sb.WriteString(fmt.Sprintf("%s %d\n", sidebarLabelStyle.Render("Messages:"), len(m.messages)))
 	sb.WriteString(fmt.Sprintf("%s U:%d A:%d S:%d E:%d D:%d\n",

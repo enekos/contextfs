@@ -51,7 +51,20 @@ var (
 				BorderForeground(colorSystem).
 				Padding(0, 1)
 
-	sidebarHeaderStyle = lipgloss.NewStyle().Foreground(colorPrompt).Bold(true)
-	sidebarLabelStyle  = lipgloss.NewStyle().Foreground(colorSystem)
-	footerStyle        = lipgloss.NewStyle().Foreground(colorSystem).Italic(true)
+	sidebarHeaderStyle  = lipgloss.NewStyle().Foreground(colorPrompt).Bold(true)
+	sidebarLabelStyle   = lipgloss.NewStyle().Foreground(colorSystem)
+	footerStyle         = lipgloss.NewStyle().Foreground(colorSystem).Italic(true)
+	thinkingGlyphStyle  = lipgloss.NewStyle().Foreground(colorAgent).Bold(true)
+	thinkingPhraseStyle = lipgloss.NewStyle().
+				Foreground(colorTool).
+				Italic(true)
+	paneTabActiveStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#2e3440")).
+				Background(colorPrompt).
+				Bold(true).
+				Padding(0, 1)
+	paneTabStyle = lipgloss.NewStyle().
+			Foreground(colorSystem).
+			Background(lipgloss.Color("#2b303b")).
+			Padding(0, 1)
 )

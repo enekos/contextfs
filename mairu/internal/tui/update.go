@@ -5,17 +5,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"mairu/internal/agent"
 )
+
+type externalToolDoneMsg struct {
+	pane workspacePane
+	err  error
+}
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
@@ -134,6 +142,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, tickAnim()
+		}
+	case spinner.TickMsg:
+		if m.thinking {
+			m.refreshThinkingIndicator(time.Now(), false)
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -286,6 +298,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.renderMessages()
 			m.autoScroll()
 			return m, nil
+		case tea.KeyCtrlN:
+			return m, m.openWorkspacePane(paneNvim)
+		case tea.KeyCtrlG:
+			return m, m.openWorkspacePane(paneLazygit)
 		case tea.KeyEnter:
 			if msg.Alt {
 				m.textarea.InsertString("\n")
@@ -410,6 +426,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 - /export <file>: Export conversation to a file
 - /explore: Toggle explore sidebar (message navigator + tool drilldown)
 - /logs: Toggle dedicated internal logs sidebar
+- /agent: Focus agent chat pane
+- /nvim: Open Neovim in workspace pane
+- /lazygit: Open LazyGit in workspace pane
+- /pane <agent|nvim|lazygit>: Switch workspace pane
 - /jump <n>: Jump to message number n
 - /exit or /quit: Exit Mairu
 
@@ -418,7 +438,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 - Home/End: Jump top/bottom
 - Ctrl+F: Toggle follow mode during streaming
 - Ctrl+E: Cycle session/explore/logs sidebar
-- Ctrl+J / Ctrl+K: Navigate explore/logs selection`
+- Ctrl+J / Ctrl+K: Navigate explore/logs selection
+- Ctrl+N / Ctrl+G: Jump to Neovim/LazyGit panes`
 					m.messages = append(m.messages, ChatMessage{Role: "System", Content: helpText})
 					m.renderMessages()
 					m.autoScroll()
@@ -704,6 +725,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.renderMessages()
 					m.autoScroll()
 					return m, nil
+				case "/agent":
+					return m, m.openWorkspacePane(paneAgent)
+				case "/nvim":
+					return m, m.openWorkspacePane(paneNvim)
+				case "/lazygit":
+					return m, m.openWorkspacePane(paneLazygit)
+				case "/pane":
+					if len(cmdParts) < 2 {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Usage: /pane <agent|nvim|lazygit>"})
+						m.renderMessages()
+						m.autoScroll()
+						return m, nil
+					}
+					pane, ok := parseWorkspacePane(cmdParts[1])
+					if !ok {
+						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Unknown pane. Use: agent, nvim, lazygit"})
+						m.renderMessages()
+						m.autoScroll()
+						return m, nil
+					}
+					return m, m.openWorkspacePane(pane)
 				case "/jump":
 					if len(cmdParts) > 1 {
 						idx, err := strconv.Atoi(cmdParts[1])
@@ -782,6 +824,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.autoScroll()
 
 			m.thinking = true
+			m.refreshThinkingIndicator(time.Now(), true)
 			m.currentResponse = ""
 			m.toolEvents = nil
 
@@ -794,6 +837,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentStreamMsg:
 		if msg.Type == "done" {
 			m.thinking = false
+			m.clearThinkingIndicator()
 			m.messages = append(m.messages, ChatMessage{
 				Role:       "Mairu",
 				Content:    m.currentResponse,
@@ -864,6 +908,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, waitForStream(m.activeStream))
 		} else if msg.Type == "error" {
 			m.thinking = false
+			m.clearThinkingIndicator()
 			m.messages = append(m.messages, ChatMessage{Role: "Error", Content: msg.Content})
 			m.activeStream = nil
 			m.pushInternalLog("error", "Agent stream error", msg.Content)
@@ -873,6 +918,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case errMsg:
 		m.err = msg
+		return m, nil
+	case externalToolDoneMsg:
+		m.activePane = paneAgent
+		if msg.err != nil {
+			m.messages = append(m.messages, ChatMessage{
+				Role:    "Error",
+				Content: fmt.Sprintf("%s exited with error: %v", paneLabel(msg.pane), msg.err),
+			})
+		} else {
+			m.messages = append(m.messages, ChatMessage{
+				Role:    "System",
+				Content: fmt.Sprintf("Returned from %s pane.", paneLabel(msg.pane)),
+			})
+		}
+		m.renderMessages()
+		m.autoScroll()
 		return m, nil
 	}
 
@@ -888,4 +949,51 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m *model) openWorkspacePane(p workspacePane) tea.Cmd {
+	m.activePane = p
+	if p == paneAgent {
+		m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Agent pane focused."})
+		m.renderMessages()
+		m.autoScroll()
+		return nil
+	}
+	if m.thinking {
+		m.activePane = paneAgent
+		m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Wait for the current stream to finish before opening a workspace pane."})
+		m.renderMessages()
+		m.autoScroll()
+		return nil
+	}
+
+	bin, args, ok := paneCommandSpec(p)
+	if !ok {
+		m.activePane = paneAgent
+		return nil
+	}
+	if _, err := exec.LookPath(bin); err != nil {
+		m.activePane = paneAgent
+		m.messages = append(m.messages, ChatMessage{Role: "Error", Content: fmt.Sprintf("`%s` is not installed or not on PATH.", bin)})
+		m.renderMessages()
+		m.autoScroll()
+		return nil
+	}
+
+	label := paneLabel(p)
+	m.messages = append(m.messages, ChatMessage{
+		Role:    "System",
+		Content: fmt.Sprintf("Opening %s pane. Exit %s to return to Mairu.", label, label),
+	})
+	m.renderMessages()
+	m.autoScroll()
+
+	cmd := exec.Command(bin, args...)
+	if m.agent != nil && m.agent.GetRoot() != "" {
+		cmd.Dir = m.agent.GetRoot()
+	}
+
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return externalToolDoneMsg{pane: p, err: err}
+	})
 }

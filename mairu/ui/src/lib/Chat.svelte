@@ -3,17 +3,81 @@
   import { messages, sendMessage, isGenerating, connectionState, sessions, currentSession, switchSession, createSession, loadSessions } from './store';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
-  import { onMount, tick } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { fade, slide, fly } from 'svelte/transition';
 
   let inputStr = "";
   let messagesContainer: HTMLDivElement;
   let expandedTools: Record<string, boolean> = {};
   let creatingSession = false;
+  let thinkingGlyph = "◜";
+  let thinkingPhrase = "Konbobulatzen...";
+  let thinkingTicker: ReturnType<typeof window.setInterval> | null = null;
+
+  const quirkySpinnerFrames = ["◜", "◝", "◞", "◟", "◠", "◡", "✶", "✷", "✸", "✹", "✺"];
+  const xiberokoLoadingPhrases = [
+    "Konbobulatzen...",
+    "Arranjatzen...",
+    "Xerkatzen...",
+    "Bürütatzen...",
+    "Aitzinatzen...",
+    "Üngürükatzen...",
+    "Moldatzen...",
+    "Eztiki nahasten...",
+    "Xuxentzen...",
+    "Berriz antolatzen...",
+    "Trikimailatzen...",
+    "Biribilkatzen...",
+    "Ñabarduratzen...",
+    "Xorroxtatzen...",
+    "Leunki orrazten...",
+    "Maskaratzen...",
+    "Hitzak xuxurlatzen...",
+    "Harilkatuz pentsatzen...",
+    "Astiro moldagaitzen...",
+    "Bihurrikatzen...",
+    "Xedetan trebatzen...",
+    "Zirtzilatzen...",
+    "Bapatez argitzen...",
+    "Isilik josten...",
+    "Ageri-ezkutu lanean..."
+  ];
+
+  function randomFrom<T>(items: T[]): T {
+    return items[Math.floor(Math.random() * items.length)];
+  }
+
+  function refreshThinkingText(forcePhrase = false) {
+    thinkingGlyph = randomFrom(quirkySpinnerFrames);
+    if (forcePhrase || Math.random() < 0.55 || !thinkingPhrase) {
+      thinkingPhrase = randomFrom(xiberokoLoadingPhrases);
+    }
+  }
+
+  function startThinkingTicker() {
+    if (thinkingTicker !== null) return;
+    refreshThinkingText(true);
+    thinkingTicker = window.setInterval(() => {
+      refreshThinkingText(false);
+    }, 280 + Math.floor(Math.random() * 520));
+  }
+
+  function stopThinkingTicker() {
+    if (thinkingTicker === null) return;
+    window.clearInterval(thinkingTicker);
+    thinkingTicker = null;
+  }
 
   onMount(() => {
     void loadSessions();
   });
+  onDestroy(() => stopThinkingTicker());
+
+  $: if ($isGenerating) {
+    startThinkingTicker();
+  } else {
+    stopThinkingTicker();
+  }
 
   $: {
     $messages;
@@ -215,7 +279,11 @@
             {#if msg.content}
               {@html renderMarkdown(msg.content)}
             {:else if $isGenerating && msg.id === $messages[$messages.length-1].id}
-              <span class="text-cyan-400 flex items-center gap-2 mt-2"><Loader2 size={14} class="animate-spin" /> Thinking...</span>
+              <span class="text-cyan-400 flex items-center gap-2 mt-2">
+                <Loader2 size={14} class="animate-spin" />
+                <span class="font-semibold text-pink-300">{thinkingGlyph}</span>
+                <span class="italic">{thinkingPhrase}</span>
+              </span>
             {/if}
           </div>
         {:else if msg.role === 'user'}

@@ -99,7 +99,11 @@ func (m model) View() string {
 
 	statusStr := ""
 	if m.thinking {
-		statusStr = m.spinner.View() + " "
+		glyph := m.thinkingGlyph
+		if glyph == "" {
+			glyph = m.spinner.View()
+		}
+		statusStr = thinkingGlyphStyle.Render(glyph) + " " + thinkingPhraseStyle.Render(m.thinkingPhrase) + " "
 	}
 
 	inputView := statusStr + m.textarea.View()
@@ -111,7 +115,7 @@ func (m model) View() string {
 	chatPane := chatPaneStyle.
 		Width(m.chatPaneWidth).
 		Height(m.panesHeight).
-		Render(m.viewport.View())
+		Render(m.renderPaneTabs() + "\n" + m.viewport.View())
 	mainRow := chatPane
 	if m.sidebarWidth > 0 {
 		sidebarPane := sidebarPaneStyle.
@@ -137,8 +141,22 @@ func (m model) View() string {
 }
 
 func (m model) renderFooter() string {
-	footer := "PgUp/PgDn scroll  ·  Home/End top-bottom  ·  Ctrl+F follow  ·  Ctrl+E sidebars  ·  /help"
+	footer := "PgUp/PgDn scroll  ·  Home/End top-bottom  ·  Ctrl+F follow  ·  Ctrl+E sidebars  ·  Ctrl+N nvim  ·  Ctrl+G lazygit  ·  /help"
 	return footerStyle.Render(footer)
+}
+
+func (m model) renderPaneTabs() string {
+	panes := []workspacePane{paneAgent, paneNvim, paneLazygit}
+	parts := make([]string, 0, len(panes))
+	for _, pane := range panes {
+		label := paneLabel(pane)
+		if pane == m.activePane {
+			parts = append(parts, paneTabActiveStyle.Render(label))
+		} else {
+			parts = append(parts, paneTabStyle.Render(label))
+		}
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Left, parts...)
 }
 
 func (m model) renderAutocomplete() string {
