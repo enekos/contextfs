@@ -38,6 +38,8 @@ var allSlashCommands = []SlashCommand{
 	{"/lazygit", "Open LazyGit pane"},
 	{"/pane", "Switch pane: agent|nvim|lazygit"},
 	{"/jump", "Jump to message number n"},
+	{"/approve", "Approve pending agent action"},
+	{"/deny", "Deny pending agent action"},
 	{"/exit", "Exit Mairu"},
 	{"/quit", "Exit Mairu"},
 }

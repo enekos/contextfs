@@ -22,8 +22,9 @@ type Agent struct {
 	db     *db.DB
 	apiKey string
 
-	mu     sync.Mutex
-	cancel context.CancelFunc
+	mu           sync.Mutex
+	cancel       context.CancelFunc
+	approvalChan chan bool
 }
 
 type Config struct {
@@ -68,6 +69,15 @@ func (a *Agent) Interrupt() {
 		a.cancel()
 		a.cancel = nil
 	}
+}
+
+func (a *Agent) ApproveAction(approved bool) {
+	a.mu.Lock()
+	if a.approvalChan != nil {
+		a.approvalChan <- approved
+		a.approvalChan = nil
+	}
+	a.mu.Unlock()
 }
 
 func (a *Agent) GetRoot() string {
@@ -332,6 +342,32 @@ func (a *Agent) executeToolCall(ctx context.Context, funcCall genai.FunctionCall
 		var timeout int
 		if ok {
 			timeout = int(timeoutMsFloat)
+		}
+
+		if IsDangerousCommand(command) {
+			a.mu.Lock()
+			a.approvalChan = make(chan bool, 1)
+			a.mu.Unlock()
+
+			outChan <- AgentEvent{
+				Type:    "approval_request",
+				Content: fmt.Sprintf("⚠️ The agent wants to execute a potentially dangerous command:\n\n```bash\n%s\n```\n\nApprove or deny this action by typing `/approve` or `/deny`.", command),
+			}
+
+			// Block until approved or denied, or context cancelled
+			approved := false
+			select {
+			case <-ctx.Done():
+				result = map[string]any{"error": "tool execution cancelled"}
+				break
+			case approved = <-a.approvalChan:
+			}
+
+			if !approved {
+				outChan <- AgentEvent{Type: "status", Content: "❌ Command execution denied by user."}
+				return map[string]any{"error": "User denied command execution."}
+			}
+			outChan <- AgentEvent{Type: "status", Content: "✅ Command execution approved."}
 		}
 
 		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🖥️ Running bash: %s", command)}

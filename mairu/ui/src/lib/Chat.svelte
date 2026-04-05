@@ -291,8 +291,14 @@
           </div>
         {:else}
           <div class="px-8 sm:px-10 text-[10px] font-bold uppercase tracking-[0.2em] text-rose-400/80">System</div>
-          <div class="bg-rose-500/10 border border-rose-500/20 rounded-2xl rounded-tl-sm px-8 sm:px-10 py-5 text-rose-200 font-mono text-sm shadow-sm leading-relaxed">
+          <div class="bg-rose-500/10 border border-rose-500/20 rounded-2xl rounded-tl-sm px-8 sm:px-10 py-5 text-rose-200 font-mono text-sm shadow-sm leading-relaxed whitespace-pre-wrap">
             {msg.content}
+            {#if msg.content.includes('/approve')}
+              <div class="mt-4 flex gap-4">
+                <button on:click={() => sendMessage('/approve')} class="px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/50 rounded hover:bg-green-500/30 transition-colors cursor-pointer">Approve</button>
+                <button on:click={() => sendMessage('/deny')} class="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/50 rounded hover:bg-red-500/30 transition-colors cursor-pointer">Deny</button>
+              </div>
+            {/if}
           </div>
         {/if}
       </div>

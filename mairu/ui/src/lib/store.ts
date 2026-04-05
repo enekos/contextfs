@@ -1,7 +1,7 @@
 import { writable } from 'svelte/store';
 
 export type AgentEvent = {
-  Type: "text" | "status" | "error" | "done" | "tool_call" | "tool_result" | "log" | "bash_output";
+  Type: "text" | "status" | "error" | "done" | "tool_call" | "tool_result" | "log" | "bash_output" | "approval_request";
   Content: string;
   ToolName?: string;
   ToolArgs?: any;
@@ -279,6 +279,11 @@ export async function connectWs(sessionName?: string, forceReconnect = false) {
       });
       isGenerating.set(false);
       currentMessageId = null;
+    } else if (data.Type === "approval_request") {
+      messages.update(msgs => [
+        ...msgs, 
+        { id: crypto.randomUUID(), role: "system", content: data.Content, bashOutput: "", statuses: [], logs: [], toolCalls: [] }
+      ]);
     } else if (data.Type === "error") {
       messages.update(msgs => [
         ...msgs, 

@@ -401,6 +401,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				case "/exit", "/quit":
 					return m, tea.Quit
+				case "/approve":
+					m.agent.ApproveAction(true)
+					m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Action approved."})
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
+				case "/deny":
+					m.agent.ApproveAction(false)
+					m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Action denied."})
+					m.renderMessages()
+					m.viewport.GotoBottom()
+					return m, nil
 				case "/clear":
 					m.messages = []ChatMessage{{Role: "System", Content: "Terminal cleared."}}
 					m.renderMessages()
@@ -424,6 +436,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 - /reset or /new: Start a fresh session and clear context
 - /compact: Summarize history to save tokens
 - /export <file>: Export conversation to a file
+- /approve: Approve pending agent action
+- /deny: Deny pending agent action
 - /explore: Toggle explore sidebar (message navigator + tool drilldown)
 - /logs: Toggle dedicated internal logs sidebar
 - /agent: Focus agent chat pane
@@ -903,6 +917,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toolEvents = append(m.toolEvents, ev)
 			m.pushToolLog("result", ev.Title)
 			m.pushInternalLog("result", ev.Title, fmt.Sprintf("%v", msg.ToolResult))
+			m.renderMessages()
+			m.autoScroll()
+			cmds = append(cmds, waitForStream(m.activeStream))
+		} else if msg.Type == "approval_request" {
+			m.messages = append(m.messages, ChatMessage{Role: "System", Content: msg.Content})
 			m.renderMessages()
 			m.autoScroll()
 			cmds = append(cmds, waitForStream(m.activeStream))

@@ -21,6 +21,32 @@ func StripANSI(str string) string {
 	return ansiPattern.ReplaceAllString(str, "")
 }
 
+func IsDangerousCommand(command string) bool {
+	lower := strings.ToLower(command)
+	dangerousPrefixes := []string{
+		"rm -rf", "rm -r ", "rm ",
+		"mv ", "cp ", "wget", "curl", "chmod", "chown", "sudo",
+		"docker run", "docker exec", "docker rm", "docker rmi", "docker stop",
+		"kill", "pkill",
+	}
+
+	// Also check after pipes/ands
+	parts := strings.FieldsFunc(lower, func(r rune) bool {
+		return r == '|' || r == '&' || r == ';'
+	})
+
+	for _, p := range parts {
+		cmdPart := strings.TrimSpace(p)
+		for _, d := range dangerousPrefixes {
+			if strings.HasPrefix(cmdPart, d) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // RunBash executes a shell command with a timeout and returns its output.
 func (a *Agent) RunBash(ctx context.Context, command string, timeoutMs int, outChan chan<- AgentEvent) (string, error) {
 	if timeoutMs <= 0 {

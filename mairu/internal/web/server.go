@@ -94,13 +94,27 @@ func SetupRouter(apiKey, meiliURL, meiliAPIKey string) (*gin.Engine, error) {
 				}
 			}()
 
-			for {
-				_, msg, err := ws.ReadMessage()
-				if err != nil {
-					break
+			promptChan := make(chan string)
+			go func() {
+				for {
+					_, msg, err := ws.ReadMessage()
+					if err != nil {
+						close(promptChan)
+						break
+					}
+					prompt := string(msg)
+					cmd := strings.TrimSpace(prompt)
+					if cmd == "/approve" {
+						ag.ApproveAction(true)
+					} else if cmd == "/deny" {
+						ag.ApproveAction(false)
+					} else {
+						promptChan <- prompt
+					}
 				}
-				prompt := string(msg)
+			}()
 
+			for prompt := range promptChan {
 				outChan := make(chan agent.AgentEvent)
 				go ag.RunStream(prompt, outChan)
 
