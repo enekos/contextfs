@@ -137,7 +137,7 @@ func (m model) View() string {
 }
 
 func (m model) renderFooter() string {
-	footer := "PgUp/PgDn scroll  ·  Home/End top-bottom  ·  Ctrl+F follow  ·  Ctrl+E explore  ·  /help"
+	footer := "PgUp/PgDn scroll  ·  Home/End top-bottom  ·  Ctrl+F follow  ·  Ctrl+E sidebars  ·  /help"
 	return footerStyle.Render(footer)
 }
 

@@ -12,6 +12,9 @@ func (m model) renderSidebar() string {
 	if m.sidebarMode == "explore" {
 		return m.renderExploreSidebar(stats)
 	}
+	if m.sidebarMode == "logs" {
+		return m.renderLogsSidebar()
+	}
 
 	var sb strings.Builder
 	sb.WriteString(sidebarHeaderStyle.Render("Session"))
@@ -124,6 +127,66 @@ func (m model) renderExploreSidebar(stats sessionStats) string {
 
 	sb.WriteString("\n")
 	sb.WriteString(sidebarLabelStyle.Render("Ctrl+J/Ctrl+K navigate  ·  /jump <n>"))
+	return sb.String()
+}
+
+func (m model) renderLogsSidebar() string {
+	var sb strings.Builder
+	sb.WriteString(sidebarHeaderStyle.Render("Logs"))
+	sb.WriteString("\n")
+	sb.WriteString(fmt.Sprintf("%s %d\n", sidebarLabelStyle.Render("Entries:"), len(m.internalLogs)))
+	sb.WriteString(fmt.Sprintf("%s %d\n", sidebarLabelStyle.Render("Selected:"), m.selectedLog+1))
+	sb.WriteString(fmt.Sprintf("%s %s\n\n", sidebarLabelStyle.Render("Follow mode:"), boolLabel(m.followMode)))
+
+	if len(m.internalLogs) == 0 {
+		sb.WriteString(sidebarLabelStyle.Render("No internal logs yet."))
+		return sb.String()
+	}
+
+	start := len(m.internalLogs) - 12
+	if start < 0 {
+		start = 0
+	}
+	if m.selectedLog >= 0 && m.selectedLog < start {
+		start = m.selectedLog
+	}
+	end := start + 12
+	if end > len(m.internalLogs) {
+		end = len(m.internalLogs)
+	}
+
+	for i := start; i < end; i++ {
+		log := m.internalLogs[i]
+		prefix := " "
+		if i == m.selectedLog {
+			prefix = ">"
+		}
+		label := fmt.Sprintf("%s %-6s %s", log.Timestamp.Format("15:04:05"), strings.ToUpper(log.Kind), previewText(log.Summary, 34))
+		if i == m.selectedLog {
+			sb.WriteString(sidebarHeaderStyle.Render(prefix + " " + label))
+		} else {
+			sb.WriteString(prefix + " " + label)
+		}
+		sb.WriteString("\n")
+	}
+
+	if m.selectedLog >= 0 && m.selectedLog < len(m.internalLogs) {
+		current := m.internalLogs[m.selectedLog]
+		sb.WriteString("\n")
+		sb.WriteString(sidebarHeaderStyle.Render("Detail"))
+		sb.WriteString("\n")
+		detail := current.Detail
+		if detail == "" {
+			detail = current.Summary
+		}
+		for _, line := range strings.Split(previewMultiline(detail, 700), "\n") {
+			sb.WriteString(sidebarLabelStyle.Render(line))
+			sb.WriteString("\n")
+		}
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(sidebarLabelStyle.Render("Ctrl+J/Ctrl+K navigate  ·  /logs toggle"))
 	return sb.String()
 }
 

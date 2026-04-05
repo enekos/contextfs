@@ -2,11 +2,13 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/iterator"
@@ -138,20 +140,36 @@ func (a *Agent) RunStream(prompt string, outChan chan<- AgentEvent) {
 }
 
 func (a *Agent) processLoopStream(input string, outChan chan<- AgentEvent) {
-	iter := a.llm.ChatStream(context.Background(), input)
-	a.emitLog(outChan, "LLM ChatStream established")
-	a.handleIterator(iter, outChan)
+	const maxStreamAttempts = 2
+	for attempt := 1; attempt <= maxStreamAttempts; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+		iter := a.llm.ChatStream(ctx, input)
+		a.emitLog(outChan, "LLM ChatStream established (attempt %d/%d)", attempt, maxStreamAttempts)
+		err := a.handleIterator(ctx, iter, outChan)
+		cancel()
+		if err == nil {
+			return
+		}
+
+		if isRetryableStreamErr(err) && attempt < maxStreamAttempts {
+			outChan <- AgentEvent{Type: "status", Content: "⚠️ Stream interrupted, retrying once..."}
+			a.emitLog(outChan, "Retrying stream after transient error: %v", err)
+			continue
+		}
+
+		outChan <- AgentEvent{Type: "error", Content: err.Error()}
+		return
+	}
 }
 
-func (a *Agent) handleIterator(iter *genai.GenerateContentResponseIterator, outChan chan<- AgentEvent) {
+func (a *Agent) handleIterator(ctx context.Context, iter *genai.GenerateContentResponseIterator, outChan chan<- AgentEvent) error {
 	for {
 		resp, err := iter.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			outChan <- AgentEvent{Type: "error", Content: err.Error()}
-			return
+			return err
 		}
 
 		if len(resp.Candidates) == 0 {
@@ -191,12 +209,30 @@ func (a *Agent) handleIterator(iter *genai.GenerateContentResponseIterator, outC
 			}
 			wg.Wait()
 
-			nextIter := a.llm.SendFunctionResponsesStream(context.Background(), results)
-			a.handleIterator(nextIter, outChan)
-			return // we recurse via handleIterator, then exit this frame
+			nextIter := a.llm.SendFunctionResponsesStream(ctx, results)
+			return a.handleIterator(ctx, nextIter, outChan) // recurse, then exit this frame
 		}
 	}
 	outChan <- AgentEvent{Type: "done"}
+	return nil
+}
+
+func (a *Agent) searchBySymbolName(symName string, outChan chan<- AgentEvent) map[string]any {
+	locations, err := a.db.FindSymbol(symName)
+	if err != nil || len(locations) == 0 {
+		return map[string]any{"error": fmt.Sprintf("symbol '%s' not found", symName)}
+	}
+
+	content, err := a.SurgicalRead(locations[0])
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+
+	outChan <- AgentEvent{
+		Type:    "status",
+		Content: fmt.Sprintf("📄 Read %d lines from %s", locations[0].EndRow-locations[0].StartRow+1, locations[0].FilePath),
+	}
+	return map[string]any{"content": content}
 }
 
 func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- AgentEvent) map[string]any {
@@ -212,22 +248,6 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 	var result map[string]any
 
 	switch funcCall.Name {
-	case "read_symbol":
-		symName, _ := funcCall.Args["symbol_name"].(string)
-		locations, err := a.db.FindSymbol(symName)
-
-		if err != nil || len(locations) == 0 {
-			result = map[string]any{"error": fmt.Sprintf("symbol '%s' not found", symName)}
-		} else {
-			content, err := a.SurgicalRead(locations[0])
-			if err != nil {
-				result = map[string]any{"error": err.Error()}
-			} else {
-				outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("📄 Read %d lines from %s", locations[0].EndRow-locations[0].StartRow+1, locations[0].FilePath)}
-				result = map[string]any{"content": content}
-			}
-		}
-
 	case "replace_block":
 		filePath, _ := funcCall.Args["file_path"].(string)
 		oldCode, _ := funcCall.Args["old_code"].(string)
@@ -352,6 +372,18 @@ func (a *Agent) executeToolCall(funcCall genai.FunctionCall, outChan chan<- Agen
 
 	case "search_codebase":
 		query, _ := funcCall.Args["query"].(string)
+		symName, _ := funcCall.Args["symbol_name"].(string)
+
+		if strings.TrimSpace(symName) != "" {
+			outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🔎 Searching symbol: %s", symName)}
+			result = a.searchBySymbolName(symName, outChan)
+			break
+		}
+
+		if strings.TrimSpace(query) == "" {
+			result = map[string]any{"error": "missing query: provide either query or symbol_name"}
+			break
+		}
 
 		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🔎 Searching for: %s", query)}
 		matches, err := a.SearchCodebase(query)
@@ -482,4 +514,20 @@ func (a *Agent) runAutoVerification(editedFilePath string, outChan chan<- AgentE
 	}
 
 	return "", nil
+}
+
+func isRetryableStreamErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "hangup") ||
+		strings.Contains(lower, "sighup") ||
+		strings.Contains(lower, "connection reset") ||
+		strings.Contains(lower, "broken pipe") ||
+		strings.Contains(lower, "stream removed") ||
+		strings.Contains(lower, "eof")
 }

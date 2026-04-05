@@ -7,20 +7,6 @@ import (
 func (g *GeminiProvider) SetupTools() {
 	tools := []*genai.FunctionDeclaration{
 		{
-			Name:        "read_symbol",
-			Description: "Perform a surgical read of a specific function or class from the codebase.",
-			Parameters: &genai.Schema{
-				Type: genai.TypeObject,
-				Properties: map[string]*genai.Schema{
-					"symbol_name": {
-						Type:        genai.TypeString,
-						Description: "The exact name of the function, method, or class to read.",
-					},
-				},
-				Required: []string{"symbol_name"},
-			},
-		},
-		{
 			Name:        "replace_block",
 			Description: "Safely apply a Search-and-Replace block edit to a file. You must provide the EXACT existing code block you want to replace, including all whitespace. This is much safer and more reliable than multi_edit.",
 			Parameters: &genai.Schema{
@@ -134,16 +120,20 @@ func (g *GeminiProvider) SetupTools() {
 		},
 		{
 			Name:        "search_codebase",
-			Description: "Search the codebase for a text pattern or regex.",
+			Description: "Search the codebase by text/regex query or by symbol name (surgical read).",
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
 					"query": {
 						Type:        genai.TypeString,
-						Description: "The text or regex to search for.",
+						Description: "Text or regex to search in files.",
+					},
+					"symbol_name": {
+						Type:        genai.TypeString,
+						Description: "Exact symbol name to look up (function, method, class).",
 					},
 				},
-				Required: []string{"query"},
+				Required: []string{},
 			},
 		},
 		{

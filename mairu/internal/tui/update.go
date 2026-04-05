@@ -185,11 +185,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.autoScroll()
 			return m, nil
 		case tea.KeyCtrlE:
-			if m.sidebarMode == "session" {
+			switch m.sidebarMode {
+			case "session":
 				m.sidebarMode = "explore"
 				m.selectedMessage = clampMessageIndex(len(m.messages)-1, 0, len(m.messages))
 				m.selectedEvent = -1
-			} else {
+			case "explore":
+				m.sidebarMode = "logs"
+				if len(m.internalLogs) > 0 {
+					m.selectedLog = len(m.internalLogs) - 1
+				}
+			default:
 				m.sidebarMode = "session"
 			}
 			return m, nil
@@ -212,6 +218,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.renderMessages()
 				return m, nil
 			}
+			if m.sidebarMode == "logs" {
+				if len(m.internalLogs) > 0 {
+					m.selectedLog = clampMessageIndex(m.selectedLog, 1, len(m.internalLogs))
+				}
+				return m, nil
+			}
 		case tea.KeyCtrlK:
 			if m.sidebarMode == "explore" {
 				if m.selectedEvent >= 0 {
@@ -226,6 +238,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.jumpToSelectedMessage()
 				m.followMode = false
 				m.renderMessages()
+				return m, nil
+			}
+			if m.sidebarMode == "logs" {
+				if len(m.internalLogs) > 0 {
+					m.selectedLog = clampMessageIndex(m.selectedLog, -1, len(m.internalLogs))
+				}
 				return m, nil
 			}
 		case tea.KeyCtrlP:
@@ -380,6 +398,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 - /compact: Summarize history to save tokens
 - /export <file>: Export conversation to a file
 - /explore: Toggle explore sidebar (message navigator + tool drilldown)
+- /logs: Toggle dedicated internal logs sidebar
 - /jump <n>: Jump to message number n
 - /exit or /quit: Exit Mairu
 
@@ -387,8 +406,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 - PgUp/PgDown: Scroll chat by half-page
 - Home/End: Jump top/bottom
 - Ctrl+F: Toggle follow mode during streaming
-- Ctrl+E: Toggle session/explore sidebar
-- Ctrl+J / Ctrl+K: Next/previous message (explore mode)`
+- Ctrl+E: Cycle session/explore/logs sidebar
+- Ctrl+J / Ctrl+K: Navigate explore/logs selection`
 					m.messages = append(m.messages, ChatMessage{Role: "System", Content: helpText})
 					m.renderMessages()
 					m.autoScroll()
@@ -648,7 +667,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.autoScroll()
 					return m, nil
 				case "/explore":
-					if m.sidebarMode == "session" {
+					if m.sidebarMode != "explore" {
 						m.sidebarMode = "explore"
 						m.selectedMessage = clampMessageIndex(len(m.messages)-1, 0, len(m.messages))
 						m.selectedEvent = -1
@@ -656,6 +675,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					} else {
 						m.sidebarMode = "session"
 						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Explore sidebar hidden."})
+					}
+					m.renderMessages()
+					m.autoScroll()
+					return m, nil
+				case "/logs":
+					if m.sidebarMode == "logs" {
+						m.sidebarMode = "session"
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Log sidebar hidden."})
+					} else {
+						m.sidebarMode = "logs"
+						if len(m.internalLogs) > 0 {
+							m.selectedLog = len(m.internalLogs) - 1
+						}
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Log sidebar enabled. Use Ctrl+J / Ctrl+K to inspect entries."})
 					}
 					m.renderMessages()
 					m.autoScroll()
@@ -733,6 +766,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.followMode = true
 			m.messages = append(m.messages, ChatMessage{Role: "You", Content: v})
+			m.pushInternalLog("user", "User prompt submitted", v)
 			m.renderMessages()
 			m.autoScroll()
 
@@ -759,11 +793,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentBashOutput = ""
 			m.toolEvents = nil
 			m.activeStream = nil
+			m.pushInternalLog("done", "Stream completed", "")
 			m.renderMessages()
 			m.autoScroll()
 		} else if msg.Type == "text" {
 			m.currentBashOutput = ""
 			m.currentResponse += msg.Content
+			m.pushInternalLog("text", "Assistant text chunk", msg.Content)
 			m.renderMessages()
 			m.autoScroll()
 			cmds = append(cmds, waitForStream(m.activeStream))
@@ -775,10 +811,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if msg.Type == "log" {
 			// Print to toolLog so it shows up in "Tool Drilldown" inside explore sidebar
 			m.pushToolLog("log", msg.Content)
+			m.pushInternalLog("log", msg.Content, msg.Content)
 			// Don't show log events in main chat, just background sidebar
 			cmds = append(cmds, waitForStream(m.activeStream))
 		} else if msg.Type == "bash_output" {
 			m.pushToolLog("bash", msg.Content)
+			m.pushInternalLog("bash", "Bash output chunk", msg.Content)
 			m.currentBashOutput += msg.Content
 			if len(m.currentBashOutput) > 2000 {
 				m.currentBashOutput = m.currentBashOutput[len(m.currentBashOutput)-2000:]
@@ -790,6 +828,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ev := buildToolStatusEvent(msg.Content)
 			m.toolEvents = append(m.toolEvents, ev)
 			m.pushToolLog("status", ev.Title)
+			m.pushInternalLog("status", ev.Title, msg.Content)
 			m.currentBashOutput = ""
 			m.renderMessages()
 			m.autoScroll()
@@ -799,6 +838,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ev := buildToolCallEvent(msg.ToolName, msg.ToolArgs)
 			m.toolEvents = append(m.toolEvents, ev)
 			m.pushToolLog("call", ev.Title)
+			m.pushInternalLog("call", ev.Title, fmt.Sprintf("%v", msg.ToolArgs))
 			m.renderMessages()
 			m.autoScroll()
 			cmds = append(cmds, waitForStream(m.activeStream))
@@ -807,6 +847,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ev := buildToolResultEvent(msg.ToolName, msg.ToolResult)
 			m.toolEvents = append(m.toolEvents, ev)
 			m.pushToolLog("result", ev.Title)
+			m.pushInternalLog("result", ev.Title, fmt.Sprintf("%v", msg.ToolResult))
 			m.renderMessages()
 			m.autoScroll()
 			cmds = append(cmds, waitForStream(m.activeStream))
@@ -814,6 +855,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.thinking = false
 			m.messages = append(m.messages, ChatMessage{Role: "Error", Content: msg.Content})
 			m.activeStream = nil
+			m.pushInternalLog("error", "Agent stream error", msg.Content)
 			m.renderMessages()
 			m.autoScroll()
 		}

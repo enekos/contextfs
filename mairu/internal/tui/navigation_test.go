@@ -28,3 +28,13 @@ func TestPreviewText(t *testing.T) {
 		t.Fatalf("unexpected truncation: %q", got)
 	}
 }
+
+func TestPreviewMultiline(t *testing.T) {
+	input := "line1\nline2\nline3"
+	if got := previewMultiline(input, 20); got != input {
+		t.Fatalf("expected multiline text to be preserved, got %q", got)
+	}
+	if got := previewMultiline("123456789", 5); got != "12..." {
+		t.Fatalf("unexpected truncation: %q", got)
+	}
+}

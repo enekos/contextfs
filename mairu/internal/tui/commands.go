@@ -32,6 +32,7 @@ var allSlashCommands = []SlashCommand{
 	{"/squash", "Summarize history to save tokens"},
 	{"/export", "Export conversation to a file"},
 	{"/explore", "Toggle explore sidebar"},
+	{"/logs", "Toggle internal logs sidebar"},
 	{"/jump", "Jump to message number n"},
 	{"/exit", "Exit Mairu"},
 	{"/quit", "Exit Mairu"},

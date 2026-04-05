@@ -33,3 +33,14 @@ func previewText(content string, maxLen int) string {
 	}
 	return normalized[:maxLen-3] + "..."
 }
+
+func previewMultiline(content string, maxLen int) string {
+	trimmed := strings.TrimSpace(content)
+	if maxLen <= 0 || len(trimmed) <= maxLen {
+		return trimmed
+	}
+	if maxLen <= 3 {
+		return trimmed[:maxLen]
+	}
+	return trimmed[:maxLen-3] + "..."
+}

@@ -7,7 +7,10 @@ import (
 	"io"
 	"os/exec"
 	"regexp"
+	"runtime"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -23,18 +26,40 @@ func (a *Agent) RunBash(command string, timeoutMs int, outChan chan<- AgentEvent
 		timeoutMs = 30000 // default 30s
 	}
 
+	const maxAttempts = 2
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		out, waitErr, runErr := a.runBashOnce(command, timeoutMs, outChan)
+		if runErr != nil {
+			return "", runErr
+		}
+		if isHangupExit(waitErr, out) && attempt < maxAttempts {
+			if outChan != nil {
+				outChan <- AgentEvent{Type: "status", Content: "⚠️ Command exited with hangup signal, retrying once..."}
+			}
+			continue
+		}
+		return out, nil
+	}
+	return "", fmt.Errorf("command failed unexpectedly after retries")
+}
+
+func (a *Agent) runBashOnce(command string, timeoutMs int, outChan chan<- AgentEvent) (string, error, error) {
 	cmd := exec.Command("bash", "-c", command)
 	cmd.Dir = a.db.Root() // Run in the project root
 	// Make it more resilient by faking CI
 	cmd.Env = append(cmd.Environ(), "CI=true", "DEBIAN_FRONTEND=noninteractive", "NONINTERACTIVE=true", "FORCE_COLOR=0")
+	if runtime.GOOS != "windows" {
+		// Isolate child in a new process group so timeout cleanup can kill descendants.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", fmt.Errorf("failed to get stdout pipe: %w", err)
+		return "", nil, fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
-		return "", fmt.Errorf("failed to get stderr pipe: %w", err)
+		return "", nil, fmt.Errorf("failed to get stderr pipe: %w", err)
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
@@ -42,7 +67,7 @@ func (a *Agent) RunBash(command string, timeoutMs int, outChan chan<- AgentEvent
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("failed to start command: %w", err)
+		return "", nil, fmt.Errorf("failed to start command: %w", err)
 	}
 
 	// Stream readers
@@ -84,10 +109,15 @@ func (a *Agent) RunBash(command string, timeoutMs int, outChan chan<- AgentEvent
 
 	select {
 	case <-time.After(time.Duration(timeoutMs) * time.Millisecond):
-		if err := cmd.Process.Kill(); err != nil {
-			return "", fmt.Errorf("command timed out and failed to kill: %w", err)
+		if cmd.Process != nil {
+			if runtime.GOOS != "windows" {
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			}
+			if err := cmd.Process.Kill(); err != nil {
+				return "", nil, fmt.Errorf("command timed out and failed to kill: %w", err)
+			}
 		}
-		return "", fmt.Errorf("command timed out after %dms", timeoutMs)
+		return "", nil, fmt.Errorf("command timed out after %dms", timeoutMs)
 	case err := <-done:
 		mu.Lock()
 		outStr := StripANSI(stdoutBuf.String())
@@ -111,6 +141,19 @@ func (a *Agent) RunBash(command string, timeoutMs int, outChan chan<- AgentEvent
 			result = result[:10000] + "\n...[Output truncated, run command redirecting to file to see full output]"
 		}
 
-		return result, nil
+		return result, err, nil
 	}
+}
+
+func isHangupExit(waitErr error, output string) bool {
+	if waitErr == nil {
+		return false
+	}
+	if ee, ok := waitErr.(*exec.ExitError); ok {
+		if ws, ok := ee.Sys().(syscall.WaitStatus); ok && ws.Signaled() && ws.Signal() == syscall.SIGHUP {
+			return true
+		}
+	}
+	lower := strings.ToLower(output)
+	return strings.Contains(lower, "hangup") || strings.Contains(lower, "sighup")
 }

@@ -25,6 +25,13 @@ type ChatMessage struct {
 	Expanded   bool
 }
 
+type internalLogEntry struct {
+	Timestamp time.Time
+	Kind      string
+	Summary   string
+	Detail    string
+}
+
 type listItem struct {
 	title, desc string
 }
@@ -62,11 +69,13 @@ type model struct {
 	panesHeight   int
 
 	followMode       bool
-	sidebarMode      string // "session" or "explore"
+	sidebarMode      string // "session", "explore", or "logs"
 	selectedMessage  int
 	selectedEvent    int
 	messageLineStart []int
 	toolLog          []string
+	internalLogs     []internalLogEntry
+	selectedLog      int
 
 	autocompleteIndex int
 	filteredCommands  []SlashCommand
@@ -240,4 +249,18 @@ func (m *model) pushToolLog(kind, content string) {
 	if len(m.toolLog) > 200 {
 		m.toolLog = m.toolLog[len(m.toolLog)-200:]
 	}
+}
+
+func (m *model) pushInternalLog(kind, summary, detail string) {
+	entry := internalLogEntry{
+		Timestamp: time.Now(),
+		Kind:      strings.TrimSpace(kind),
+		Summary:   strings.TrimSpace(summary),
+		Detail:    strings.TrimSpace(detail),
+	}
+	m.internalLogs = append(m.internalLogs, entry)
+	if len(m.internalLogs) > 1000 {
+		m.internalLogs = m.internalLogs[len(m.internalLogs)-1000:]
+	}
+	m.selectedLog = len(m.internalLogs) - 1
 }
