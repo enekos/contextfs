@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"log/slog"
+	"mairu/internal/logger"
 	"mairu/internal/web"
 	"os"
 
@@ -12,6 +13,11 @@ var webCmd = &cobra.Command{
 	Use:   "web",
 	Short: "Start the Mairu web interface",
 	Run: func(cmd *cobra.Command, args []string) {
+		logger.Init(logger.Config{
+			Level:      "info",
+			Structured: true,
+		})
+
 		port, _ := cmd.Flags().GetInt("port")
 		meiliURL, _ := cmd.Flags().GetString("meili-url")
 		meiliAPIKey, _ := cmd.Flags().GetString("meili-api-key")

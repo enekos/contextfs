@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"mairu/internal/contextsrv"
+	"mairu/internal/logger"
 	"os"
 	"os/signal"
 	"syscall"
@@ -40,6 +41,11 @@ var contextServerCmd = &cobra.Command{
 			cfg.AuthToken = authToken
 		}
 		cfg.EnableProjector = enableProjector
+
+		logger.Init(logger.Config{
+			Level:      "info",
+			Structured: true,
+		})
 
 		app, err := contextsrv.NewApp(cfg)
 		if err != nil {
