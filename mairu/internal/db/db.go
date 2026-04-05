@@ -63,14 +63,18 @@ func (db *DB) migrate() error {
 		return errors.New("database client is not initialized")
 	}
 
-	// Let's create the index. If it exists, this will return an error but we can ignore it if it's already there.
-	_, _ = db.client.CreateIndex(&meilisearch.IndexConfig{
+	_, err := db.client.CreateIndex(&meilisearch.IndexConfig{
 		Uid:        symbolsIndexName,
 		PrimaryKey: symbolsPrimaryKey,
 	})
+	if err != nil {
+		if !strings.Contains(err.Error(), "already_exists") {
+			return fmt.Errorf("failed to create index: %w", err)
+		}
+	}
 
 	// Configure searchable attributes
-	_, err := db.client.Index(symbolsIndexName).UpdateSearchableAttributes(&[]string{
+	_, err = db.client.Index(symbolsIndexName).UpdateSearchableAttributes(&[]string{
 		"name",
 		"kind",
 		"file_path",

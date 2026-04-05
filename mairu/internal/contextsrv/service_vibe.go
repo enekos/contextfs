@@ -10,7 +10,7 @@ import (
 )
 
 type LLMClient interface {
-	GenerateJSON(ctx context.Context, system, user string) (map[string]any, error)
+	GenerateJSON(ctx context.Context, system, user string, out any) error
 	GenerateContent(ctx context.Context, model, prompt string) (string, error)
 }
 
@@ -42,7 +42,8 @@ func (s *AppService) VibeQuery(prompt, project string, topK int) (VibeQueryResul
 		}{
 			Project: strings.TrimSpace(project),
 		}); err == nil {
-			res, err := s.llmClient.GenerateJSON(context.Background(), sys, prompt)
+			var res map[string]any
+			err := s.llmClient.GenerateJSON(context.Background(), sys, prompt, &res)
 			if err == nil {
 				plannedReasoning, plannedQueries := parseSearchPlan(res)
 				if len(plannedQueries) > 0 {
@@ -113,7 +114,8 @@ func (s *AppService) PlanVibeMutation(prompt, project string, topK int) (VibeMut
 		return fallback, nil
 	}
 
-	res, err := s.llmClient.GenerateJSON(context.Background(), systemPrompt, "USER PROMPT: "+mutationPrompt)
+	var res map[string]any
+	err = s.llmClient.GenerateJSON(context.Background(), systemPrompt, "USER PROMPT: "+mutationPrompt, &res)
 	if err == nil {
 		if parsed, ok := parseMutationPlan(res); ok {
 			return parsed, nil
@@ -131,7 +133,7 @@ func (s *AppService) PlanVibeMutation(prompt, project string, topK int) (VibeMut
 		return fallback, nil
 	}
 
-	res, err = s.llmClient.GenerateJSON(context.Background(), compactSystemPrompt, "USER PROMPT (possibly truncated): "+truncateForLLM(mutationPrompt, 6000))
+	err = s.llmClient.GenerateJSON(context.Background(), compactSystemPrompt, "USER PROMPT (possibly truncated): "+truncateForLLM(mutationPrompt, 6000), &res)
 	if err == nil {
 		if parsed, ok := parseMutationPlan(res); ok {
 			return parsed, nil

@@ -3,9 +3,10 @@ package agent
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 type EditBlock struct {
@@ -57,34 +58,19 @@ func (a *Agent) MultiEdit(filePath string, edits []EditBlock) (string, error) {
 
 	newContent := strings.Join(lines, "\n")
 
-	// Create a temp file with original content to compute diff
-	tmpFile, err := os.CreateTemp("", "mairu-diff-*")
-	if err == nil {
-		tmpFile.Write(content)
-		tmpFile.Close()
-		defer os.Remove(tmpFile.Name())
-
-		tmpFile2, err2 := os.CreateTemp("", "mairu-diff-new-*")
-		if err2 == nil {
-			tmpFile2.Write([]byte(newContent))
-			tmpFile2.Close()
-			defer os.Remove(tmpFile2.Name())
-
-			cmd := exec.Command("diff", "-u", tmpFile.Name(), tmpFile2.Name())
-			out, _ := cmd.CombinedOutput()
-			diffStr := string(out)
-			// clean up file names in diff
-			diffStr = strings.Replace(diffStr, tmpFile.Name(), filePath+" (old)", 1)
-			diffStr = strings.Replace(diffStr, tmpFile2.Name(), filePath+" (new)", 1)
-
-			if err := os.WriteFile(fullPath, []byte(newContent), 0644); err != nil {
-				return "", err
-			}
-			return diffStr, nil
-		}
+	diff := difflib.UnifiedDiff{
+		A:        difflib.SplitLines(string(content)),
+		B:        difflib.SplitLines(newContent),
+		FromFile: filePath + " (old)",
+		ToFile:   filePath + " (new)",
+		Context:  3,
 	}
+	diffStr, _ := difflib.GetUnifiedDiffString(diff)
 
-	return "", os.WriteFile(fullPath, []byte(newContent), 0644)
+	if err := os.WriteFile(fullPath, []byte(newContent), 0644); err != nil {
+		return "", err
+	}
+	return diffStr, nil
 }
 
 // ReplaceBlock safely replaces an exact string block in a file.
@@ -108,32 +94,17 @@ func (a *Agent) ReplaceBlock(filePath string, oldString, newString string) (stri
 
 	newContent := strings.Replace(contentStr, oldString, newString, 1)
 
-	// Create a temp file with original content to compute diff
-	tmpFile, err := os.CreateTemp("", "mairu-diff-*")
-	if err == nil {
-		tmpFile.Write(content)
-		tmpFile.Close()
-		defer os.Remove(tmpFile.Name())
-
-		tmpFile2, err2 := os.CreateTemp("", "mairu-diff-new-*")
-		if err2 == nil {
-			tmpFile2.Write([]byte(newContent))
-			tmpFile2.Close()
-			defer os.Remove(tmpFile2.Name())
-
-			cmd := exec.Command("diff", "-u", tmpFile.Name(), tmpFile2.Name())
-			out, _ := cmd.CombinedOutput()
-			diffStr := string(out)
-			// clean up file names in diff
-			diffStr = strings.Replace(diffStr, tmpFile.Name(), filePath+" (old)", 1)
-			diffStr = strings.Replace(diffStr, tmpFile2.Name(), filePath+" (new)", 1)
-
-			if err := os.WriteFile(fullPath, []byte(newContent), 0644); err != nil {
-				return "", err
-			}
-			return diffStr, nil
-		}
+	diff := difflib.UnifiedDiff{
+		A:        difflib.SplitLines(string(content)),
+		B:        difflib.SplitLines(newContent),
+		FromFile: filePath + " (old)",
+		ToFile:   filePath + " (new)",
+		Context:  3,
 	}
+	diffStr, _ := difflib.GetUnifiedDiffString(diff)
 
-	return "", os.WriteFile(fullPath, []byte(newContent), 0644)
+	if err := os.WriteFile(fullPath, []byte(newContent), 0644); err != nil {
+		return "", err
+	}
+	return diffStr, nil
 }

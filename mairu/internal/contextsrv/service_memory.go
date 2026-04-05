@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -107,7 +108,7 @@ func (s *AppService) CreateMemory(input MemoryCreateInput) (Memory, error) {
 					}
 				}
 				if err := mIdx.Upsert("memory", payload); err != nil {
-					fmt.Printf("Meilisearch Upsert error: %v\n", err)
+					slog.Error("Meilisearch Upsert error", "error", err)
 				}
 			}
 		}

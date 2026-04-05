@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html"
-	"log"
+	"log/slog"
 	"mairu/internal/agent"
 	"os"
 	"regexp"
@@ -49,7 +49,7 @@ func sendLongMessage(c tele.Context, text string) error {
 		htmlMsg := formatTelegramHTML(msg)
 		err := c.Send(htmlMsg, &tele.SendOptions{ParseMode: tele.ModeHTML})
 		if err != nil {
-			log.Printf("HTML send failed, falling back to plain text: %v", err)
+			slog.Error("HTML send failed, falling back to plain text", "error", err)
 			return c.Send(msg)
 		}
 		return nil
@@ -85,19 +85,22 @@ var telegramCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		token := os.Getenv("TELEGRAM_BOT_TOKEN")
 		if token == "" {
-			log.Fatal("TELEGRAM_BOT_TOKEN environment variable is required")
+			slog.Error("TELEGRAM_BOT_TOKEN environment variable is required")
+			os.Exit(1)
 		}
 
 		apiKey := GetAPIKey()
 		if apiKey == "" {
-			log.Fatal("GEMINI_API_KEY environment variable is required")
+			slog.Error("GEMINI_API_KEY environment variable is required")
+			os.Exit(1)
 		}
 
 		projectRoot, _ := cmd.Flags().GetString("project")
 		if projectRoot == "" {
 			pwd, err := os.Getwd()
 			if err != nil {
-				log.Fatalf("failed to get current directory: %v", err)
+				slog.Error("failed to get current directory", "error", err)
+				os.Exit(1)
 			}
 			projectRoot = pwd
 		}
@@ -125,7 +128,8 @@ var telegramCmd = &cobra.Command{
 
 		b, err := tele.NewBot(pref)
 		if err != nil {
-			log.Fatalf("failed to create telegram bot: %v", err)
+			slog.Error("failed to create telegram bot", "error", err)
+			os.Exit(1)
 		}
 
 		activeSessions := make(map[int64]string)
@@ -287,13 +291,13 @@ var telegramCmd = &cobra.Command{
 
 			c.Bot().Delete(statusMsg)
 			if err := ag.SaveSession(sessionName); err != nil {
-				log.Printf("Failed to save session: %v", err)
+				slog.Error("Failed to save session", "error", err)
 			}
 
 			return sendLongMessage(c, textChunk.String())
 		})
 
-		fmt.Println("Telegram bot is running...")
+		slog.Info("Telegram bot is running...")
 		b.Start()
 	},
 }

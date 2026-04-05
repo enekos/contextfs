@@ -55,18 +55,19 @@ type Skill struct {
 
 // ContextNode represents a hierarchical piece of knowledge or code context.
 type ContextNode struct {
-	URI               string    `json:"uri"`
-	Project           string    `json:"project"`
-	ParentURI         *string   `json:"parent_uri,omitempty"`
-	Name              string    `json:"name"`
-	Abstract          string    `json:"abstract"`
-	Overview          string    `json:"overview,omitempty"`
-	Content           string    `json:"content,omitempty"`
-	ModerationStatus  string    `json:"moderation_status"`
-	ModerationReasons []string  `json:"moderation_reasons"`
-	ReviewRequired    bool      `json:"review_required"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	URI               string         `json:"uri"`
+	Project           string         `json:"project"`
+	ParentURI         *string        `json:"parent_uri,omitempty"`
+	Name              string         `json:"name"`
+	Abstract          string         `json:"abstract"`
+	Overview          string         `json:"overview,omitempty"`
+	Content           string         `json:"content,omitempty"`
+	Metadata          map[string]any `json:"metadata,omitempty"`
+	ModerationStatus  string         `json:"moderation_status"`
+	ModerationReasons []string       `json:"moderation_reasons"`
+	ReviewRequired    bool           `json:"review_required"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
 }
 
 // MemoryCreateInput holds the data required to create a new Memory.

@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -17,26 +17,26 @@ var tuiCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		apiKey := GetAPIKey()
 		if apiKey == "" {
-			fmt.Println("Error: Gemini API key not found. Please run 'mairu setup' or set GEMINI_API_KEY environment variable.")
+			slog.Error("Gemini API key not found. Please run 'mairu setup' or set GEMINI_API_KEY environment variable.")
 			os.Exit(1)
 		}
 
 		cwd, _ := os.Getwd()
 		a, err := agent.New(cwd, apiKey)
 		if err != nil {
-			fmt.Printf("Failed to initialize agent: %v\n", err)
+			slog.Error("Failed to initialize agent", "error", err)
 			os.Exit(1)
 		}
 		defer a.Close()
 
 		if sessionName != "" {
 			if err := a.LoadSession(sessionName); err != nil {
-				fmt.Printf("Warning: Failed to load session '%s': %v\n", sessionName, err)
+				slog.Warn("Failed to load session", "session", sessionName, "error", err)
 			}
 		}
 
 		if err := tui.Start(a, sessionName); err != nil {
-			fmt.Printf("TUI Error: %v\n", err)
+			slog.Error("TUI Error", "error", err)
 			os.Exit(1)
 		}
 

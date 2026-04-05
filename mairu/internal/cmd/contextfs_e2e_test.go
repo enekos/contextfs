@@ -32,13 +32,14 @@ type e2eSkill struct {
 }
 
 type e2eNode struct {
-	URI       string `json:"uri"`
-	Project   string `json:"project"`
-	ParentURI string `json:"parent_uri,omitempty"`
-	Name      string `json:"name"`
-	Abstract  string `json:"abstract"`
-	Overview  string `json:"overview,omitempty"`
-	Content   string `json:"content,omitempty"`
+	URI       string         `json:"uri"`
+	Project   string         `json:"project"`
+	ParentURI string         `json:"parent_uri,omitempty"`
+	Name      string         `json:"name"`
+	Abstract  string         `json:"abstract"`
+	Overview  string         `json:"overview,omitempty"`
+	Content   string         `json:"content,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 type e2eContextAPI struct {

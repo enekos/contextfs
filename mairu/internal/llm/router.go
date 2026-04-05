@@ -9,14 +9,14 @@ import (
 )
 
 type LLMClient interface {
-	GenerateJSON(ctx context.Context, system, user string) (map[string]any, error)
+	GenerateJSON(ctx context.Context, system, user string, out any) error
 }
 
 type RouterAction struct {
-	Action        string
-	TargetID      string
-	MergedContent string
-	Reason        string
+	Action        string `json:"action"`
+	TargetID      string `json:"targetId"`
+	MergedContent string `json:"mergedContent"`
+	Reason        string `json:"reason"`
 }
 
 type RouterCandidate struct {
@@ -60,21 +60,18 @@ func DecideMemoryAction(ctx context.Context, client LLMClient, newContent string
 		CandidateList: candidateList,
 	})
 
-	decision, err := client.GenerateJSON(ctx, "system", prompt)
+	var decision RouterAction
+	err := client.GenerateJSON(ctx, "system", prompt, &decision)
 	if err != nil {
-		return RouterAction{Action: "create"}, nil
+		return RouterAction{Action: "create"}, err
 	}
 
-	act, _ := decision["action"].(string)
-	if act == "update" {
-		targetID, _ := decision["targetId"].(string)
-		merged, _ := decision["mergedContent"].(string)
-		if targetID != "" && merged != "" {
-			return RouterAction{Action: "update", TargetID: targetID, MergedContent: merged}, nil
+	if decision.Action == "update" {
+		if decision.TargetID != "" && decision.MergedContent != "" {
+			return decision, nil
 		}
-	} else if act == "skip" {
-		reason, _ := decision["reason"].(string)
-		return RouterAction{Action: "skip", Reason: reason}, nil
+	} else if decision.Action == "skip" {
+		return decision, nil
 	}
 	return RouterAction{Action: "create"}, nil
 }
@@ -116,21 +113,18 @@ func DecideContextAction(ctx context.Context, client LLMClient, uri, name, abstr
 		CandidateList: candidateList,
 	})
 
-	decision, err := client.GenerateJSON(ctx, "system", prompt)
+	var decision RouterAction
+	err := client.GenerateJSON(ctx, "system", prompt, &decision)
 	if err != nil {
-		return RouterAction{Action: "create"}, nil
+		return RouterAction{Action: "create"}, err
 	}
 
-	act, _ := decision["action"].(string)
-	if act == "update" {
-		targetID, _ := decision["targetId"].(string)
-		merged, _ := decision["mergedContent"].(string)
-		if targetID != "" && merged != "" {
-			return RouterAction{Action: "update", TargetID: targetID, MergedContent: merged}, nil
+	if decision.Action == "update" {
+		if decision.TargetID != "" && decision.MergedContent != "" {
+			return decision, nil
 		}
-	} else if act == "skip" {
-		reason, _ := decision["reason"].(string)
-		return RouterAction{Action: "skip", Reason: reason}, nil
+	} else if decision.Action == "skip" {
+		return decision, nil
 	}
 	return RouterAction{Action: "create"}, nil
 }

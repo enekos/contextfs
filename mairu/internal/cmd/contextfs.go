@@ -32,6 +32,9 @@ func init() {
 	rootCmd.AddCommand(newSummarizeCmd())
 	rootCmd.AddCommand(newFlushCmd())
 	rootCmd.AddCommand(newNudgeCmd())
+	rootCmd.AddCommand(newImpactCmd())
+	rootCmd.AddCommand(newAnalyzeGraphCmd())
+	rootCmd.AddCommand(newAnalyzeDiffCmd())
 }
 
 func contextServerURL() string {
@@ -168,6 +171,15 @@ func runMemoryStore(project, content, category, owner string, importance int) er
 }
 
 func runNodeStore(project, uri, name, abstract, parent, overview, content string) error {
+	out, err := storeNodeRaw(project, uri, name, abstract, parent, overview, content)
+	if err != nil {
+		return err
+	}
+	printJSON(out)
+	return nil
+}
+
+func storeNodeRaw(project, uri, name, abstract, parent, overview, content string) ([]byte, error) {
 	payload := map[string]any{
 		"uri":      uri,
 		"project":  project,
@@ -179,12 +191,7 @@ func runNodeStore(project, uri, name, abstract, parent, overview, content string
 	if parent != "" {
 		payload["parent_uri"] = parent
 	}
-	out, err := contextPost("/api/context", payload)
-	if err != nil {
-		return err
-	}
-	printJSON(out)
-	return nil
+	return contextPost("/api/context", payload)
 }
 
 func runVibeMutation(project, prompt string, k int) error {

@@ -65,7 +65,7 @@ func (r *PostgresRepository) ListContextNodes(ctx context.Context, project strin
 	if limit <= 0 {
 		limit = 200
 	}
-	q := `SELECT uri, project, parent_uri, name, abstract, overview, content, moderation_status, moderation_reasons, review_required, created_at, updated_at FROM context_nodes WHERE 1=1`
+	q := `SELECT uri, project, parent_uri, name, abstract, overview, content, metadata, moderation_status, moderation_reasons, review_required, created_at, updated_at FROM context_nodes WHERE 1=1`
 	args := []any{}
 	argN := 1
 	if project != "" {
@@ -89,10 +89,12 @@ func (r *PostgresRepository) ListContextNodes(ctx context.Context, project strin
 	for rows.Next() {
 		var n ContextNode
 		var reasonsRaw []byte
-		if err := rows.Scan(&n.URI, &n.Project, &n.ParentURI, &n.Name, &n.Abstract, &n.Overview, &n.Content, &n.ModerationStatus, &reasonsRaw, &n.ReviewRequired, &n.CreatedAt, &n.UpdatedAt); err != nil {
+		var metadataRaw []byte
+		if err := rows.Scan(&n.URI, &n.Project, &n.ParentURI, &n.Name, &n.Abstract, &n.Overview, &n.Content, &metadataRaw, &n.ModerationStatus, &reasonsRaw, &n.ReviewRequired, &n.CreatedAt, &n.UpdatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(reasonsRaw, &n.ModerationReasons)
+		_ = json.Unmarshal(metadataRaw, &n.Metadata)
 		out = append(out, n)
 	}
 	return out, rows.Err()
@@ -116,15 +118,17 @@ func (r *PostgresRepository) UpdateContextNode(ctx context.Context, input Contex
 		return ContextNode{}, err
 	}
 	row := r.db.QueryRowContext(ctx, `
-		SELECT uri, project, parent_uri, name, abstract, overview, content, moderation_status, moderation_reasons, review_required, created_at, updated_at
+		SELECT uri, project, parent_uri, name, abstract, overview, content, metadata, moderation_status, moderation_reasons, review_required, created_at, updated_at
 		FROM context_nodes WHERE uri = $1
 	`, input.URI)
 	var n ContextNode
 	var reasonsRaw []byte
-	if err := row.Scan(&n.URI, &n.Project, &n.ParentURI, &n.Name, &n.Abstract, &n.Overview, &n.Content, &n.ModerationStatus, &reasonsRaw, &n.ReviewRequired, &n.CreatedAt, &n.UpdatedAt); err != nil {
+	var metadataRaw []byte
+	if err := row.Scan(&n.URI, &n.Project, &n.ParentURI, &n.Name, &n.Abstract, &n.Overview, &n.Content, &metadataRaw, &n.ModerationStatus, &reasonsRaw, &n.ReviewRequired, &n.CreatedAt, &n.UpdatedAt); err != nil {
 		return ContextNode{}, err
 	}
 	_ = json.Unmarshal(reasonsRaw, &n.ModerationReasons)
+	_ = json.Unmarshal(metadataRaw, &n.Metadata)
 	return n, nil
 }
 

@@ -2,6 +2,7 @@ package contextsrv
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -87,10 +88,14 @@ type vibeLLM struct {
 	payload    map[string]any
 }
 
-func (l *vibeLLM) GenerateJSON(ctx context.Context, system, user string) (map[string]any, error) {
+func (l *vibeLLM) GenerateJSON(ctx context.Context, system, user string, out any) error {
 	l.lastSystem = system
 	l.lastUser = user
-	return l.payload, nil
+	b, err := json.Marshal(l.payload)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, out)
 }
 
 func TestPlanVibeMutation_UsesBoundedExistingContext(t *testing.T) {

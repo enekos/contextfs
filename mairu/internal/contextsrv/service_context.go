@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -108,7 +109,7 @@ func (s *AppService) CreateContextNode(input ContextCreateInput) (ContextNode, e
 					}
 				}
 				if err := mIdx.Upsert("context_node", payload); err != nil {
-					fmt.Printf("Meilisearch Upsert error: %v\n", err)
+					slog.Error("Meilisearch Upsert error", "error", err)
 				}
 			}
 		}

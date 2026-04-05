@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"mairu/internal/contextsrv"
 	"os"
 	"os/signal"
@@ -43,7 +43,7 @@ var contextServerCmd = &cobra.Command{
 
 		app, err := contextsrv.NewApp(cfg)
 		if err != nil {
-			fmt.Printf("failed to initialize context server: %v\n", err)
+			slog.Error("failed to initialize context server", "error", err)
 			os.Exit(1)
 		}
 
@@ -57,9 +57,9 @@ var contextServerCmd = &cobra.Command{
 			_ = app.Shutdown(shutdownCtx)
 		}()
 
-		fmt.Printf("Starting context server on port %d...\n", port)
+		slog.Info("Starting context server", "port", port)
 		if err := app.Start(ctx); err != nil && err.Error() != "http: Server closed" {
-			fmt.Printf("context server exited with error: %v\n", err)
+			slog.Error("context server exited with error", "error", err)
 			os.Exit(1)
 		}
 	},

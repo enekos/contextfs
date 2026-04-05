@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
+	"log/slog"
 	"mairu/internal/agent"
 	"mairu/ui"
 	"net/http"
@@ -62,7 +62,7 @@ func SetupRouter(apiKey, meiliURL, meiliAPIKey string) (*gin.Engine, error) {
 
 			ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 			if err != nil {
-				log.Println("upgrade error:", err)
+				slog.Error("upgrade error", "error", err)
 				return
 			}
 			defer ws.Close()
@@ -77,7 +77,7 @@ func SetupRouter(apiKey, meiliURL, meiliAPIKey string) (*gin.Engine, error) {
 				MeiliAPIKey: meiliAPIKey,
 			})
 			if err != nil {
-				log.Printf("failed to init agent: %v\n", err)
+				slog.Error("failed to init agent", "error", err)
 				ws.WriteJSON(agent.AgentEvent{Type: "error", Content: "failed to initialize agent: " + err.Error()})
 				return
 			}
@@ -90,7 +90,7 @@ func SetupRouter(apiKey, meiliURL, meiliAPIKey string) (*gin.Engine, error) {
 
 			defer func() {
 				if err := ag.SaveSession(sessionName); err != nil {
-					log.Printf("failed to save session %q: %v", sessionName, err)
+					slog.Error("failed to save session", "session", sessionName, "error", err)
 				}
 			}()
 
