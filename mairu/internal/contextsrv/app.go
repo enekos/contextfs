@@ -14,7 +14,7 @@ import (
 // It includes server settings, database connections, API keys, and projector configuration.
 type Config struct {
 	Port              int
-	PostgresDSN       string
+	SQLiteDSN         string
 	MeiliURL          string
 	MeiliAPIKey       string
 	GeminiAPIKey      string
@@ -29,7 +29,7 @@ type Config struct {
 func LoadConfig() Config {
 	cfg := Config{
 		Port:              8788,
-		PostgresDSN:       os.Getenv("CONTEXT_SERVER_POSTGRES_DSN"),
+		SQLiteDSN:         os.Getenv("CONTEXT_SERVER_SQLITE_DSN"),
 		MeiliURL:          os.Getenv("MEILI_URL"),
 		MeiliAPIKey:       os.Getenv("MEILI_API_KEY"),
 		GeminiAPIKey:      os.Getenv("GEMINI_API_KEY"),
@@ -37,6 +37,9 @@ func LoadConfig() Config {
 		ProjectorEvery:    3 * time.Second,
 		ProjectorBatch:    50,
 		ModerationEnabled: os.Getenv("CONTEXT_ENABLE_MODERATION") == "true",
+	}
+	if cfg.SQLiteDSN == "" {
+		cfg.SQLiteDSN = "file:mairu.db?cache=shared&mode=rwc"
 	}
 	if cfg.MeiliURL == "" {
 		cfg.MeiliURL = "http://localhost:7700"
@@ -51,7 +54,7 @@ func LoadConfig() Config {
 // It bundles the configuration, repository, projector, and HTTP server to manage the application lifecycle.
 type App struct {
 	cfg       Config
-	repo      *PostgresRepository
+	repo      *SQLiteRepository
 	projector *Projector
 	server    *http.Server
 }
@@ -59,10 +62,10 @@ type App struct {
 // NewApp initializes and returns a new App instance using the provided Config.
 // It sets up the repository, LLM provider, indexing service, handler, and an HTTP server.
 func NewApp(cfg Config) (*App, error) {
-	var repo *PostgresRepository
+	var repo *SQLiteRepository
 	var err error
-	if cfg.PostgresDSN != "" {
-		repo, err = NewPostgresRepository(cfg.PostgresDSN)
+	if cfg.SQLiteDSN != "" {
+		repo, err = NewSQLiteRepository(cfg.SQLiteDSN)
 		if err != nil {
 			return nil, err
 		}

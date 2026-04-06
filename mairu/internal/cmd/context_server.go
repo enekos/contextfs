@@ -18,19 +18,21 @@ var contextServerCmd = &cobra.Command{
 	Short: "Start centralized context management server",
 	Run: func(cmd *cobra.Command, args []string) {
 		port, _ := cmd.Flags().GetInt("port")
-		pgDSN, _ := cmd.Flags().GetString("pg-dsn")
+		sqliteDSN, _ := cmd.Flags().GetString("sqlite-dsn")
 		authToken, _ := cmd.Flags().GetString("auth-token")
 		enableProjector, _ := cmd.Flags().GetBool("projector")
 		meiliURL, _ := cmd.Flags().GetString("meili-url")
 		meiliAPIKey, _ := cmd.Flags().GetString("meili-api-key")
 
-		if pgDSN == "" {
-			pgDSN = os.Getenv("CONTEXT_SERVER_POSTGRES_DSN")
+		if sqliteDSN == "" {
+			sqliteDSN = os.Getenv("CONTEXT_SERVER_SQLITE_DSN")
 		}
 
 		cfg := contextsrv.LoadConfig()
 		cfg.Port = port
-		cfg.PostgresDSN = pgDSN
+		if sqliteDSN != "" {
+			cfg.SQLiteDSN = sqliteDSN
+		}
 		if meiliURL != "" {
 			cfg.MeiliURL = meiliURL
 		}
@@ -73,9 +75,9 @@ var contextServerCmd = &cobra.Command{
 
 func init() {
 	contextServerCmd.Flags().IntP("port", "p", 8788, "Port to run context server on")
-	contextServerCmd.Flags().String("pg-dsn", os.Getenv("CONTEXT_SERVER_POSTGRES_DSN"), "PostgreSQL DSN")
+	contextServerCmd.Flags().String("sqlite-dsn", os.Getenv("CONTEXT_SERVER_SQLITE_DSN"), "SQLite DSN")
 	contextServerCmd.Flags().String("auth-token", os.Getenv("CONTEXT_SERVER_AUTH_TOKEN"), "Shared token for internal auth (X-Context-Token)")
-	contextServerCmd.Flags().Bool("projector", true, "Enable Postgres->Meilisearch outbox projector")
+	contextServerCmd.Flags().Bool("projector", true, "Enable SQLite->Meilisearch outbox projector")
 	contextServerCmd.Flags().String("meili-url", os.Getenv("MEILI_URL"), "Meilisearch URL")
 	contextServerCmd.Flags().String("meili-api-key", os.Getenv("MEILI_API_KEY"), "Meilisearch API key")
 	rootCmd.AddCommand(contextServerCmd)

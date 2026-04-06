@@ -116,7 +116,7 @@ func (s *AppService) Dashboard(limit int, project string) (map[string]any, error
 			StoreSkills:       []Skill{},
 			StoreMemories:     []Memory{},
 			StoreContextNodes: []ContextNode{},
-			"warning":         "PostgreSQL repository not configured",
+			"warning":         "SQLite repository not configured",
 		}, nil
 	}
 	memories, err := s.repo.ListMemories(context.Background(), project, limit)

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func (r *PostgresRepository) CreateSkill(ctx context.Context, input SkillCreateInput) (Skill, error) {
+func (r *SQLiteRepository) CreateSkill(ctx context.Context, input SkillCreateInput) (Skill, error) {
 	id := fmt.Sprintf("skill_%d", time.Now().UnixNano())
 	now := time.Now().UTC()
 	reasonsJSON, _ := json.Marshal(input.ModerationReasons)
@@ -18,7 +18,7 @@ func (r *PostgresRepository) CreateSkill(ctx context.Context, input SkillCreateI
 	defer tx.Rollback()
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO skills (id, project, name, description, metadata, moderation_status, moderation_reasons, review_required, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7::jsonb,$8,$9,$9)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)
 	`, id, input.Project, input.Name, input.Description, jsonString(input.Metadata, `{}`), input.ModerationStatus, string(reasonsJSON), input.ReviewRequired, now)
 	if err != nil {
 		return Skill{}, err
@@ -45,7 +45,7 @@ func (r *PostgresRepository) CreateSkill(ctx context.Context, input SkillCreateI
 	}, nil
 }
 
-func (r *PostgresRepository) ListSkills(ctx context.Context, project string, limit int) ([]Skill, error) {
+func (r *SQLiteRepository) ListSkills(ctx context.Context, project string, limit int) ([]Skill, error) {
 	if limit <= 0 {
 		limit = 200
 	}
@@ -76,17 +76,19 @@ func (r *PostgresRepository) ListSkills(ctx context.Context, project string, lim
 	return out, rows.Err()
 }
 
-func (r *PostgresRepository) UpdateSkill(ctx context.Context, input SkillUpdateInput) (Skill, error) {
+func (r *SQLiteRepository) UpdateSkill(ctx context.Context, input SkillUpdateInput) (Skill, error) {
 	if input.ID == "" {
 		return Skill{}, fmt.Errorf("id is required")
 	}
+
+	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE skills
 		SET name = COALESCE(NULLIF($2, ''), name),
 		    description = COALESCE(NULLIF($3, ''), description),
-		    updated_at = NOW()
+		    updated_at = $4
 		WHERE id = $1
-	`, input.ID, input.Name, input.Description)
+	`, input.ID, input.Name, input.Description, now)
 	if err != nil {
 		return Skill{}, err
 	}
@@ -103,7 +105,7 @@ func (r *PostgresRepository) UpdateSkill(ctx context.Context, input SkillUpdateI
 	return s, nil
 }
 
-func (r *PostgresRepository) DeleteSkill(ctx context.Context, id string) error {
+func (r *SQLiteRepository) DeleteSkill(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM skills WHERE id = $1`, id)
 	return err
 }

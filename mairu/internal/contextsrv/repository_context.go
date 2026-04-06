@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func (r *PostgresRepository) CreateContextNode(ctx context.Context, input ContextCreateInput) (ContextNode, error) {
+func (r *SQLiteRepository) CreateContextNode(ctx context.Context, input ContextCreateInput) (ContextNode, error) {
 	now := time.Now().UTC()
 	reasonsJSON, _ := json.Marshal(input.ModerationReasons)
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -18,20 +18,20 @@ func (r *PostgresRepository) CreateContextNode(ctx context.Context, input Contex
 
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO context_nodes (uri, project, parent_uri, name, abstract, overview, content, metadata, moderation_status, moderation_reasons, review_required, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10::jsonb,$11,$12,$12)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)
 		ON CONFLICT (uri) DO UPDATE SET
-			project = EXCLUDED.project,
-			parent_uri = EXCLUDED.parent_uri,
-			name = EXCLUDED.name,
-			abstract = EXCLUDED.abstract,
-			overview = EXCLUDED.overview,
-			content = EXCLUDED.content,
-			metadata = EXCLUDED.metadata,
-			moderation_status = EXCLUDED.moderation_status,
-			moderation_reasons = EXCLUDED.moderation_reasons,
-			review_required = EXCLUDED.review_required,
+			project = excluded.project,
+			parent_uri = excluded.parent_uri,
+			name = excluded.name,
+			abstract = excluded.abstract,
+			overview = excluded.overview,
+			content = excluded.content,
+			metadata = excluded.metadata,
+			moderation_status = excluded.moderation_status,
+			moderation_reasons = excluded.moderation_reasons,
+			review_required = excluded.review_required,
 			version = context_nodes.version + 1,
-			updated_at = EXCLUDED.updated_at
+			updated_at = excluded.updated_at
 	`, input.URI, input.Project, input.ParentURI, input.Name, input.Abstract, input.Overview, input.Content, jsonString(input.Metadata, `{}`), input.ModerationStatus, string(reasonsJSON), input.ReviewRequired, now)
 	if err != nil {
 		return ContextNode{}, err
@@ -61,7 +61,7 @@ func (r *PostgresRepository) CreateContextNode(ctx context.Context, input Contex
 	}, nil
 }
 
-func (r *PostgresRepository) ListContextNodes(ctx context.Context, project string, parentURI *string, limit int) ([]ContextNode, error) {
+func (r *SQLiteRepository) ListContextNodes(ctx context.Context, project string, parentURI *string, limit int) ([]ContextNode, error) {
 	if limit <= 0 {
 		limit = 200
 	}
@@ -100,20 +100,22 @@ func (r *PostgresRepository) ListContextNodes(ctx context.Context, project strin
 	return out, rows.Err()
 }
 
-func (r *PostgresRepository) UpdateContextNode(ctx context.Context, input ContextUpdateInput) (ContextNode, error) {
+func (r *SQLiteRepository) UpdateContextNode(ctx context.Context, input ContextUpdateInput) (ContextNode, error) {
 	if input.URI == "" {
 		return ContextNode{}, fmt.Errorf("uri is required")
 	}
+
+	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE context_nodes
 		SET name = COALESCE(NULLIF($2, ''), name),
 		    abstract = COALESCE(NULLIF($3, ''), abstract),
 		    overview = COALESCE($4, overview),
 		    content = COALESCE($5, content),
-		    updated_at = NOW(),
+		    updated_at = $6,
 		    version = version + 1
 		WHERE uri = $1
-	`, input.URI, input.Name, input.Abstract, input.Overview, input.Content)
+	`, input.URI, input.Name, input.Abstract, input.Overview, input.Content, now)
 	if err != nil {
 		return ContextNode{}, err
 	}
@@ -132,7 +134,7 @@ func (r *PostgresRepository) UpdateContextNode(ctx context.Context, input Contex
 	return n, nil
 }
 
-func (r *PostgresRepository) DeleteContextNode(ctx context.Context, uri string) error {
+func (r *SQLiteRepository) DeleteContextNode(ctx context.Context, uri string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM context_nodes WHERE uri = $1`, uri)
 	return err
 }

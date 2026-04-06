@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
 	"mairu/internal/agent"
-	"mairu/ui"
 	"net/http"
 	"os"
 	"strings"
@@ -267,10 +265,9 @@ func SetupRouter(apiKey, meiliURL, meiliAPIKey string) (*http.ServeMux, error) {
 	}
 
 	// Serve the embedded Svelte UI
-	distFS, err := fs.Sub(ui.FS, "dist")
-	if err != nil {
-		return nil, fmt.Errorf("failed to load ui assets: %w", err)
-	}
+	// Fallback since ui module isn't strictly defined as a go module yet
+	// We'll serve from local dist directory directly
+	distFS := os.DirFS("ui/dist")
 
 	r.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		path := req.URL.Path

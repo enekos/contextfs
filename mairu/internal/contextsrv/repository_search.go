@@ -2,6 +2,7 @@ package contextsrv
 
 import (
 	"context"
+	"crypto/md5"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -9,7 +10,7 @@ import (
 	"time"
 )
 
-func (r *PostgresRepository) SearchText(ctx context.Context, opts SearchOptions) (map[string]any, error) {
+func (r *SQLiteRepository) SearchText(ctx context.Context, opts SearchOptions) (map[string]any, error) {
 	project := opts.Project
 	store := normalizeStoreName(opts.Store)
 	topK := opts.TopK
@@ -139,12 +140,12 @@ func (r *PostgresRepository) SearchText(ctx context.Context, opts SearchOptions)
 	return out, nil
 }
 
-func (r *PostgresRepository) ListModerationQueue(ctx context.Context, limit int) ([]ModerationEvent, error) {
+func (r *SQLiteRepository) ListModerationQueue(ctx context.Context, limit int) ([]ModerationEvent, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, entity_type, entity_id, project, decision, reasons, review_status, reviewer_decision, review_required, policy_version, created_at, COALESCE(reviewed_at, '0001-01-01'::timestamptz), reviewer
+		SELECT id, entity_type, entity_id, project, decision, reasons, review_status, reviewer_decision, review_required, policy_version, created_at, COALESCE(reviewed_at, '0001-01-01 00:00:00'), reviewer
 		FROM moderation_events
 		WHERE review_status = 'pending'
 		ORDER BY created_at DESC
@@ -168,7 +169,7 @@ func (r *PostgresRepository) ListModerationQueue(ctx context.Context, limit int)
 	return out, rows.Err()
 }
 
-func (r *PostgresRepository) ReviewModeration(ctx context.Context, input ModerationReviewInput) error {
+func (r *SQLiteRepository) ReviewModeration(ctx context.Context, input ModerationReviewInput) error {
 	if input.EventID == 0 {
 		return fmt.Errorf("event_id is required")
 	}
@@ -177,15 +178,17 @@ func (r *PostgresRepository) ReviewModeration(ctx context.Context, input Moderat
 		return err
 	}
 	defer tx.Rollback()
+
+	now := time.Now().UTC()
 	_, err = tx.ExecContext(ctx, `
 		UPDATE moderation_events
 		SET review_status = 'reviewed',
 			reviewer_decision = $2,
 			reviewer = $3,
 			notes = $4,
-			reviewed_at = NOW()
+			reviewed_at = $5
 		WHERE id = $1
-	`, input.EventID, input.Decision, input.Reviewer, input.Notes)
+	`, input.EventID, input.Decision, input.Reviewer, input.Notes, now)
 	if err != nil {
 		return err
 	}
@@ -195,29 +198,31 @@ func (r *PostgresRepository) ReviewModeration(ctx context.Context, input Moderat
 	return tx.Commit()
 }
 
-func (r *PostgresRepository) EnqueueOutbox(ctx context.Context, entityType, entityID, opType string, payload any) error {
+func (r *SQLiteRepository) EnqueueOutbox(ctx context.Context, entityType, entityID, opType string, payload any) error {
 	payloadBytes, _ := json.Marshal(payload)
+	payloadHash := fmt.Sprintf("%x", md5.Sum(payloadBytes))
+	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO search_outbox (entity_type, entity_id, op_type, payload, payload_hash, status, retry_count, next_attempt_at, updated_at)
-		VALUES ($1, $2, $3, $4::jsonb, md5($4::text), 'pending', 0, NOW(), NOW())
-	`, entityType, entityID, opType, string(payloadBytes))
+		VALUES ($1, $2, $3, $4, $5, 'pending', 0, $6, $6)
+	`, entityType, entityID, opType, string(payloadBytes), payloadHash, now)
 	return err
 }
 
-func (r *PostgresRepository) insertModerationEventTx(ctx context.Context, tx *sql.Tx, entityType, entityID, project, decision string, reasons []string, reviewRequired bool) error {
+func (r *SQLiteRepository) insertModerationEventTx(ctx context.Context, tx *sql.Tx, entityType, entityID, project, decision string, reasons []string, reviewRequired bool) error {
 	reasonsJSON, _ := json.Marshal(reasons)
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO moderation_events (entity_type, entity_id, project, decision, reasons, review_status, review_required, policy_version)
-		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, 'v1')
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'v1')
 	`, entityType, entityID, project, decision, string(reasonsJSON), reviewState(reviewRequired), reviewRequired)
 	return err
 }
 
-func (r *PostgresRepository) insertAuditTx(ctx context.Context, tx *sql.Tx, entityType, entityID, action, actor string, details map[string]any) error {
+func (r *SQLiteRepository) insertAuditTx(ctx context.Context, tx *sql.Tx, entityType, entityID, action, actor string, details map[string]any) error {
 	detailsJSON, _ := json.Marshal(details)
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO audit_log (entity_type, entity_id, action, actor, details)
-		VALUES ($1, $2, $3, $4, $5::jsonb)
+		VALUES ($1, $2, $3, $4, $5)
 	`, entityType, entityID, action, actor, string(detailsJSON))
 	return err
 }

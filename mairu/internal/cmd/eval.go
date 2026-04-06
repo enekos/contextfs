@@ -45,11 +45,11 @@ var evalCmd = &cobra.Command{
 		// embedder logic
 		// we don't strictly need embedder if we just search, but meili needs it.
 
-		pgDSN := os.Getenv("CONTEXT_SERVER_POSTGRES_DSN")
-		if pgDSN == "" {
-			pgDSN = "postgres://localhost/mairudb?sslmode=disable"
+		sqliteDSN := os.Getenv("CONTEXT_SERVER_SQLITE_DSN")
+		if sqliteDSN == "" {
+			sqliteDSN = "file:mairu_eval.db?cache=shared&mode=rwc"
 		}
-		repo, err := contextsrv.NewPostgresRepository(pgDSN)
+		repo, err := contextsrv.NewSQLiteRepository(sqliteDSN)
 		if err != nil {
 			return fmt.Errorf("failed to connect to db: %w", err)
 		}

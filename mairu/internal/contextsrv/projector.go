@@ -16,17 +16,18 @@ type OutboxJob struct {
 	RetryCount int
 }
 
-func (r *PostgresRepository) PullOutboxBatch(ctx context.Context, limit int) ([]OutboxJob, error) {
+func (r *SQLiteRepository) PullOutboxBatch(ctx context.Context, limit int) ([]OutboxJob, error) {
 	if limit <= 0 {
 		limit = 50
 	}
+	now := time.Now().UTC()
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, entity_type, entity_id, op_type, payload::text, retry_count
+		SELECT id, entity_type, entity_id, op_type, payload, retry_count
 		FROM search_outbox
-		WHERE status = 'pending' AND next_attempt_at <= NOW()
+		WHERE status = 'pending' AND next_attempt_at <= $1
 		ORDER BY id ASC
-		LIMIT $1
-	`, limit)
+		LIMIT $2
+	`, now, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -44,30 +45,32 @@ func (r *PostgresRepository) PullOutboxBatch(ctx context.Context, limit int) ([]
 	return out, rows.Err()
 }
 
-func (r *PostgresRepository) MarkOutboxDone(ctx context.Context, id int64) error {
+func (r *SQLiteRepository) MarkOutboxDone(ctx context.Context, id int64) error {
+	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE search_outbox
-		SET status = 'done', updated_at = NOW()
+		SET status = 'done', updated_at = $2
 		WHERE id = $1
-	`, id)
+	`, id, now)
 	return err
 }
 
-func (r *PostgresRepository) MarkOutboxFailed(ctx context.Context, id int64, retryCount int, lastErr string) error {
+func (r *SQLiteRepository) MarkOutboxFailed(ctx context.Context, id int64, retryCount int, lastErr string) error {
 	nextAttempt := time.Now().UTC().Add(time.Duration(1<<min(6, retryCount)) * time.Second)
 	status := "pending"
 	if retryCount >= 8 {
 		status = "dead_letter"
 	}
+	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE search_outbox
 		SET status = $2,
 			retry_count = $3,
 			last_error = $4,
 			next_attempt_at = $5,
-			updated_at = NOW()
+			updated_at = $6
 		WHERE id = $1
-	`, id, status, retryCount, truncate(lastErr, 800), nextAttempt)
+	`, id, status, retryCount, truncate(lastErr, 800), nextAttempt, now)
 	return err
 }
 
@@ -76,12 +79,12 @@ type Embedder interface {
 }
 
 type Projector struct {
-	repo     *PostgresRepository
+	repo     *SQLiteRepository
 	indexer  *MeiliIndexer
 	embedder Embedder
 }
 
-func NewProjector(repo *PostgresRepository, indexer *MeiliIndexer, embedder Embedder) *Projector {
+func NewProjector(repo *SQLiteRepository, indexer *MeiliIndexer, embedder Embedder) *Projector {
 	return &Projector{repo: repo, indexer: indexer, embedder: embedder}
 }
 

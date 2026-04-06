@@ -5,23 +5,28 @@ import (
 	"database/sql"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/mattn/go-sqlite3"
 )
 
-type PostgresRepository struct {
+type SQLiteRepository struct {
 	db *sql.DB
 }
 
-func NewPostgresRepository(dsn string) (*PostgresRepository, error) {
-	db, err := sql.Open("pgx", dsn)
+func NewSQLiteRepository(dsn string) (*SQLiteRepository, error) {
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(12)
-	db.SetMaxIdleConns(12)
+	db.SetMaxOpenConns(1) // SQLite works best with 1 writer to avoid BUSY errors if not using WAL properly, but let's stick to 1 for safety or use WAL mode
+	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(30 * time.Minute)
 
-	repo := &PostgresRepository{db: db}
+	// Enable WAL mode for better concurrency
+	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		return nil, err
+	}
+
+	repo := &SQLiteRepository{db: db}
 	if err := repo.Migrate(context.Background()); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -29,11 +34,11 @@ func NewPostgresRepository(dsn string) (*PostgresRepository, error) {
 	return repo, nil
 }
 
-func (r *PostgresRepository) Close() error {
+func (r *SQLiteRepository) Close() error {
 	return r.db.Close()
 }
 
-func (r *PostgresRepository) Migrate(ctx context.Context) error {
+func (r *SQLiteRepository) Migrate(ctx context.Context) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS memories (
 			id TEXT PRIMARY KEY,
@@ -42,26 +47,26 @@ func (r *PostgresRepository) Migrate(ctx context.Context) error {
 			category TEXT NOT NULL,
 			owner TEXT NOT NULL,
 			importance INT NOT NULL,
-			metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+			metadata TEXT NOT NULL DEFAULT '{}',
 			moderation_status TEXT NOT NULL,
-			moderation_reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
-			review_required BOOLEAN NOT NULL DEFAULT false,
+			moderation_reasons TEXT NOT NULL DEFAULT '[]',
+			review_required BOOLEAN NOT NULL DEFAULT 0,
 			version BIGINT NOT NULL DEFAULT 1,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE TABLE IF NOT EXISTS skills (
 			id TEXT PRIMARY KEY,
 			project TEXT NOT NULL DEFAULT '',
 			name TEXT NOT NULL,
 			description TEXT NOT NULL,
-			metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+			metadata TEXT NOT NULL DEFAULT '{}',
 			moderation_status TEXT NOT NULL,
-			moderation_reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
-			review_required BOOLEAN NOT NULL DEFAULT false,
+			moderation_reasons TEXT NOT NULL DEFAULT '[]',
+			review_required BOOLEAN NOT NULL DEFAULT 0,
 			version BIGINT NOT NULL DEFAULT 1,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE TABLE IF NOT EXISTS context_nodes (
 			uri TEXT PRIMARY KEY,
@@ -71,52 +76,52 @@ func (r *PostgresRepository) Migrate(ctx context.Context) error {
 			abstract TEXT NOT NULL,
 			overview TEXT NOT NULL DEFAULT '',
 			content TEXT NOT NULL DEFAULT '',
-			metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+			metadata TEXT NOT NULL DEFAULT '{}',
 			moderation_status TEXT NOT NULL,
-			moderation_reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
-			review_required BOOLEAN NOT NULL DEFAULT false,
+			moderation_reasons TEXT NOT NULL DEFAULT '[]',
+			review_required BOOLEAN NOT NULL DEFAULT 0,
 			version BIGINT NOT NULL DEFAULT 1,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE TABLE IF NOT EXISTS moderation_events (
-			id BIGSERIAL PRIMARY KEY,
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			entity_type TEXT NOT NULL,
 			entity_id TEXT NOT NULL,
 			project TEXT NOT NULL DEFAULT '',
 			decision TEXT NOT NULL,
-			reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
+			reasons TEXT NOT NULL DEFAULT '[]',
 			review_status TEXT NOT NULL DEFAULT 'pending',
 			reviewer_decision TEXT NOT NULL DEFAULT '',
 			reviewer TEXT NOT NULL DEFAULT '',
 			notes TEXT NOT NULL DEFAULT '',
 			policy_version TEXT NOT NULL DEFAULT 'v1',
-			review_required BOOLEAN NOT NULL DEFAULT false,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			reviewed_at TIMESTAMPTZ NULL
+			review_required BOOLEAN NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			reviewed_at DATETIME NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS audit_log (
-			id BIGSERIAL PRIMARY KEY,
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			entity_type TEXT NOT NULL,
 			entity_id TEXT NOT NULL,
 			action TEXT NOT NULL,
 			actor TEXT NOT NULL DEFAULT 'system',
-			details JSONB NOT NULL DEFAULT '{}'::jsonb,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			details TEXT NOT NULL DEFAULT '{}',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE TABLE IF NOT EXISTS search_outbox (
-			id BIGSERIAL PRIMARY KEY,
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			entity_type TEXT NOT NULL,
 			entity_id TEXT NOT NULL,
 			op_type TEXT NOT NULL,
-			payload JSONB NOT NULL,
+			payload TEXT NOT NULL,
 			payload_hash TEXT NOT NULL DEFAULT '',
 			status TEXT NOT NULL DEFAULT 'pending',
 			retry_count INT NOT NULL DEFAULT 0,
 			last_error TEXT NOT NULL DEFAULT '',
-			next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			next_attempt_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_memories_project_created ON memories(project, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_skills_project_created ON skills(project, created_at DESC)`,

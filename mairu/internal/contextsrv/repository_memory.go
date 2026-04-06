@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func (r *PostgresRepository) CreateMemory(ctx context.Context, input MemoryCreateInput) (Memory, error) {
+func (r *SQLiteRepository) CreateMemory(ctx context.Context, input MemoryCreateInput) (Memory, error) {
 	id := fmt.Sprintf("mem_%d", time.Now().UnixNano())
 	now := time.Now().UTC()
 	reasonsJSON, _ := json.Marshal(input.ModerationReasons)
@@ -20,7 +20,7 @@ func (r *PostgresRepository) CreateMemory(ctx context.Context, input MemoryCreat
 
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO memories (id, project, content, category, owner, importance, metadata, moderation_status, moderation_reasons, review_required, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9::jsonb,$10,$11,$11)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)
 	`, id, input.Project, input.Content, input.Category, input.Owner, input.Importance, jsonString(input.Metadata, `{}`), input.ModerationStatus, string(reasonsJSON), input.ReviewRequired, now)
 	if err != nil {
 		return Memory{}, err
@@ -49,7 +49,7 @@ func (r *PostgresRepository) CreateMemory(ctx context.Context, input MemoryCreat
 	}, nil
 }
 
-func (r *PostgresRepository) ListMemories(ctx context.Context, project string, limit int) ([]Memory, error) {
+func (r *SQLiteRepository) ListMemories(ctx context.Context, project string, limit int) ([]Memory, error) {
 	if limit <= 0 {
 		limit = 200
 	}
@@ -80,19 +80,21 @@ func (r *PostgresRepository) ListMemories(ctx context.Context, project string, l
 	return out, rows.Err()
 }
 
-func (r *PostgresRepository) UpdateMemory(ctx context.Context, input MemoryUpdateInput) (Memory, error) {
+func (r *SQLiteRepository) UpdateMemory(ctx context.Context, input MemoryUpdateInput) (Memory, error) {
 	if input.ID == "" {
 		return Memory{}, fmt.Errorf("id is required")
 	}
+
+	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE memories
 		SET content = COALESCE(NULLIF($2, ''), content),
 		    category = COALESCE(NULLIF($3, ''), category),
 		    owner = COALESCE(NULLIF($4, ''), owner),
 		    importance = CASE WHEN $5 > 0 THEN $5 ELSE importance END,
-		    updated_at = NOW()
+		    updated_at = $6
 		WHERE id = $1
-	`, input.ID, input.Content, input.Category, input.Owner, input.Importance)
+	`, input.ID, input.Content, input.Category, input.Owner, input.Importance, now)
 	if err != nil {
 		return Memory{}, err
 	}
@@ -109,7 +111,7 @@ func (r *PostgresRepository) UpdateMemory(ctx context.Context, input MemoryUpdat
 	return m, nil
 }
 
-func (r *PostgresRepository) DeleteMemory(ctx context.Context, id string) error {
+func (r *SQLiteRepository) DeleteMemory(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM memories WHERE id = $1`, id)
 	return err
 }
