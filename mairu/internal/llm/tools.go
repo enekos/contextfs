@@ -169,6 +169,42 @@ func (g *GeminiProvider) SetupTools() {
 			},
 		},
 		{
+			Name:        "scrape_url",
+			Description: "Scrape a web page and extract structured information based on a prompt. Use this when you need specific data extracted intelligently from a website.",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"url": {
+						Type:        genai.TypeString,
+						Description: "The full URL to scrape (e.g., https://example.com).",
+					},
+					"prompt": {
+						Type:        genai.TypeString,
+						Description: "The instructions on what information to extract from the page.",
+					},
+				},
+				Required: []string{"url", "prompt"},
+			},
+		},
+		{
+			Name:        "search_web",
+			Description: "Search the web for a query and extract structured information from the top results based on a prompt.",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"query": {
+						Type:        genai.TypeString,
+						Description: "The search query to look up on the web.",
+					},
+					"prompt": {
+						Type:        genai.TypeString,
+						Description: "The instructions on what information to extract from the search results.",
+					},
+				},
+				Required: []string{"query", "prompt"},
+			},
+		},
+		{
 			Name:        "fetch_url",
 			Description: "Fetch the text content of a web page by URL. Useful for reading documentation or external resources.",
 			Parameters: &genai.Schema{

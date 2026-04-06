@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/iterator"
+	"mairu/crawler"
 	"mairu/internal/db"
 	"mairu/internal/llm"
 	"mairu/internal/prompts"
@@ -504,6 +505,32 @@ func (a *Agent) executeToolCall(ctx context.Context, funcCall genai.FunctionCall
 			result = map[string]any{"error": err.Error()}
 		} else {
 			result = map[string]any{"content": content}
+		}
+
+	case "scrape_url":
+		urlToScrape, _ := funcCall.Args["url"].(string)
+		prompt, _ := funcCall.Args["prompt"].(string)
+		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🕸️ Scraping URL: %s", urlToScrape)}
+
+		graph := crawler.NewSmartScraperGraph(a.llm)
+		data, err := graph.Run(ctx, urlToScrape, prompt)
+		if err != nil {
+			result = map[string]any{"error": err.Error()}
+		} else {
+			result = map[string]any{"data": data}
+		}
+
+	case "search_web":
+		query, _ := funcCall.Args["query"].(string)
+		prompt, _ := funcCall.Args["prompt"].(string)
+		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🔍 Searching Web: %s", query)}
+
+		graph := crawler.NewSearchScraperGraph(a.llm)
+		data, err := graph.Run(ctx, query, prompt, 3)
+		if err != nil {
+			result = map[string]any{"error": err.Error()}
+		} else {
+			result = map[string]any{"data": data}
 		}
 
 	case "delete_file":
