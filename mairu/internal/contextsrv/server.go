@@ -40,6 +40,7 @@ func NewHandler(svc Service, authToken string) *Handler {
 	mux.HandleFunc("GET /api/memories", authMiddleware(h.listMemories))
 	mux.HandleFunc("PUT /api/memories", authMiddleware(h.updateMemory))
 	mux.HandleFunc("DELETE /api/memories", authMiddleware(h.deleteMemory))
+	mux.HandleFunc("POST /api/memories/feedback", authMiddleware(h.applyMemoryFeedback))
 
 	// Skills
 	mux.HandleFunc("POST /api/skills", authMiddleware(h.createSkill))

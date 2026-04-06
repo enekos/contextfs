@@ -55,6 +55,10 @@ func (r *repoSearchStub) EnqueueOutbox(ctx context.Context, entityType, entityID
 	return nil
 }
 
+func (r *repoSearchStub) GetMemory(ctx context.Context, id string) (Memory, error) {
+	return Memory{}, nil
+}
+
 type backendStub struct {
 	searchCalls int
 	searchOut   map[string]any

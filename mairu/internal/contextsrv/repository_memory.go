@@ -80,6 +80,20 @@ func (r *SQLiteRepository) ListMemories(ctx context.Context, project string, lim
 	return out, rows.Err()
 }
 
+func (r *SQLiteRepository) GetMemory(ctx context.Context, id string) (Memory, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, project, content, category, owner, importance, moderation_status, moderation_reasons, review_required, created_at, updated_at
+		FROM memories WHERE id = $1
+	`, id)
+	var m Memory
+	var reasonsRaw []byte
+	if err := row.Scan(&m.ID, &m.Project, &m.Content, &m.Category, &m.Owner, &m.Importance, &m.ModerationStatus, &reasonsRaw, &m.ReviewRequired, &m.CreatedAt, &m.UpdatedAt); err != nil {
+		return Memory{}, err
+	}
+	_ = json.Unmarshal(reasonsRaw, &m.ModerationReasons)
+	return m, nil
+}
+
 func (r *SQLiteRepository) UpdateMemory(ctx context.Context, input MemoryUpdateInput) (Memory, error) {
 	if input.ID == "" {
 		return Memory{}, fmt.Errorf("id is required")

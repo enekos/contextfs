@@ -78,6 +78,10 @@ func (r *vibeRepo) ListModerationQueue(ctx context.Context, limit int) ([]Modera
 func (r *vibeRepo) ReviewModeration(ctx context.Context, input ModerationReviewInput) error {
 	return nil
 }
+func (r *vibeRepo) GetMemory(ctx context.Context, id string) (Memory, error) {
+	return Memory{}, nil
+}
+
 func (r *vibeRepo) EnqueueOutbox(ctx context.Context, entityType, entityID, opType string, payload any) error {
 	return nil
 }

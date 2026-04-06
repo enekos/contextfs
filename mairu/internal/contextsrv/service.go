@@ -15,6 +15,9 @@ type Service interface {
 	Health() map[string]any
 	CreateMemory(input MemoryCreateInput) (Memory, error)
 	ListMemories(project string, limit int) ([]Memory, error)
+	GetMemory(id string) (Memory, error)
+	ApplyMemoryFeedback(id string, reward int) (Memory, error)
+
 	UpdateMemory(input MemoryUpdateInput) (Memory, error)
 	DeleteMemory(id string) error
 	CreateSkill(input SkillCreateInput) (Skill, error)
@@ -54,6 +57,7 @@ type Repository interface {
 	ListModerationQueue(ctx context.Context, limit int) ([]ModerationEvent, error)
 	ReviewModeration(ctx context.Context, input ModerationReviewInput) error
 	EnqueueOutbox(ctx context.Context, entityType, entityID, opType string, payload any) error
+	GetMemory(ctx context.Context, id string) (Memory, error)
 }
 
 // AppService is the default implementation of the Service interface.

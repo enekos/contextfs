@@ -201,3 +201,11 @@ func TestModerationQueueAPIContract(t *testing.T) {
 func (s *stubService) Ingest(text, baseURI string) ([]llm.ProposedContextNode, error) {
 	return nil, nil
 }
+
+func (s *stubService) ApplyMemoryFeedback(id string, reward int) (Memory, error) {
+	return Memory{ID: id, Importance: reward}, nil
+}
+
+func (s *stubService) GetMemory(id string) (Memory, error) {
+	return Memory{ID: id}, nil
+}

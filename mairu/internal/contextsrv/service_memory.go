@@ -165,7 +165,60 @@ func (s *AppService) UpdateMemory(input MemoryUpdateInput) (Memory, error) {
 	if s.repo == nil {
 		return Memory{ID: input.ID, Content: input.Content}, nil
 	}
-	return s.repo.UpdateMemory(context.Background(), input)
+	out, err := s.repo.UpdateMemory(context.Background(), input)
+	if err == nil {
+		_ = s.repo.EnqueueOutbox(context.Background(), "memory", out.ID, "upsert", out)
+	}
+	return out, err
+}
+
+func (s *AppService) GetMemory(id string) (Memory, error) {
+	if s.repo == nil {
+		return Memory{}, fmt.Errorf("repository not configured")
+	}
+	return s.repo.GetMemory(context.Background(), id)
+}
+
+func (s *AppService) ApplyMemoryFeedback(id string, reward int) (Memory, error) {
+	if s.repo == nil {
+		return Memory{}, fmt.Errorf("repository not configured")
+	}
+
+	// 1. Get current memory to read OldImportance
+	mem, err := s.repo.GetMemory(context.Background(), id)
+	if err != nil {
+		return Memory{}, err
+	}
+
+	// 2. TD Learning update
+	// NewImportance = OldImportance + alpha * (Reward - OldImportance)
+	const alpha = 0.5
+	oldImportance := float64(mem.Importance)
+	targetReward := float64(reward)
+
+	newImportanceFloat := oldImportance + alpha*(targetReward-oldImportance)
+	newImportance := int(newImportanceFloat + 0.5) // Round to nearest int
+
+	// 3. Clamp between 1 and 10
+	if newImportance < 1 {
+		newImportance = 1
+	}
+	if newImportance > 10 {
+		newImportance = 10
+	}
+
+	// 4. Update the memory if importance changed
+	if newImportance != mem.Importance {
+		return s.UpdateMemory(MemoryUpdateInput{
+			ID:         id,
+			Content:    mem.Content,
+			Category:   mem.Category,
+			Owner:      mem.Owner,
+			Importance: newImportance,
+		})
+	}
+
+	return mem, nil
 }
 
 func (s *AppService) DeleteMemory(id string) error {
