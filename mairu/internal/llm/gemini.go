@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
@@ -96,6 +98,40 @@ func (g *GeminiProvider) SetModel(modelName string) {
 
 func (g *GeminiProvider) IsNewSession() bool {
 	return g.isNew
+}
+
+func (g *GeminiProvider) CacheContext(ctx context.Context, systemPrompt string, ttl time.Duration) (string, error) {
+	modelID := g.modelName
+	if !strings.HasPrefix(modelID, "models/") {
+		modelID = "models/" + modelID
+	}
+	cc := &genai.CachedContent{
+		Model: modelID,
+		SystemInstruction: &genai.Content{
+			Parts: []genai.Part{genai.Text(systemPrompt)},
+		},
+		Expiration: genai.ExpireTimeOrTTL{TTL: ttl},
+		Tools:      g.model.Tools,
+	}
+	res, err := g.client.CreateCachedContent(ctx, cc)
+	if err != nil {
+		return "", fmt.Errorf("failed to create cached content: %w", err)
+	}
+	return res.Name, nil
+}
+
+func (g *GeminiProvider) SetCachedContent(ctx context.Context, name string) error {
+	cc, err := g.client.GetCachedContent(ctx, name)
+	if err != nil {
+		return fmt.Errorf("failed to get cached content %q: %w", name, err)
+	}
+	newModel := g.client.GenerativeModelFromCachedContent(cc)
+	applySafetySettings(newModel)
+	newSession := newModel.StartChat()
+	newSession.History = g.session.History
+	g.model = newModel
+	g.session = newSession
+	return nil
 }
 
 func (g *GeminiProvider) GetHistory() []*genai.Content {
