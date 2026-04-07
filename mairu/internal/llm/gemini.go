@@ -179,6 +179,11 @@ func (g *GeminiProvider) GenerateJSON(ctx context.Context, system, user string, 
 	model := g.client.GenerativeModel(g.modelName)
 	applySafetySettings(model)
 	model.ResponseMIMEType = "application/json"
+
+	if schema == nil && out != nil {
+		schema = GenerateSchema(out)
+	}
+
 	if schema != nil {
 		model.ResponseSchema = schema
 	}

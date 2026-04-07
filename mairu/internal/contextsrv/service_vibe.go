@@ -44,28 +44,10 @@ func (s *AppService) VibeQuery(prompt, project string, topK int) (VibeQueryResul
 		}{
 			Project: strings.TrimSpace(project),
 		}); err == nil {
-			var res map[string]any
-			schema := &genai.Schema{
-				Type: genai.TypeObject,
-				Properties: map[string]*genai.Schema{
-					"reasoning": {Type: genai.TypeString},
-					"queries": {
-						Type: genai.TypeArray,
-						Items: &genai.Schema{
-							Type: genai.TypeObject,
-							Properties: map[string]*genai.Schema{
-								"store": {Type: genai.TypeString, Description: "One of: memory, skill, node"},
-								"query": {Type: genai.TypeString},
-							},
-							Required: []string{"store", "query"},
-						},
-					},
-				},
-				Required: []string{"reasoning", "queries"},
-			}
-			err := s.llmClient.GenerateJSON(context.Background(), sys, prompt, schema, &res)
+			var res vibeQueryPlan
+			err := s.llmClient.GenerateJSON(context.Background(), sys, prompt, nil, &res)
 			if err == nil {
-				plannedReasoning, plannedQueries := parseSearchPlan(res)
+				plannedReasoning, plannedQueries := validateSearchPlan(res)
 				if len(plannedQueries) > 0 {
 					reasoning = plannedReasoning
 					queries = plannedQueries
@@ -134,29 +116,8 @@ func (s *AppService) PlanVibeMutation(prompt, project string, topK int) (VibeMut
 		return fallback, nil
 	}
 
-	var res map[string]any
-	schema := &genai.Schema{
-		Type: genai.TypeObject,
-		Properties: map[string]*genai.Schema{
-			"reasoning": {Type: genai.TypeString, Description: "Why this plan was chosen"},
-			"operations": {
-				Type: genai.TypeArray,
-				Items: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"op":          {Type: genai.TypeString, Description: "Operation type e.g. create_memory, update_memory, create_node, etc."},
-						"target":      {Type: genai.TypeString, Description: "Target ID or URI if applicable"},
-						"description": {Type: genai.TypeString, Description: "Description of the operation"},
-						"data":        {Type: genai.TypeObject, Description: "Operation payload"},
-					},
-					Required: []string{"op", "description", "data"},
-				},
-			},
-		},
-		Required: []string{"reasoning", "operations"},
-	}
-
-	err = s.llmClient.GenerateJSON(context.Background(), systemPrompt, "USER PROMPT: "+mutationPrompt, schema, &res)
+	var res VibeMutationPlan
+	err = s.llmClient.GenerateJSON(context.Background(), systemPrompt, "USER PROMPT: "+mutationPrompt, nil, &res)
 	if err == nil {
 		if parsed, ok := parseMutationPlan(res); ok {
 			return parsed, nil
@@ -174,7 +135,7 @@ func (s *AppService) PlanVibeMutation(prompt, project string, topK int) (VibeMut
 		return fallback, nil
 	}
 
-	err = s.llmClient.GenerateJSON(context.Background(), compactSystemPrompt, "USER PROMPT (possibly truncated): "+truncateForLLM(mutationPrompt, 6000), schema, &res)
+	err = s.llmClient.GenerateJSON(context.Background(), compactSystemPrompt, "USER PROMPT (possibly truncated): "+truncateForLLM(mutationPrompt, 6000), nil, &res)
 	if err == nil {
 		if parsed, ok := parseMutationPlan(res); ok {
 			return parsed, nil
@@ -440,15 +401,7 @@ type vibeQueryPlanItem struct {
 	Query string `json:"query"`
 }
 
-func parseSearchPlan(raw map[string]any) (string, []vibeQueryPlanItem) {
-	b, err := json.Marshal(raw)
-	if err != nil {
-		return "", nil
-	}
-	var parsed vibeQueryPlan
-	if err := json.Unmarshal(b, &parsed); err != nil {
-		return "", nil
-	}
+func validateSearchPlan(parsed vibeQueryPlan) (string, []vibeQueryPlanItem) {
 	valid := make([]vibeQueryPlanItem, 0, len(parsed.Queries))
 	for _, q := range parsed.Queries {
 		if strings.TrimSpace(q.Query) == "" {
@@ -466,15 +419,7 @@ func parseSearchPlan(raw map[string]any) (string, []vibeQueryPlanItem) {
 	return parsed.Reasoning, valid
 }
 
-func parseMutationPlan(raw map[string]any) (VibeMutationPlan, bool) {
-	b, err := json.Marshal(raw)
-	if err != nil {
-		return VibeMutationPlan{}, false
-	}
-	var parsed VibeMutationPlan
-	if err := json.Unmarshal(b, &parsed); err != nil {
-		return VibeMutationPlan{}, false
-	}
+func parseMutationPlan(parsed VibeMutationPlan) (VibeMutationPlan, bool) {
 	if len(parsed.Operations) == 0 {
 		return VibeMutationPlan{Reasoning: parsed.Reasoning, Operations: []VibeMutationOp{}}, true
 	}
