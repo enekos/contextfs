@@ -43,7 +43,7 @@ func TestSearchScraperGraphValidation(t *testing.T) {
 	if graph == nil {
 		t.Fatalf("SearchScraperGraph init failed")
 	}
-	
+
 	// Try a run which will fail internally
 	_, err := graph.Run(context.Background(), "", "prompt", 0)
 	if err == nil {
@@ -56,7 +56,7 @@ func TestScriptCreatorGraphValidation(t *testing.T) {
 	if graph == nil {
 		t.Fatalf("ScriptCreatorGraph init failed")
 	}
-	
+
 	// Should fail fetch
 	_, err := graph.Run(context.Background(), "invalid", "prompt")
 	if err == nil {
@@ -69,7 +69,7 @@ func TestSearchLinkGraphValidation(t *testing.T) {
 	if graph == nil {
 		t.Fatalf("SearchLinkGraph init failed")
 	}
-	
+
 	// Should fail fetch
 	_, err := graph.Run(context.Background(), "invalid", "prompt")
 	if err == nil {

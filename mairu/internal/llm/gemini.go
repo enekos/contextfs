@@ -22,6 +22,27 @@ type GeminiProvider struct {
 	modelName string
 }
 
+func applySafetySettings(model *genai.GenerativeModel) {
+	model.SafetySettings = []*genai.SafetySetting{
+		{
+			Category:  genai.HarmCategoryDangerousContent,
+			Threshold: genai.HarmBlockNone,
+		},
+		{
+			Category:  genai.HarmCategoryHarassment,
+			Threshold: genai.HarmBlockNone,
+		},
+		{
+			Category:  genai.HarmCategoryHateSpeech,
+			Threshold: genai.HarmBlockNone,
+		},
+		{
+			Category:  genai.HarmCategorySexuallyExplicit,
+			Threshold: genai.HarmBlockNone,
+		},
+	}
+}
+
 func NewGeminiProvider(ctx context.Context, apiKey string) (*GeminiProvider, error) {
 	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
@@ -30,6 +51,7 @@ func NewGeminiProvider(ctx context.Context, apiKey string) (*GeminiProvider, err
 
 	modelName := "gemini-3.1-flash-lite-preview"
 	model := client.GenerativeModel(modelName)
+	applySafetySettings(model)
 	session := model.StartChat()
 
 	provider := &GeminiProvider{
@@ -49,6 +71,7 @@ func (g *GeminiProvider) GetModelName() string {
 
 func (g *GeminiProvider) SetModel(modelName string) {
 	newModel := g.client.GenerativeModel(modelName)
+	applySafetySettings(newModel)
 	newSession := newModel.StartChat()
 	newSession.History = g.session.History
 	g.modelName = modelName
@@ -104,6 +127,7 @@ func (g *GeminiProvider) SendFunctionResponsesStream(ctx context.Context, respon
 
 func (g *GeminiProvider) GenerateJSON(ctx context.Context, system, user string, out any) error {
 	model := g.client.GenerativeModel(g.modelName)
+	applySafetySettings(model)
 	model.ResponseMIMEType = "application/json"
 	model.SystemInstruction = &genai.Content{
 		Parts: []genai.Part{genai.Text(system)},
@@ -127,6 +151,7 @@ func (g *GeminiProvider) GenerateJSON(ctx context.Context, system, user string, 
 
 func (g *GeminiProvider) GenerateContent(ctx context.Context, modelName, prompt string) (string, error) {
 	model := g.client.GenerativeModel(modelName)
+	applySafetySettings(model)
 	res, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
 		return "", err
