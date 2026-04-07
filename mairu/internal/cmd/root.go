@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"mairu/internal/agent"
+	"mairu/internal/config"
 	"mairu/internal/logger"
 	"os"
 	"strings"
@@ -11,7 +12,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var debugMode bool
+var (
+	debugMode    bool
+	outputFormat string
+	verbose      bool
+	quiet        bool
+	appConfig    *config.Config
+)
 
 var rootCmd = &cobra.Command{
 	Use:   "mairu [prompt]",
@@ -20,6 +27,23 @@ var rootCmd = &cobra.Command{
 	Args:  cobra.ArbitraryArgs,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		logger.Setup(debugMode)
+
+		cwd, _ := os.Getwd()
+		cfg, err := config.Load(cwd)
+		if err != nil {
+			slog.Warn("Failed to load config, using defaults", "error", err)
+			defaults := config.Config{}
+			cfg = &defaults
+		}
+		appConfig = cfg
+
+		// CLI flag overrides for output
+		if !cmd.Flags().Changed("output") && appConfig.Output.Format != "" {
+			outputFormat = appConfig.Output.Format
+		}
+		if !cmd.Flags().Changed("verbose") {
+			verbose = appConfig.Output.Verbose
+		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) > 0 {
@@ -30,6 +54,17 @@ var rootCmd = &cobra.Command{
 		fmt.Println("Welcome to Mairu! Use 'mairu tui' or 'mairu web' to start.")
 		cmd.Help()
 	},
+}
+
+// GetConfig returns the loaded application config. Must be called after
+// PersistentPreRun has executed.
+func GetConfig() *config.Config {
+	return appConfig
+}
+
+// GetFormatter returns a Formatter based on the resolved output format.
+func GetFormatter() *Formatter {
+	return NewFormatter(outputFormat)
 }
 
 func runHeadless(prompt string) {
@@ -57,11 +92,13 @@ func runHeadless(prompt string) {
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() error {
 	return rootCmd.Execute()
 }
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "table", "Output format: table, json, plain")
+	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Show extra details (timing, weights, query plan)")
+	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "Only output results, no status messages")
 }

@@ -16,7 +16,6 @@ func main() {
 	// Optionally try loading from executable directory
 	if exe, err := os.Executable(); err == nil {
 		dir := filepath.Dir(exe)
-		// Usually exe is in bin/, project root is ../
 		_ = godotenv.Load(filepath.Join(dir, "..", ".env"))
 		_ = godotenv.Load(filepath.Join(dir, "..", "..", ".env"))
 	}

@@ -18,7 +18,7 @@ var (
 	evalTopK        int
 	failBelowMRR    float64
 	failBelowRecall float64
-	verbose         bool
+	evalVerbose     bool
 )
 
 var evalCmd = &cobra.Command{
@@ -108,7 +108,7 @@ var evalCmd = &cobra.Command{
 			return results, nil
 		}
 
-		metrics, err := eval.EvaluateDataset(ctx, &dataset, evalTopK, verbose, searchFunc)
+		metrics, err := eval.EvaluateDataset(ctx, &dataset, evalTopK, evalVerbose, searchFunc)
 		if err != nil {
 			return err
 		}
@@ -132,6 +132,6 @@ func init() {
 	evalCmd.Flags().IntVarP(&evalTopK, "topK", "k", 5, "Number of results to retrieve")
 	evalCmd.Flags().Float64Var(&failBelowMRR, "fail-below-mrr", 0.0, "Fail if MRR is below this threshold")
 	evalCmd.Flags().Float64Var(&failBelowRecall, "fail-below-recall", 0.0, "Fail if Recall is below this threshold")
-	evalCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Print verbose output")
+	evalCmd.Flags().BoolVarP(&evalVerbose, "verbose", "v", false, "Print verbose output")
 	rootCmd.AddCommand(evalCmd)
 }

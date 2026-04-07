@@ -3,7 +3,9 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"mairu/internal/config"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -27,18 +29,25 @@ var setupCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		cfg, err := LoadConfig()
-		if err != nil {
-			cfg = Config{}
-		}
-		cfg.GeminiAPIKey = apiKey
+		targetPath := config.UserConfigPath()
+		fv := config.NewViper("")
+		fv.SetConfigFile(targetPath)
+		fv.SetConfigType("toml")
+		_ = fv.ReadInConfig() // ok if missing
 
-		if err := SaveConfig(cfg); err != nil {
+		fv.Set("api.gemini_api_key", apiKey)
+
+		dir := filepath.Dir(targetPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			fmt.Printf("Error creating config directory: %v\n", err)
+			os.Exit(1)
+		}
+		if err := fv.WriteConfigAs(targetPath); err != nil {
 			fmt.Printf("Error saving configuration: %v\n", err)
 			os.Exit(1)
 		}
 
-		fmt.Println("Configuration saved successfully to ~/.config/mairu/config.json!")
+		fmt.Printf("Configuration saved successfully to %s!\n", targetPath)
 	},
 }
 
