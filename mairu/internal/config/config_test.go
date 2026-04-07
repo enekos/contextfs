@@ -47,3 +47,123 @@ func TestFindProjectConfig_StopsAtGitBoundary(t *testing.T) {
 		t.Errorf("FindProjectConfig should not cross .git boundary, got %q", got)
 	}
 }
+func TestLoad_Defaults(t *testing.T) {
+	// Point viper away from real config files
+	t.Setenv("HOME", t.TempDir())
+
+	cfg, err := Load(t.TempDir()) // no .mairu.toml in this dir
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	// Spot-check key defaults
+	if cfg.API.MeiliURL != "http://localhost:7700" {
+		t.Errorf("MeiliURL = %q, want http://localhost:7700", cfg.API.MeiliURL)
+	}
+	if cfg.Daemon.Concurrency != 8 {
+		t.Errorf("Daemon.Concurrency = %d, want 8", cfg.Daemon.Concurrency)
+	}
+	if cfg.Search.Memories.Vector != 0.6 {
+		t.Errorf("Search.Memories.Vector = %f, want 0.6", cfg.Search.Memories.Vector)
+	}
+	if cfg.Server.Port != 8788 {
+		t.Errorf("Server.Port = %d, want 8788", cfg.Server.Port)
+	}
+	if cfg.Embedding.Model != "gemini-embedding-001" {
+		t.Errorf("Embedding.Model = %q, want gemini-embedding-001", cfg.Embedding.Model)
+	}
+	if cfg.Output.Format != "table" {
+		t.Errorf("Output.Format = %q, want table", cfg.Output.Format)
+	}
+}
+
+func TestLoad_UserConfigOverridesDefaults(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	configDir := filepath.Join(home, ".config", "mairu")
+	os.MkdirAll(configDir, 0755)
+	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(`
+[daemon]
+concurrency = 16
+
+[server]
+port = 9999
+`), 0644)
+
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Daemon.Concurrency != 16 {
+		t.Errorf("Daemon.Concurrency = %d, want 16 (from user config)", cfg.Daemon.Concurrency)
+	}
+	if cfg.Server.Port != 9999 {
+		t.Errorf("Server.Port = %d, want 9999 (from user config)", cfg.Server.Port)
+	}
+	// Unset values should still be defaults
+	if cfg.Search.Memories.Vector != 0.6 {
+		t.Errorf("Search.Memories.Vector = %f, want 0.6 (default)", cfg.Search.Memories.Vector)
+	}
+}
+
+func TestLoad_ProjectConfigOverridesUser(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	configDir := filepath.Join(home, ".config", "mairu")
+	os.MkdirAll(configDir, 0755)
+	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(`
+[daemon]
+concurrency = 16
+`), 0644)
+
+	projectDir := t.TempDir()
+	os.MkdirAll(filepath.Join(projectDir, ".git"), 0755)
+	os.WriteFile(filepath.Join(projectDir, ".mairu.toml"), []byte(`
+[daemon]
+concurrency = 4
+`), 0644)
+
+	cfg, err := Load(projectDir)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Daemon.Concurrency != 4 {
+		t.Errorf("Daemon.Concurrency = %d, want 4 (from project config)", cfg.Daemon.Concurrency)
+	}
+}
+
+func TestLoad_EnvOverridesAll(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("MAIRU_DAEMON_CONCURRENCY", "32")
+
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Daemon.Concurrency != 32 {
+		t.Errorf("Daemon.Concurrency = %d, want 32 (from env)", cfg.Daemon.Concurrency)
+	}
+}
+
+func TestLoad_LegacyEnvAliases(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GEMINI_API_KEY", "test-key-123")
+	t.Setenv("MEILI_URL", "http://custom:7700")
+
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.API.GeminiAPIKey != "test-key-123" {
+		t.Errorf("GeminiAPIKey = %q, want test-key-123", cfg.API.GeminiAPIKey)
+	}
+	if cfg.API.MeiliURL != "http://custom:7700" {
+		t.Errorf("MeiliURL = %q, want http://custom:7700", cfg.API.MeiliURL)
+	}
+}
