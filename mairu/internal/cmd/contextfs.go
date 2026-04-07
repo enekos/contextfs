@@ -273,7 +273,28 @@ func newMemoryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printJSON(out)
+
+			if outputFormat == "json" || outputFormat == "" {
+				printJSON(out)
+			} else {
+				var results []map[string]any
+				if err := json.Unmarshal(out, &results); err != nil {
+					printJSON(out) // fallback
+					return nil
+				}
+				f := GetFormatter()
+				f.PrintItems(
+					[]string{"score", "category", "content"},
+					results,
+					func(item map[string]any) map[string]string {
+						return map[string]string{
+							"score":    fmt.Sprintf("%.2f", item["_rankingScore"]),
+							"category": fmt.Sprintf("%v", item["category"]),
+							"content":  truncate(fmt.Sprintf("%v", item["content"]), 80),
+						}
+					},
+				)
+			}
 			return nil
 		},
 	}
@@ -322,7 +343,28 @@ func newMemoryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printJSON(out)
+
+			if outputFormat == "json" || outputFormat == "" {
+				printJSON(out)
+			} else {
+				var results []map[string]any
+				if err := json.Unmarshal(out, &results); err != nil {
+					printJSON(out) // fallback
+					return nil
+				}
+				f := GetFormatter()
+				f.PrintItems(
+					[]string{"id", "category", "content"},
+					results,
+					func(item map[string]any) map[string]string {
+						return map[string]string{
+							"id":       fmt.Sprintf("%v", item["id"]),
+							"category": fmt.Sprintf("%v", item["category"]),
+							"content":  truncate(fmt.Sprintf("%v", item["content"]), 80),
+						}
+					},
+				)
+			}
 			return nil
 		},
 	}
@@ -431,7 +473,28 @@ func newSkillCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printJSON(out)
+
+			if outputFormat == "json" || outputFormat == "" {
+				printJSON(out)
+			} else {
+				var results []map[string]any
+				if err := json.Unmarshal(out, &results); err != nil {
+					printJSON(out) // fallback
+					return nil
+				}
+				f := GetFormatter()
+				f.PrintItems(
+					[]string{"score", "name", "description"},
+					results,
+					func(item map[string]any) map[string]string {
+						return map[string]string{
+							"score":       fmt.Sprintf("%.2f", item["_rankingScore"]),
+							"name":        fmt.Sprintf("%v", item["name"]),
+							"description": truncate(fmt.Sprintf("%v", item["description"]), 80),
+						}
+					},
+				)
+			}
 			return nil
 		},
 	}
@@ -449,7 +512,28 @@ func newSkillCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printJSON(out)
+
+			if outputFormat == "json" || outputFormat == "" {
+				printJSON(out)
+			} else {
+				var results []map[string]any
+				if err := json.Unmarshal(out, &results); err != nil {
+					printJSON(out) // fallback
+					return nil
+				}
+				f := GetFormatter()
+				f.PrintItems(
+					[]string{"id", "name", "description"},
+					results,
+					func(item map[string]any) map[string]string {
+						return map[string]string{
+							"id":          fmt.Sprintf("%v", item["id"]),
+							"name":        fmt.Sprintf("%v", item["name"]),
+							"description": truncate(fmt.Sprintf("%v", item["description"]), 80),
+						}
+					},
+				)
+			}
 			return nil
 		},
 	}
@@ -593,7 +677,29 @@ func newNodeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printJSON(out)
+
+			if outputFormat == "json" || outputFormat == "" {
+				printJSON(out)
+			} else {
+				var results []map[string]any
+				if err := json.Unmarshal(out, &results); err != nil {
+					printJSON(out) // fallback
+					return nil
+				}
+				f := GetFormatter()
+				f.PrintItems(
+					[]string{"score", "uri", "name", "abstract"},
+					results,
+					func(item map[string]any) map[string]string {
+						return map[string]string{
+							"score":    fmt.Sprintf("%.2f", item["_rankingScore"]),
+							"uri":      fmt.Sprintf("%v", item["uri"]),
+							"name":     truncate(fmt.Sprintf("%v", item["name"]), 30),
+							"abstract": truncate(fmt.Sprintf("%v", item["abstract"]), 60),
+						}
+					},
+				)
+			}
 			return nil
 		},
 	}
@@ -641,7 +747,28 @@ func newNodeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printJSON(out)
+
+			if outputFormat == "json" || outputFormat == "" {
+				printJSON(out)
+			} else {
+				var results []map[string]any
+				if err := json.Unmarshal(out, &results); err != nil {
+					printJSON(out) // fallback
+					return nil
+				}
+				f := GetFormatter()
+				f.PrintItems(
+					[]string{"uri", "name", "abstract"},
+					results,
+					func(item map[string]any) map[string]string {
+						return map[string]string{
+							"uri":      fmt.Sprintf("%v", item["uri"]),
+							"name":     truncate(fmt.Sprintf("%v", item["name"]), 30),
+							"abstract": truncate(fmt.Sprintf("%v", item["abstract"]), 60),
+						}
+					},
+				)
+			}
 			return nil
 		},
 	}
@@ -663,7 +790,28 @@ func newNodeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printJSON(out)
+
+			if outputFormat == "json" || outputFormat == "" {
+				printJSON(out)
+			} else {
+				var results []map[string]any
+				if err := json.Unmarshal(out, &results); err != nil {
+					printJSON(out) // fallback
+					return nil
+				}
+				f := GetFormatter()
+				f.PrintItems(
+					[]string{"uri", "name", "abstract"},
+					results,
+					func(item map[string]any) map[string]string {
+						return map[string]string{
+							"uri":      fmt.Sprintf("%v", item["uri"]),
+							"name":     truncate(fmt.Sprintf("%v", item["name"]), 30),
+							"abstract": truncate(fmt.Sprintf("%v", item["abstract"]), 60),
+						}
+					},
+				)
+			}
 			return nil
 		},
 	}
@@ -1461,4 +1609,11 @@ func newOmniScrapeCmd() *cobra.Command {
 	cmd.Flags().StringVar(&prompt, "prompt", "", "Prompt to instruct LLM what to extract and merge")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 3, "Concurrent scraping requests")
 	return cmd
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
