@@ -25,10 +25,12 @@ func NewMeiliIndexer(host, apiKey string, embedder Embedder) *MeiliIndexer {
 func (m *MeiliIndexer) EnsureIndexes() error {
 	indexes := []string{IndexMemories, IndexSkills, IndexNodes, IndexSymbols}
 	for _, idx := range indexes {
-		_, _ = m.client.CreateIndex(&meilisearch.IndexConfig{
+		if _, err := m.client.CreateIndex(&meilisearch.IndexConfig{
 			Uid:        idx,
 			PrimaryKey: "id",
-		})
+		}); err != nil {
+			return fmt.Errorf("create index %q: %w", idx, err)
+		}
 	}
 	return nil
 }
@@ -108,8 +110,10 @@ func (m *MeiliIndexer) Search(opts SearchOptions) (map[string]any, error) {
 
 	var queryEmbedding []float32
 	if strings.TrimSpace(opts.Query) != "" && m.embedder != nil {
-		emb, _ := m.embedder.GetEmbedding(context.Background(), opts.Query)
-		queryEmbedding = emb
+		// Embedding failure is non-fatal: we degrade gracefully to keyword-only search.
+		if emb, err := m.embedder.GetEmbedding(context.Background(), opts.Query); err == nil {
+			queryEmbedding = emb
+		}
 	}
 
 	if store == "all" || store == "memories" {

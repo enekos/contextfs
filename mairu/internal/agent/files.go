@@ -46,27 +46,29 @@ func (a *Agent) WriteFile(filePath string, content string) (string, error) {
 		return "", err
 	}
 
-	// Compute diff
-	tmpFile, err1 := os.CreateTemp("", "mairu-diff-*")
-	tmpFile2, err2 := os.CreateTemp("", "mairu-diff-new-*")
-	if err1 == nil && err2 == nil {
-		tmpFile.Write(oldContent)
-		tmpFile.Close()
-		defer os.Remove(tmpFile.Name())
-
-		tmpFile2.Write([]byte(content))
-		tmpFile2.Close()
-		defer os.Remove(tmpFile2.Name())
-
-		cmd := exec.Command("diff", "-u", tmpFile.Name(), tmpFile2.Name())
-		out, _ := cmd.CombinedOutput()
-		diffStr := string(out)
-		diffStr = strings.Replace(diffStr, tmpFile.Name(), filePath+" (old)", 1)
-		diffStr = strings.Replace(diffStr, tmpFile2.Name(), filePath+" (new)", 1)
-		return diffStr, nil
+	// Compute diff using two temp files, cleaning up regardless of errors.
+	tmpFile, err := os.CreateTemp("", "mairu-diff-*")
+	if err != nil {
+		return "", nil
 	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Write(oldContent) //nolint:errcheck // best-effort diff
+	tmpFile.Close()
 
-	return "", nil
+	tmpFile2, err := os.CreateTemp("", "mairu-diff-new-*")
+	if err != nil {
+		return "", nil
+	}
+	defer os.Remove(tmpFile2.Name())
+	tmpFile2.Write([]byte(content)) //nolint:errcheck // best-effort diff
+	tmpFile2.Close()
+
+	cmd := exec.Command("diff", "-u", tmpFile.Name(), tmpFile2.Name())
+	out, _ := cmd.CombinedOutput()
+	diffStr := string(out)
+	diffStr = strings.Replace(diffStr, tmpFile.Name(), filePath+" (old)", 1)
+	diffStr = strings.Replace(diffStr, tmpFile2.Name(), filePath+" (new)", 1)
+	return diffStr, nil
 }
 
 // FindFiles uses glob pattern to find files.

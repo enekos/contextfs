@@ -10,7 +10,10 @@ import (
 func (r *SQLiteRepository) CreateSkill(ctx context.Context, input SkillCreateInput) (Skill, error) {
 	id := fmt.Sprintf("skill_%d", time.Now().UnixNano())
 	now := time.Now().UTC()
-	reasonsJSON, _ := json.Marshal(input.ModerationReasons)
+	reasonsJSON, err := json.Marshal(input.ModerationReasons)
+	if err != nil {
+		return Skill{}, fmt.Errorf("marshal moderation reasons: %w", err)
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Skill{}, err
@@ -70,7 +73,9 @@ func (r *SQLiteRepository) ListSkills(ctx context.Context, project string, limit
 		if err := rows.Scan(&s.ID, &s.Project, &s.Name, &s.Description, &s.ModerationStatus, &reasonsRaw, &s.ReviewRequired, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal(reasonsRaw, &s.ModerationReasons)
+		if err := unmarshalJSONField(reasonsRaw, &s.ModerationReasons); err != nil {
+			return nil, fmt.Errorf("unmarshal moderation_reasons for skill %s: %w", s.ID, err)
+		}
 		out = append(out, s)
 	}
 	return out, rows.Err()
@@ -101,7 +106,9 @@ func (r *SQLiteRepository) UpdateSkill(ctx context.Context, input SkillUpdateInp
 	if err := row.Scan(&s.ID, &s.Project, &s.Name, &s.Description, &s.ModerationStatus, &reasonsRaw, &s.ReviewRequired, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return Skill{}, err
 	}
-	_ = json.Unmarshal(reasonsRaw, &s.ModerationReasons)
+	if err := unmarshalJSONField(reasonsRaw, &s.ModerationReasons); err != nil {
+		return Skill{}, fmt.Errorf("unmarshal moderation_reasons for skill %s: %w", s.ID, err)
+	}
 	return s, nil
 }
 

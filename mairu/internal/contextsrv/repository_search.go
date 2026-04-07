@@ -163,7 +163,9 @@ func (r *SQLiteRepository) ListModerationQueue(ctx context.Context, limit int) (
 		if err := rows.Scan(&ev.ID, &ev.EntityType, &ev.EntityID, &ev.Project, &ev.Decision, &reasonsRaw, &ev.ReviewStatus, &ev.ReviewerDecision, &ev.ReviewRequired, &ev.PolicyVersion, &ev.CreatedAt, &ev.ReviewedAt, &ev.Reviewer); err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal(reasonsRaw, &ev.Reasons)
+		if err := unmarshalJSONField(reasonsRaw, &ev.Reasons); err != nil {
+			return nil, fmt.Errorf("unmarshal reasons for moderation event %d: %w", ev.ID, err)
+		}
 		out = append(out, ev)
 	}
 	return out, rows.Err()
@@ -199,10 +201,13 @@ func (r *SQLiteRepository) ReviewModeration(ctx context.Context, input Moderatio
 }
 
 func (r *SQLiteRepository) EnqueueOutbox(ctx context.Context, entityType, entityID, opType string, payload any) error {
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal outbox payload: %w", err)
+	}
 	payloadHash := fmt.Sprintf("%x", md5.Sum(payloadBytes))
 	now := time.Now().UTC()
-	_, err := r.db.ExecContext(ctx, `
+	_, err = r.db.ExecContext(ctx, `
 		INSERT INTO search_outbox (entity_type, entity_id, op_type, payload, payload_hash, status, retry_count, next_attempt_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, 'pending', 0, $6, $6)
 	`, entityType, entityID, opType, string(payloadBytes), payloadHash, now)
@@ -210,8 +215,11 @@ func (r *SQLiteRepository) EnqueueOutbox(ctx context.Context, entityType, entity
 }
 
 func (r *SQLiteRepository) insertModerationEventTx(ctx context.Context, tx *sql.Tx, entityType, entityID, project, decision string, reasons []string, reviewRequired bool) error {
-	reasonsJSON, _ := json.Marshal(reasons)
-	_, err := tx.ExecContext(ctx, `
+	reasonsJSON, err := json.Marshal(reasons)
+	if err != nil {
+		return fmt.Errorf("marshal moderation reasons: %w", err)
+	}
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO moderation_events (entity_type, entity_id, project, decision, reasons, review_status, review_required, policy_version)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, 'v1')
 	`, entityType, entityID, project, decision, string(reasonsJSON), reviewState(reviewRequired), reviewRequired)
@@ -219,8 +227,11 @@ func (r *SQLiteRepository) insertModerationEventTx(ctx context.Context, tx *sql.
 }
 
 func (r *SQLiteRepository) insertAuditTx(ctx context.Context, tx *sql.Tx, entityType, entityID, action, actor string, details map[string]any) error {
-	detailsJSON, _ := json.Marshal(details)
-	_, err := tx.ExecContext(ctx, `
+	detailsJSON, err := json.Marshal(details)
+	if err != nil {
+		return fmt.Errorf("marshal audit details: %w", err)
+	}
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO audit_log (entity_type, entity_id, action, actor, details)
 		VALUES ($1, $2, $3, $4, $5)
 	`, entityType, entityID, action, actor, string(detailsJSON))

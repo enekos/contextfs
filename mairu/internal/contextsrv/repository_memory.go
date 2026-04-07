@@ -10,7 +10,10 @@ import (
 func (r *SQLiteRepository) CreateMemory(ctx context.Context, input MemoryCreateInput) (Memory, error) {
 	id := fmt.Sprintf("mem_%d", time.Now().UnixNano())
 	now := time.Now().UTC()
-	reasonsJSON, _ := json.Marshal(input.ModerationReasons)
+	reasonsJSON, err := json.Marshal(input.ModerationReasons)
+	if err != nil {
+		return Memory{}, fmt.Errorf("marshal moderation reasons: %w", err)
+	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -74,7 +77,9 @@ func (r *SQLiteRepository) ListMemories(ctx context.Context, project string, lim
 		if err := rows.Scan(&m.ID, &m.Project, &m.Content, &m.Category, &m.Owner, &m.Importance, &m.ModerationStatus, &reasonsRaw, &m.ReviewRequired, &m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal(reasonsRaw, &m.ModerationReasons)
+		if err := unmarshalJSONField(reasonsRaw, &m.ModerationReasons); err != nil {
+			return nil, fmt.Errorf("unmarshal moderation_reasons for memory %s: %w", m.ID, err)
+		}
 		out = append(out, m)
 	}
 	return out, rows.Err()
@@ -90,7 +95,9 @@ func (r *SQLiteRepository) GetMemory(ctx context.Context, id string) (Memory, er
 	if err := row.Scan(&m.ID, &m.Project, &m.Content, &m.Category, &m.Owner, &m.Importance, &m.ModerationStatus, &reasonsRaw, &m.ReviewRequired, &m.CreatedAt, &m.UpdatedAt); err != nil {
 		return Memory{}, err
 	}
-	_ = json.Unmarshal(reasonsRaw, &m.ModerationReasons)
+	if err := unmarshalJSONField(reasonsRaw, &m.ModerationReasons); err != nil {
+		return Memory{}, fmt.Errorf("unmarshal moderation_reasons for memory %s: %w", m.ID, err)
+	}
 	return m, nil
 }
 
@@ -121,7 +128,9 @@ func (r *SQLiteRepository) UpdateMemory(ctx context.Context, input MemoryUpdateI
 	if err := row.Scan(&m.ID, &m.Project, &m.Content, &m.Category, &m.Owner, &m.Importance, &m.ModerationStatus, &reasonsRaw, &m.ReviewRequired, &m.CreatedAt, &m.UpdatedAt); err != nil {
 		return Memory{}, err
 	}
-	_ = json.Unmarshal(reasonsRaw, &m.ModerationReasons)
+	if err := unmarshalJSONField(reasonsRaw, &m.ModerationReasons); err != nil {
+		return Memory{}, fmt.Errorf("unmarshal moderation_reasons for memory %s: %w", m.ID, err)
+	}
 	return m, nil
 }
 

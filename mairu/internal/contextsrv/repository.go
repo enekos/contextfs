@@ -3,10 +3,20 @@ package contextsrv
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+// unmarshalJSONField decodes a nullable JSON column into dst.
+// Empty/null bytes are treated as a no-op rather than an error.
+func unmarshalJSONField(raw []byte, dst any) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	return json.Unmarshal(raw, dst)
+}
 
 type SQLiteRepository struct {
 	db *sql.DB

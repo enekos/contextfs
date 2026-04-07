@@ -9,7 +9,10 @@ import (
 
 func (r *SQLiteRepository) CreateContextNode(ctx context.Context, input ContextCreateInput) (ContextNode, error) {
 	now := time.Now().UTC()
-	reasonsJSON, _ := json.Marshal(input.ModerationReasons)
+	reasonsJSON, err := json.Marshal(input.ModerationReasons)
+	if err != nil {
+		return ContextNode{}, fmt.Errorf("marshal moderation reasons: %w", err)
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ContextNode{}, err
@@ -93,8 +96,12 @@ func (r *SQLiteRepository) ListContextNodes(ctx context.Context, project string,
 		if err := rows.Scan(&n.URI, &n.Project, &n.ParentURI, &n.Name, &n.Abstract, &n.Overview, &n.Content, &metadataRaw, &n.ModerationStatus, &reasonsRaw, &n.ReviewRequired, &n.CreatedAt, &n.UpdatedAt); err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal(reasonsRaw, &n.ModerationReasons)
-		_ = json.Unmarshal(metadataRaw, &n.Metadata)
+		if err := unmarshalJSONField(reasonsRaw, &n.ModerationReasons); err != nil {
+			return nil, fmt.Errorf("unmarshal moderation_reasons for node %s: %w", n.URI, err)
+		}
+		if err := unmarshalJSONField(metadataRaw, &n.Metadata); err != nil {
+			return nil, fmt.Errorf("unmarshal metadata for node %s: %w", n.URI, err)
+		}
 		out = append(out, n)
 	}
 	return out, rows.Err()
@@ -129,8 +136,12 @@ func (r *SQLiteRepository) UpdateContextNode(ctx context.Context, input ContextU
 	if err := row.Scan(&n.URI, &n.Project, &n.ParentURI, &n.Name, &n.Abstract, &n.Overview, &n.Content, &metadataRaw, &n.ModerationStatus, &reasonsRaw, &n.ReviewRequired, &n.CreatedAt, &n.UpdatedAt); err != nil {
 		return ContextNode{}, err
 	}
-	_ = json.Unmarshal(reasonsRaw, &n.ModerationReasons)
-	_ = json.Unmarshal(metadataRaw, &n.Metadata)
+	if err := unmarshalJSONField(reasonsRaw, &n.ModerationReasons); err != nil {
+		return ContextNode{}, fmt.Errorf("unmarshal moderation_reasons for node %s: %w", n.URI, err)
+	}
+	if err := unmarshalJSONField(metadataRaw, &n.Metadata); err != nil {
+		return ContextNode{}, fmt.Errorf("unmarshal metadata for node %s: %w", n.URI, err)
+	}
 	return n, nil
 }
 
