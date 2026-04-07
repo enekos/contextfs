@@ -70,6 +70,35 @@ Manage your config using the CLI:
 ./mairu/bin/mairu-agent doctor          # check system health
 ```
 
+### Sample `config.toml`
+
+Here is an example of what your `~/.config/mairu/config.toml` or `.mairu.toml` might look like:
+
+```toml
+[api]
+gemini_api_key = "AIzaSyYourKeyHere..."
+meili_url = "http://localhost:7700"
+meili_api_key = "contextfs-dev-key"
+
+[daemon]
+concurrency = 8
+max_file_size = "512KB"
+debounce = "200ms"
+max_content_chars = 16000
+
+[server]
+port = 8788
+sqlite_dsn = "file:mairu.db?cache=shared&mode=rwc"
+
+[embedding]
+model = "gemini-embedding-001"
+dimensions = 3072
+
+[output]
+format = "table"
+color = true
+```
+
 ## Core Commands
 
 | Command | Description |

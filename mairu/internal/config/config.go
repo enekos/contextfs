@@ -112,12 +112,6 @@ func Load(workDir string) (*Config, error) {
 }
 
 func NewViper(workDir string) *viper.Viper {
-	// Auto-migrate legacy config.json if present.
-	if home, err := os.UserHomeDir(); err == nil {
-		configDir := filepath.Join(home, ".config", "mairu")
-		_, _ = MigrateLegacyJSON(configDir)
-	}
-
 	v := viper.New()
 	setDefaults(v)
 
