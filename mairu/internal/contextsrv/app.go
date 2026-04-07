@@ -23,6 +23,8 @@ type Config struct {
 	ProjectorBatch    int
 	ReadTimeout       time.Duration
 	ModerationEnabled bool
+	EmbeddingModel    string
+	EmbeddingDim      int
 }
 
 // App represents the Context Server application instance.
@@ -50,6 +52,8 @@ func NewApp(cfg Config) (*App, error) {
 	if cfg.GeminiAPIKey != "" {
 		client, err := llm.NewGeminiProvider(context.Background(), cfg.GeminiAPIKey)
 		if err == nil {
+			client.EmbeddingModel = cfg.EmbeddingModel
+			client.EmbeddingDim = cfg.EmbeddingDim
 			geminiClient = client
 		}
 	}

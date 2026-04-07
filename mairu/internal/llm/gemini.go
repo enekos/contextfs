@@ -17,11 +17,13 @@ type Provider interface {
 }
 
 type GeminiProvider struct {
-	client    *genai.Client
-	model     *genai.GenerativeModel
-	session   *genai.ChatSession
-	isNew     bool
-	modelName string
+	client         *genai.Client
+	model          *genai.GenerativeModel
+	session        *genai.ChatSession
+	isNew          bool
+	modelName      string
+	EmbeddingModel string
+	EmbeddingDim   int
 }
 
 func applySafetySettings(model *genai.GenerativeModel) {

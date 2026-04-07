@@ -10,7 +10,10 @@ import (
 )
 
 func (g *GeminiProvider) GetEmbedding(ctx context.Context, text string) ([]float32, error) {
-	modelName := os.Getenv("EMBEDDING_MODEL")
+	modelName := g.EmbeddingModel
+	if modelName == "" {
+		modelName = os.Getenv("EMBEDDING_MODEL")
+	}
 	if modelName == "" {
 		modelName = "text-embedding-004" // gemini-embedding-001 is older, text-embedding-004 is recommended, but let's default to text-embedding-004 for newer projects or use what they have.
 	}
@@ -26,7 +29,10 @@ func (g *GeminiProvider) GetEmbedding(ctx context.Context, text string) ([]float
 }
 
 func (g *GeminiProvider) GetEmbeddingsBatch(ctx context.Context, texts []string) ([][]float32, error) {
-	modelName := os.Getenv("EMBEDDING_MODEL")
+	modelName := g.EmbeddingModel
+	if modelName == "" {
+		modelName = os.Getenv("EMBEDDING_MODEL")
+	}
 	if modelName == "" {
 		modelName = "text-embedding-004"
 	}
@@ -52,7 +58,10 @@ func (g *GeminiProvider) GetEmbeddingsBatch(ctx context.Context, texts []string)
 	return out, nil
 }
 
-func GetEmbeddingDimension() int {
+func (g *GeminiProvider) GetEmbeddingDimension() int {
+	if g.EmbeddingDim > 0 {
+		return g.EmbeddingDim
+	}
 	dimStr := os.Getenv("EMBEDDING_DIM")
 	if dimStr != "" {
 		dim, err := strconv.Atoi(dimStr)
@@ -60,7 +69,10 @@ func GetEmbeddingDimension() int {
 			return dim
 		}
 	}
-	model := os.Getenv("EMBEDDING_MODEL")
+	model := g.EmbeddingModel
+	if model == "" {
+		model = os.Getenv("EMBEDDING_MODEL")
+	}
 	if model == "text-embedding-004" {
 		return 768
 	}

@@ -36,6 +36,8 @@ var contextServerCmd = &cobra.Command{
 			EnableProjector:   enableProjector,
 			ProjectorBatch:    appCfg.Server.ProjectorBatch,
 			ModerationEnabled: appCfg.Server.ModerationEnabled,
+			EmbeddingModel:    appCfg.Embedding.Model,
+			EmbeddingDim:      appCfg.Embedding.Dimensions,
 		}
 
 		// Parse projector interval from config
