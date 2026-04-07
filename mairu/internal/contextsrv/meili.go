@@ -8,17 +8,32 @@ import (
 	"time"
 
 	"github.com/meilisearch/meilisearch-go"
+	"mairu/internal/llm"
 )
+
+// embeddingCacheSize is the number of query embeddings kept in the LRU cache.
+// Each entry holds a float32 slice (~12 KB for 3072-dim models), so 256
+// entries cost at most ~3 MB.
+const embeddingCacheSize = 256
+
+// embeddingCacher is the minimal interface MeiliIndexer needs from the LRU
+// cache, making it easy to swap in a no-op in tests.
+type embeddingCacher interface {
+	Get(key string) ([]float32, bool)
+	Put(key string, value []float32)
+}
 
 type MeiliIndexer struct {
 	client   meilisearch.ServiceManager
 	embedder Embedder
+	cache    embeddingCacher
 }
 
 func NewMeiliIndexer(host, apiKey string, embedder Embedder) *MeiliIndexer {
 	return &MeiliIndexer{
 		client:   meilisearch.New(host, meilisearch.WithAPIKey(apiKey)),
 		embedder: embedder,
+		cache:    llm.NewEmbeddingCache(embeddingCacheSize),
 	}
 }
 
@@ -110,8 +125,12 @@ func (m *MeiliIndexer) Search(opts SearchOptions) (map[string]any, error) {
 
 	var queryEmbedding []float32
 	if strings.TrimSpace(opts.Query) != "" && m.embedder != nil {
-		// Embedding failure is non-fatal: we degrade gracefully to keyword-only search.
-		if emb, err := m.embedder.GetEmbedding(context.Background(), opts.Query); err == nil {
+		q := strings.TrimSpace(opts.Query)
+		if cached, ok := m.cache.Get(q); ok {
+			queryEmbedding = cached
+		} else if emb, err := m.embedder.GetEmbedding(context.Background(), q); err == nil {
+			// Embedding failure is non-fatal: degrade gracefully to keyword-only.
+			m.cache.Put(q, emb)
 			queryEmbedding = emb
 		}
 	}
