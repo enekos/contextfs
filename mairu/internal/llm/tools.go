@@ -236,5 +236,6 @@ func (g *GeminiProvider) SetupTools() {
 
 	g.model.Tools = []*genai.Tool{
 		{FunctionDeclarations: tools},
+		{CodeExecution: &genai.CodeExecution{}},
 	}
 }
