@@ -99,6 +99,8 @@ func TestAnalyzeDiffE2E(t *testing.T) {
 	os.WriteFile("src/bar.go", []byte("package src"), 0644)
 	os.WriteFile("src/baz.go", []byte("package src"), 0644)
 
+	exec.Command("git", "config", "user.email", "test@test.com").Run()
+	exec.Command("git", "config", "user.name", "Test").Run()
 	exec.Command("git", "add", ".").Run()
 	exec.Command("git", "commit", "-m", "init").Run()
 
