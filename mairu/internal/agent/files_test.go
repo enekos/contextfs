@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"mairu/internal/db"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +16,7 @@ func TestFilesTools(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	agent := &Agent{
-		db: db.NewTestDB(tempDir),
+		root: tempDir,
 	}
 
 	t.Run("Write and Read File", func(t *testing.T) {

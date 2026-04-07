@@ -18,7 +18,7 @@ import (
 
 // fallbackSearch implements a concurrent, gitignore-aware search in Go.
 func (a *Agent) fallbackSearch(query string) (string, error) {
-	root := a.db.Root()
+	root := a.root
 
 	var ignorer *ignore.GitIgnore
 	if gi, err := ignore.CompileIgnoreFile(filepath.Join(root, ".gitignore")); err == nil {

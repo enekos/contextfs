@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"mairu/internal/db"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,7 +14,7 @@ func TestMultiEdit(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	agent := &Agent{
-		db: db.NewTestDB(tempDir),
+		root: tempDir,
 	}
 
 	filePath := "test_edit.txt"

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"mairu/internal/db"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,7 +9,7 @@ import (
 
 func TestRunBash(t *testing.T) {
 	agent := &Agent{
-		db: db.NewTestDB("."),
+		root: ".",
 	}
 
 	t.Run("basic command", func(t *testing.T) {

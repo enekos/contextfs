@@ -12,7 +12,7 @@ import (
 
 // ReadFile reads the full content of a file, adding line numbers.
 func (a *Agent) ReadFile(filePath string) (string, error) {
-	fullPath := filepath.Join(a.db.Root(), filePath)
+	fullPath := filepath.Join(a.root, filePath)
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file %s: %w", filePath, err)
@@ -29,7 +29,7 @@ func (a *Agent) ReadFile(filePath string) (string, error) {
 
 // WriteFile overwrites a file completely.
 func (a *Agent) WriteFile(filePath string, content string) (string, error) {
-	fullPath := filepath.Join(a.db.Root(), filePath)
+	fullPath := filepath.Join(a.root, filePath)
 
 	// Create directory if it doesn't exist
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
@@ -73,7 +73,7 @@ func (a *Agent) WriteFile(filePath string, content string) (string, error) {
 
 // FindFiles uses glob pattern to find files.
 func (a *Agent) FindFiles(pattern string) (string, error) {
-	fs := os.DirFS(a.db.Root())
+	fs := os.DirFS(a.root)
 	matches, err := doublestar.Glob(fs, pattern)
 	if err != nil {
 		return "", fmt.Errorf("failed to search pattern %s: %w", pattern, err)
@@ -90,7 +90,7 @@ func (a *Agent) FindFiles(pattern string) (string, error) {
 func (a *Agent) SearchCodebase(query string) (string, error) {
 	// Let's try ripgrep first as it's much faster
 	cmd := exec.Command("rg", "-n", query)
-	cmd.Dir = a.db.Root()
+	cmd.Dir = a.root
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {

@@ -6,12 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"mairu/internal/db"
+	"mairu/internal/contextsrv"
 )
 
 // SurgicalRead extracts specific lines from a file, saving massive amounts of tokens.
-func (a *Agent) SurgicalRead(loc db.SymbolLocation) (string, error) {
-	fullPath := filepath.Join(a.db.Root(), loc.FilePath)
+func (a *Agent) SurgicalRead(loc contextsrv.SymbolLocation) (string, error) {
+	fullPath := filepath.Join(a.root, loc.FilePath)
 
 	file, err := os.Open(fullPath)
 	if err != nil {

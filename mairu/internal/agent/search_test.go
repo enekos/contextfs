@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"mairu/internal/db"
 )
 
 func TestFallbackSearch(t *testing.T) {
@@ -28,7 +27,7 @@ func TestFallbackSearch(t *testing.T) {
 	os.WriteFile(filepath.Join(tmpDir, "binary.bin"), binData, 0644)
 
 	a := &Agent{
-		db: db.NewTestDB(tmpDir),
+		root: tmpDir,
 	}
 
 	t.Run("literal search", func(t *testing.T) {

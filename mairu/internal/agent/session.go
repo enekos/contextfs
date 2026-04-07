@@ -47,7 +47,7 @@ func ValidateSessionName(sessionName string) error {
 }
 
 func (a *Agent) sessionFilePath(sessionName string) (string, error) {
-	return SessionFilePath(a.db.Root(), sessionName)
+	return SessionFilePath(a.root, sessionName)
 }
 
 func SessionFilePath(projectRoot, sessionName string) (string, error) {
@@ -58,7 +58,7 @@ func SessionFilePath(projectRoot, sessionName string) (string, error) {
 }
 
 func (a *Agent) ListSessions() ([]string, error) {
-	return ListSessions(a.db.Root())
+	return ListSessions(a.root)
 }
 
 func ListSessions(projectRoot string) ([]string, error) {
@@ -172,7 +172,7 @@ func (a *Agent) SaveSession(sessionName string) error {
 	if strings.TrimSpace(sessionName) == "" {
 		sessionName = "default"
 	}
-	if _, err := ensureSessionsDir(a.db.Root()); err != nil {
+	if _, err := ensureSessionsDir(a.root); err != nil {
 		return err
 	}
 
@@ -296,7 +296,7 @@ func (a *Agent) ResetSession() {
 }
 
 func (a *Agent) LoadSavedSessionMessages(sessionName string) ([]SavedMessage, error) {
-	return LoadSavedSessionMessages(a.db.Root(), sessionName)
+	return LoadSavedSessionMessages(a.root, sessionName)
 }
 
 func LoadSavedSessionMessages(projectRoot, sessionName string) ([]SavedMessage, error) {

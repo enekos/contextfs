@@ -75,7 +75,7 @@ func (a *Agent) runBashOnce(ctx context.Context, command string, timeoutMs int, 
 	defer cancel()
 
 	cmd := exec.CommandContext(cmdCtx, "bash", "-c", command)
-	cmd.Dir = a.db.Root() // Run in the project root
+	cmd.Dir = a.root // Run in the project root
 	// Make it more resilient by faking CI
 	cmd.Env = append(cmd.Environ(), "CI=true", "DEBIAN_FRONTEND=noninteractive", "NONINTERACTIVE=true", "FORCE_COLOR=0")
 	if runtime.GOOS != "windows" {

@@ -13,15 +13,16 @@ import (
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/iterator"
 	"mairu/crawler"
-	"mairu/internal/db"
+	"mairu/internal/contextsrv"
 	"mairu/internal/llm"
 	"mairu/internal/prompts"
 )
 
 type Agent struct {
-	llm    *llm.GeminiProvider
-	db     *db.DB
-	apiKey string
+	llm     *llm.GeminiProvider
+	indexer *contextsrv.MeiliIndexer
+	root    string
+	apiKey  string
 
 	mu           sync.Mutex
 	cancel       context.CancelFunc
@@ -34,17 +35,18 @@ type Config struct {
 }
 
 func New(projectRoot string, apiKey string, cfg ...Config) (*Agent, error) {
-	var dbCfg db.Config
+	meiliURL := os.Getenv("MEILI_URL")
+	meiliAPIKey := os.Getenv("MEILI_API_KEY")
 	if len(cfg) > 0 {
-		dbCfg = db.Config{
-			MeiliURL:    cfg[0].MeiliURL,
-			MeiliAPIKey: cfg[0].MeiliAPIKey,
+		if cfg[0].MeiliURL != "" {
+			meiliURL = cfg[0].MeiliURL
+		}
+		if cfg[0].MeiliAPIKey != "" {
+			meiliAPIKey = cfg[0].MeiliAPIKey
 		}
 	}
-
-	database, err := db.InitDB(projectRoot, dbCfg)
-	if err != nil {
-		return nil, err
+	if meiliURL == "" {
+		meiliURL = "http://localhost:7700"
 	}
 
 	llmProvider, err := llm.NewGeminiProvider(context.Background(), apiKey)
@@ -52,10 +54,13 @@ func New(projectRoot string, apiKey string, cfg ...Config) (*Agent, error) {
 		return nil, err
 	}
 
+	indexer := contextsrv.NewMeiliIndexer(meiliURL, meiliAPIKey, llmProvider)
+
 	return &Agent{
-		llm:    llmProvider,
-		db:     database,
-		apiKey: apiKey,
+		llm:     llmProvider,
+		indexer: indexer,
+		root:    projectRoot,
+		apiKey:  apiKey,
 	}, nil
 }
 
@@ -86,7 +91,7 @@ func (a *Agent) ApproveAction(approved bool) {
 }
 
 func (a *Agent) GetRoot() string {
-	return a.db.Root()
+	return a.root
 }
 
 func (a *Agent) SetModel(modelName string) {
@@ -279,7 +284,7 @@ func (a *Agent) handleIterator(ctx context.Context, iter *genai.GenerateContentR
 }
 
 func (a *Agent) searchBySymbolName(symName string, outChan chan<- AgentEvent) map[string]any {
-	locations, err := a.db.FindSymbol(symName)
+	locations, err := a.indexer.FindSymbol(symName)
 	if err != nil || len(locations) == 0 {
 		return map[string]any{"error": fmt.Sprintf("symbol '%s' not found", symName)}
 	}
@@ -494,7 +499,7 @@ func (a *Agent) executeToolCall(ctx context.Context, funcCall genai.FunctionCall
 		task, _ := funcCall.Args["task_description"].(string)
 		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🤖 Delegating task: %s", task)}
 
-		subAgent, err := New(a.db.Root(), a.apiKey)
+		subAgent, err := New(a.root, a.apiKey)
 		if err != nil {
 			result = map[string]any{"error": "failed to spawn sub-agent: " + err.Error()}
 		} else {
@@ -607,7 +612,6 @@ func (a *Agent) Run(prompt string) (string, error) {
 }
 
 func (a *Agent) Close() {
-	a.db.Close()
 	a.llm.Close()
 }
 

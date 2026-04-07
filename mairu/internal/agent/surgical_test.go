@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"mairu/internal/db"
+	"mairu/internal/contextsrv"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +16,7 @@ func TestSurgicalRead(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	agent := &Agent{
-		db: db.NewTestDB(tempDir),
+		root: tempDir,
 	}
 
 	content := "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\n"
@@ -28,7 +28,7 @@ func TestSurgicalRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loc := db.SymbolLocation{
+	loc := contextsrv.SymbolLocation{
 		FilePath: filePath,
 		Name:     "TestFunc",
 		Kind:     "function",

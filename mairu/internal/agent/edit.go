@@ -17,7 +17,7 @@ type EditBlock struct {
 
 // MultiEdit safely applies multiple block replacements to a file.
 func (a *Agent) MultiEdit(filePath string, edits []EditBlock) (string, error) {
-	fullPath := fmt.Sprintf("%s/%s", a.db.Root(), filePath)
+	fullPath := fmt.Sprintf("%s/%s", a.root, filePath)
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		return "", err
@@ -75,7 +75,7 @@ func (a *Agent) MultiEdit(filePath string, edits []EditBlock) (string, error) {
 
 // ReplaceBlock safely replaces an exact string block in a file.
 func (a *Agent) ReplaceBlock(filePath string, oldString, newString string) (string, error) {
-	fullPath := filepath.Join(a.db.Root(), filePath)
+	fullPath := filepath.Join(a.root, filePath)
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		return "", err
