@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"mairu/internal/llm"
@@ -22,32 +21,8 @@ type Config struct {
 	EnableProjector   bool
 	ProjectorEvery    time.Duration
 	ProjectorBatch    int
+	ReadTimeout       time.Duration
 	ModerationEnabled bool
-}
-
-// LoadConfig creates a Config with defaults and environment variables overrides.
-func LoadConfig() Config {
-	cfg := Config{
-		Port:              8788,
-		SQLiteDSN:         os.Getenv("CONTEXT_SERVER_SQLITE_DSN"),
-		MeiliURL:          os.Getenv("MEILI_URL"),
-		MeiliAPIKey:       os.Getenv("MEILI_API_KEY"),
-		GeminiAPIKey:      os.Getenv("GEMINI_API_KEY"),
-		AuthToken:         os.Getenv("CONTEXT_AUTH_TOKEN"),
-		ProjectorEvery:    3 * time.Second,
-		ProjectorBatch:    50,
-		ModerationEnabled: os.Getenv("CONTEXT_ENABLE_MODERATION") == "true",
-	}
-	if cfg.SQLiteDSN == "" {
-		cfg.SQLiteDSN = "file:mairu.db?cache=shared&mode=rwc"
-	}
-	if cfg.MeiliURL == "" {
-		cfg.MeiliURL = "http://localhost:7700"
-	}
-	if cfg.MeiliAPIKey == "" {
-		cfg.MeiliAPIKey = "contextfs-dev-key"
-	}
-	return cfg
 }
 
 // App represents the Context Server application instance.
@@ -97,7 +72,7 @@ func NewApp(cfg Config) (*App, error) {
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
 		Handler:           handler,
-		ReadHeaderTimeout: 10 * time.Second,
+		ReadHeaderTimeout: cfg.ReadTimeout,
 	}
 
 	var projector *Projector

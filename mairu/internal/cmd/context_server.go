@@ -24,12 +24,37 @@ var contextServerCmd = &cobra.Command{
 		meiliURL, _ := cmd.Flags().GetString("meili-url")
 		meiliAPIKey, _ := cmd.Flags().GetString("meili-api-key")
 
-		if sqliteDSN == "" {
-			sqliteDSN = os.Getenv("CONTEXT_SERVER_SQLITE_DSN")
+		appCfg := GetConfig()
+
+		cfg := contextsrv.Config{
+			Port:              appCfg.Server.Port,
+			SQLiteDSN:         appCfg.Server.SQLiteDSN,
+			MeiliURL:          appCfg.API.MeiliURL,
+			MeiliAPIKey:       appCfg.API.MeiliAPIKey,
+			GeminiAPIKey:      appCfg.API.GeminiAPIKey,
+			AuthToken:         appCfg.Server.AuthToken,
+			EnableProjector:   enableProjector,
+			ProjectorBatch:    appCfg.Server.ProjectorBatch,
+			ModerationEnabled: appCfg.Server.ModerationEnabled,
 		}
 
-		cfg := contextsrv.LoadConfig()
-		cfg.Port = port
+		// Parse projector interval from config
+		if d, err := time.ParseDuration(appCfg.Server.ProjectorInterval); err == nil {
+			cfg.ProjectorEvery = d
+		} else {
+			cfg.ProjectorEvery = 3 * time.Second
+		}
+		// Parse read timeout from config
+		if d, err := time.ParseDuration(appCfg.Server.ReadTimeout); err == nil {
+			cfg.ReadTimeout = d
+		} else {
+			cfg.ReadTimeout = 10 * time.Second
+		}
+
+		// CLI flag overrides
+		if cmd.Flags().Changed("port") {
+			cfg.Port = port
+		}
 		if sqliteDSN != "" {
 			cfg.SQLiteDSN = sqliteDSN
 		}
@@ -42,7 +67,6 @@ var contextServerCmd = &cobra.Command{
 		if authToken != "" {
 			cfg.AuthToken = authToken
 		}
-		cfg.EnableProjector = enableProjector
 
 		logger.Init(logger.Config{
 			Level:      "info",
@@ -65,7 +89,7 @@ var contextServerCmd = &cobra.Command{
 			_ = app.Shutdown(shutdownCtx)
 		}()
 
-		slog.Info("Starting context server", "port", port)
+		slog.Info("Starting context server", "port", cfg.Port)
 		if err := app.Start(ctx); err != nil && err.Error() != "http: Server closed" {
 			slog.Error("context server exited with error", "error", err)
 			os.Exit(1)
