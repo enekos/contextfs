@@ -172,15 +172,15 @@ func (r *SQLiteRepository) RecordRetrievals(ctx context.Context, ids []string) e
 		UPDATE memories
 		SET
 			retrieval_count    = retrieval_count + 1,
-			last_retrieved_at  = $2,
+			last_retrieved_at  = ?2,
 			importance = CASE
-				WHEN importance > $3
-				 AND (retrieval_count + 1 - feedback_count * $4) > 0
-				 AND (retrieval_count + 1 - feedback_count * $4) % $4 = 0
-				THEN MAX(1, CAST(importance + $5 * ($3 - importance) + 0.5 AS INT))
+				WHEN importance > ?3
+				 AND (retrieval_count + 1 - feedback_count * ?4) > 0
+				 AND (retrieval_count + 1 - feedback_count * ?4) % ?4 = 0
+				THEN MAX(1, CAST(importance + ?5 * (?3 - importance) + 0.5 AS INT))
 				ELSE importance
 			END
-		WHERE id = $1`
+		WHERE id = ?1`
 
 	for _, id := range ids {
 		if _, err := r.db.ExecContext(ctx, query,

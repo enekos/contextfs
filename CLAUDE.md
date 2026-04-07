@@ -140,32 +140,22 @@ Context nodes store a materialized `ancestors` array. Tree operations:
 
 Before writing, `llmRouter` does a vector-only search. If cosine similarity ≥ 0.75, an LLM decides whether to CREATE, UPDATE, or SKIP the new entry.
 
-## Environment Variables
+## Configuration
 
-See `.env.example` for the full list. Required:
+Mairu relies on TOML configuration files instead of massive `.env` files.
+A 5-tier configuration system determines settings: defaults -> user -> project -> env vars -> CLI flags.
 
-```
-MEILI_URL=http://localhost:7700
-GEMINI_API_KEY=
-EMBEDDING_MODEL=gemini-embedding-001
-EMBEDDING_DIM=3072
-```
+View the fully resolved config layout:
 
-Optional:
-```
-MEILI_API_KEY=               # for secured Meilisearch instances
-ALLOW_ZERO_EMBEDDINGS=false  # set true for local testing without Gemini
-DASHBOARD_API_PORT=8787
+```bash
+mairu-agent config list
+mairu-agent config get daemon.concurrency
 ```
 
-### Search Fine-Tuning
-
-These control query-level defaults (overridable per-search via API params):
-
-```
-SYNONYMS=auth,authentication,authn;db,database;k8s,kubernetes
-RECENCY_SCALE=30d            # Recency half-life (e.g., 7d, 30d, 90d)
-RECENCY_DECAY=0.5            # Decay factor at scale distance
+You can initialize a project config or check health settings via:
+```bash
+mairu-agent init --defaults
+mairu-agent doctor
 ```
 
 # Agent Integration Instructions

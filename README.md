@@ -4,7 +4,7 @@
 
 Unified monorepo for:
 
-- the **Mairu coding agent** (Go, TUI + web)
+- the **Mairu coding agent** (Go, CLI, TUI + web)
 - the **central context server** (Go)
 - the **unified web UI dashboard** (Svelte)
 
@@ -37,20 +37,37 @@ The easiest way to set up Mairu locally (without Docker) is using the bootstrap 
 ./bootstrap.sh
 ```
 
-If you prefer to set up manually:
+Then initialize the configuration and set your API key:
 
 ```bash
-cp .env.example .env
-bun install --cwd mairu/ui
-make setup-no-docker
+make mairu-build
+./mairu/bin/mairu-agent setup
+./mairu/bin/mairu-agent init --defaults
 ```
 
-Then run:
+Start the services:
 
 ```bash
 make dashboard        # Context server + unified web dashboard
 # or
 make mairu-web        # Mairu agent web UI
+```
+
+## Configuration
+
+Mairu uses a five-tier TOML configuration cascade:
+1. Hardcoded defaults
+2. User config (`~/.config/mairu/config.toml`)
+3. Project config (`.mairu.toml` in your project root or `.git` parent)
+4. Environment variables (`MAIRU_` prefix)
+5. CLI flags
+
+Manage your config using the CLI:
+```bash
+./mairu/bin/mairu-agent config list
+./mairu/bin/mairu-agent config set api.gemini_api_key "your-key"
+./mairu/bin/mairu-agent init            # interactive project setup
+./mairu/bin/mairu-agent doctor          # check system health
 ```
 
 ## Core Commands
@@ -79,40 +96,23 @@ go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 If `golangci-lint` is not installed, the tooling falls back to `go vet`.
 
-Useful commands:
-
-```bash
-make fmt-go
-make fmt-go-check
-make test-go-race
-make test-go-cover
-make check-go
-make check-go-ci
-```
-
 Optional pre-commit hook:
 
 ```bash
 make install-hooks
 ```
 
-## Local Meilisearch (No Docker)
-
-```bash
-make meili-up
-make meili-status
-make meili-down
-make meili-clean
-```
-
-Script path: `mairu/scripts/meili-local.sh`.
-
 ## Go CLI Commands (Mairu Agent)
 
-With the latest features, the Go CLI implements the ContextFS API fully via the `mairu-agent` binary:
+With the latest features, the Go CLI implements the ContextFS API fully via the `mairu-agent` binary.
+Output defaults to `table`, but you can use `-o json` or `-o plain` for scripting.
 
 ```bash
 make mairu-build
+
+# Configuration & Health
+./mairu/bin/mairu-agent config list
+./mairu/bin/mairu-agent doctor
 
 # Context Server APIs
 ./mairu/bin/mairu-agent memory search "auth token" -P my-project -k 5
@@ -133,9 +133,10 @@ make mairu-build
 ./mairu/bin/mairu-agent context-server -p 8788
 ```
 
-## Environment
+## Environment Variables (Legacy Support)
 
-Minimal `.env`:
+Mairu supports older environment variables, but `.mairu.toml` or `~/.config/mairu/config.toml` is preferred.
+See `mairu config list` for the complete list of settings.
 
 ```env
 MEILI_URL=http://localhost:7700
@@ -143,8 +144,6 @@ MEILI_API_KEY=mairu-dev-key
 GEMINI_API_KEY=your_gemini_api_key
 EMBEDDING_MODEL=gemini-embedding-001
 EMBEDDING_DIM=3072
-ALLOW_ZERO_EMBEDDINGS=false
-DASHBOARD_API_PORT=8787
 ```
 
 ## License
