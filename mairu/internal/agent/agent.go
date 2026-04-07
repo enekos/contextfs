@@ -73,12 +73,16 @@ func (a *Agent) Interrupt() {
 }
 
 func (a *Agent) ApproveAction(approved bool) {
+	// Take ownership of the channel under the lock, then send outside it.
+	// Sending inside the lock would deadlock if the channel were unbuffered;
+	// nil-ing first prevents double-sends from concurrent callers.
 	a.mu.Lock()
-	if a.approvalChan != nil {
-		a.approvalChan <- approved
-		a.approvalChan = nil
-	}
+	ch := a.approvalChan
+	a.approvalChan = nil
 	a.mu.Unlock()
+	if ch != nil {
+		ch <- approved
+	}
 }
 
 func (a *Agent) GetRoot() string {
@@ -372,8 +376,13 @@ func (a *Agent) executeToolCall(ctx context.Context, funcCall genai.FunctionCall
 		}
 
 		if IsDangerousCommand(command) {
+			// Create the approval channel and capture a local reference before
+			// emitting the event.  ApproveAction may be called (and the struct
+			// field nil'd) before the select below is entered, so we select on
+			// the local copy to avoid a receive on a nil channel.
+			approvalCh := make(chan bool, 1)
 			a.mu.Lock()
-			a.approvalChan = make(chan bool, 1)
+			a.approvalChan = approvalCh
 			a.mu.Unlock()
 
 			outChan <- AgentEvent{
@@ -386,7 +395,7 @@ func (a *Agent) executeToolCall(ctx context.Context, funcCall genai.FunctionCall
 			select {
 			case <-ctx.Done():
 				return map[string]any{"error": "tool execution cancelled"}
-			case approved = <-a.approvalChan:
+			case approved = <-approvalCh:
 			}
 
 			if !approved {

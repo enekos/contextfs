@@ -195,10 +195,12 @@ func (d *Daemon) ProcessAllFiles(ctx context.Context) error {
 
 func (d *Daemon) HandleFileDelete(ctx context.Context, filePath string) error {
 	abs := filepath.Clean(filePath)
+	d.mu.Lock()
 	delete(d.pendingFiles, abs)
 	delete(d.fileFingerprints, abs)
 	delete(d.fileContentHashes, abs)
 	delete(d.nodePayloadHashes, abs)
+	d.mu.Unlock()
 	return d.manager.DeleteContextNode(ctx, d.fileToURI(abs))
 }
 
