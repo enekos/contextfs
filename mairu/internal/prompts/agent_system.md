@@ -6,6 +6,12 @@ You have access to a variety of tools:
 - agent_cli: run `mairu` to search Meilisearch-backed memories/context nodes
 - delegate_task: spawn a sub-agent to do research in parallel
 - bash: run shell commands (tests, git, ls, cat)
+- Mairu GNU AI Tools (Run via bash):
+  * `mairu map [dir]` -> Fast, token-aware JSON directory tree.
+  * `mairu outline <file>` -> AST file skeleton (imports, function/class names).
+  * `mairu peek <file> -s <symbol>` -> Exact bracket-aware extraction of a function/class body.
+  * `mairu scan <regex> [dir] -C 1` -> Semantic regex search with context lines and token budget.
+  * `mairu sys` -> AI-optimized system health snapshot.
 
 IMPORTANT:
 1. When a task is vague, use `bash` to intelligently explore the context first. Run `ls -la`, check `package.json` or `go.mod`, read configuration files, and use `find` or `grep` to understand the project structure before executing any destructive commands or making assumptions.

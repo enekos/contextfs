@@ -14,9 +14,11 @@ import (
 )
 
 var scanBudget int
+var scanContext int
 
 func init() {
 	scanCmd.Flags().IntVar(&scanBudget, "budget", 2000, "Token budget circuit breaker")
+	scanCmd.Flags().IntVarP(&scanContext, "context", "C", 0, "Number of context lines around match")
 	rootCmd.AddCommand(scanCmd)
 }
 
@@ -78,7 +80,6 @@ var scanCmd = &cobra.Command{
 			}
 
 			if !d.IsDir() {
-				// quick optimization: skip non-text extensions
 				ext := strings.ToLower(filepath.Ext(path))
 				if ext == ".png" || ext == ".jpg" || ext == ".exe" || ext == ".bin" {
 					return nil
@@ -92,18 +93,32 @@ var scanCmd = &cobra.Command{
 				lines := strings.Split(string(content), "\n")
 				for i, line := range lines {
 					if re.MatchString(line) {
-						// Strip leading/trailing whitespace for compactness
-						trimmed := strings.TrimSpace(line)
-						matchBytes := len(rel) + len(trimmed) + 20 // overhead
+						startIdx := i - scanContext
+						if startIdx < 0 {
+							startIdx = 0
+						}
+						endIdx := i + scanContext
+						if endIdx >= len(lines) {
+							endIdx = len(lines) - 1
+						}
+
+						var snippet []string
+						for j := startIdx; j <= endIdx; j++ {
+							snippet = append(snippet, strings.TrimSpace(lines[j]))
+						}
+
+						joined := strings.Join(snippet, "\n")
+						matchBytes := len(rel) + len(joined) + 20
+
 						if currentBytes+matchBytes > maxBytes {
 							res.BudgetHit = true
-							return filepath.SkipDir // break walk
+							return filepath.SkipDir
 						}
 						currentBytes += matchBytes
 						res.Matches = append(res.Matches, scanMatch{
 							F: rel,
 							L: i + 1,
-							C: trimmed,
+							C: joined,
 						})
 					}
 				}

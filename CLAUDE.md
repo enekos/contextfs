@@ -212,3 +212,11 @@ mairu node ls "contextfs://my-project/backend" -P my-project
 ```
 
 Agents should proactively search memories and context nodes when beginning a task, and store important discoveries or user preferences as they work.
+
+### AI-Optimized GNU Tools
+Agents are encouraged to use the `mairu` binary for token-dense, strictly parsable exploration:
+- `mairu map [dir] -d 2` -> Fast, `.gitignore` aware, token-counted directory tree
+- `mairu outline <file>` -> Emits imports and logic symbols (classes, functions) via AST
+- `mairu peek <file> -s <symbol>` -> Smart, bracket-aware symbol extraction (no `sed`/`head` needed!)
+- `mairu scan <regex> [dir] -C 1` -> Token-budgeted regex search preventing context window blowouts
+- `mairu sys` -> Quick system status and memory check

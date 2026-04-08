@@ -7,12 +7,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/spf13/cobra"
 )
 
+var mapDepth int
+
 func init() {
+	mapCmd.Flags().IntVarP(&mapDepth, "depth", "d", 0, "Max depth to map (0 = unlimited)")
 	rootCmd.AddCommand(mapCmd)
 	rootCmd.AddCommand(sysCmd)
 }
@@ -47,6 +51,18 @@ var mapCmd = &cobra.Command{
 			}
 
 			rel, _ := filepath.Rel(dir, path)
+
+			// Depth check
+			if mapDepth > 0 {
+				depth := len(strings.Split(rel, string(os.PathSeparator)))
+				if depth > mapDepth {
+					if d.IsDir() {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+			}
+
 			if rel == ".git" {
 				return filepath.SkipDir
 			}
@@ -86,6 +102,7 @@ type sysEntry struct {
 	Arch   string `json:"arch"`
 	NumCPU int    `json:"num_cpu"`
 	MemMB  uint64 `json:"mem_mb"`
+	// Ports could be implemented later if needed
 }
 
 var sysCmd = &cobra.Command{
@@ -106,11 +123,4 @@ var sysCmd = &cobra.Command{
 		out, _ := json.Marshal(info)
 		fmt.Println(string(out))
 	},
-}
-
-func getActivePorts() []string {
-	var ports []string
-	// implementation... we can parse lsof or just leave ports empty for now
-	// to avoid complex OS-specific logic, let's leave it simple or do a quick wrapper.
-	return ports
 }
