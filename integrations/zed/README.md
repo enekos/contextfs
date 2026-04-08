@@ -9,7 +9,7 @@ Since this extension is in development, you can install it as a local dev extens
 1. Open Zed.
 2. Run the `zed: extensions` command from the command palette.
 3. Click the "Install Dev Extension" button in the Extensions view.
-4. Select the `mairu-zed-extension` folder.
+4. Select the `integrations/zed` folder.
 
 ## Configuration
 

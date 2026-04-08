@@ -4,7 +4,7 @@ version = "0.1.0"
 schema_version = 1
 authors = ["Eneko Sarasola"]
 description = "A dynamic context and memory storage system for coding agents"
-repository = "https://github.com/enekosarasola/mairu"
+repository = "https://github.com/enekos/mairu"
 
 [context_servers.mairu]
 name = "Mairu Agent"
