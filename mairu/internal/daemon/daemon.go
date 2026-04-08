@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"mairu/internal/ast"
+	"mairu/internal/enricher"
 )
 
 const (
@@ -54,6 +55,7 @@ type Options struct {
 	ProcessingDebounceMs int
 	Concurrency          int
 	MarkdownSummarizer   MarkdownSummarizer
+	EnricherPipeline     *enricher.Pipeline
 }
 
 type cacheEntry struct {
@@ -85,8 +87,9 @@ type Daemon struct {
 	fileContentHashes map[string]string
 	nodePayloadHashes map[string]string
 
-	describers   []ast.LanguageDescriber
-	mdSummarizer MarkdownSummarizer
+	describers       []ast.LanguageDescriber
+	mdSummarizer     MarkdownSummarizer
+	enricherPipeline *enricher.Pipeline
 }
 
 // New creates a new Daemon instance that watches a specified directory.
@@ -118,7 +121,8 @@ func New(manager Manager, project, watchDir string, opts Options) *Daemon {
 			ast.PythonDescriber{},
 			ast.MarkdownDescriber{},
 		},
-		mdSummarizer: opts.MarkdownSummarizer,
+		mdSummarizer:     opts.MarkdownSummarizer,
+		enricherPipeline: opts.EnricherPipeline,
 	}
 }
 
@@ -262,6 +266,19 @@ func (d *Daemon) ProcessFile(ctx context.Context, filePath string) error {
 		"source_hash": contentHash,
 		"logic_graph": summary.LogicGraph,
 	}
+
+	// Run enricher pipeline if configured
+	if d.enricherPipeline != nil {
+		rel, _ := filepath.Rel(d.watchDir, abs)
+		fc := &enricher.FileContext{
+			FilePath: abs,
+			RelPath:  filepath.ToSlash(rel),
+			WatchDir: d.watchDir,
+			Metadata: metadata,
+		}
+		d.enricherPipeline.Run(ctx, fc)
+	}
+
 	payloadHash := hashText(summary.Abstract + "\n" + summary.Overview + "\n" + summary.Content + "\n" + mustJSON(metadata))
 
 	d.mu.Lock()

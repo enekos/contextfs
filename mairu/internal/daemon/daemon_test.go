@@ -8,7 +8,18 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"mairu/internal/enricher"
 )
+
+type stubDaemonEnricher struct {
+	enrichFn func(ctx context.Context, fc *enricher.FileContext) error
+}
+
+func (s *stubDaemonEnricher) Name() string { return "stub" }
+func (s *stubDaemonEnricher) Enrich(ctx context.Context, fc *enricher.FileContext) error {
+	return s.enrichFn(ctx, fc)
+}
 
 type upsertCall struct {
 	URI      string
@@ -156,5 +167,39 @@ func TestReUpsertsOnContentChange(t *testing.T) {
 	_ = d.ProcessFile(context.Background(), file)
 	if len(mgr.upserts) != 2 {
 		t.Fatalf("expected 2 upserts, got %d", len(mgr.upserts))
+	}
+}
+
+func TestProcessFileRunsEnricherPipeline(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "feature.ts")
+	src := "export function greet(name: string) { return name; }"
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr := &managerStub{}
+	enricherCalled := false
+	stub := &stubDaemonEnricher{
+		enrichFn: func(ctx context.Context, fc *enricher.FileContext) error {
+			enricherCalled = true
+			fc.Metadata["enrichment_test"] = "hello"
+			return nil
+		},
+	}
+	pipeline := enricher.NewPipeline([]enricher.Enricher{stub})
+	d := New(mgr, "proj", dir, Options{EnricherPipeline: pipeline})
+
+	if err := d.ProcessFile(context.Background(), file); err != nil {
+		t.Fatalf("process failed: %v", err)
+	}
+	if !enricherCalled {
+		t.Fatal("enricher pipeline was not called")
+	}
+	if len(mgr.upserts) != 1 {
+		t.Fatalf("expected one upsert, got %d", len(mgr.upserts))
+	}
+	if mgr.upserts[0].Metadata["enrichment_test"] != "hello" {
+		t.Fatalf("enrichment data not in metadata: %v", mgr.upserts[0].Metadata)
 	}
 }
