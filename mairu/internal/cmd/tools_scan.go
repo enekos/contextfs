@@ -34,6 +34,9 @@ func init() {
 	scanCmd.Flags().BoolVarP(&scanFilesOnly, "files-with-matches", "l", false, "Only print matching filenames")
 	scanCmd.Flags().BoolVarP(&scanHeading, "heading", "H", false, "Attempt to find nearest function/class heading above match")
 	scanCmd.Flags().StringVarP(&scanExclude, "exclude", "x", "", "Comma-separated glob patterns to exclude (e.g. vendor/*,*_test.go)")
+	scanCmd.Flags().BoolVarP(&scanGroup, "group", "g", false, "Group matches by file")
+	scanCmd.Flags().BoolVarP(&scanInvert, "invert", "v", false, "Invert match (select non-matching lines)")
+	scanCmd.Flags().StringVarP(&scanMulti, "multi", "m", "", "Additional patterns that must ALL match in the file (comma-separated, AND logic)")
 }
 
 type scanMatch struct {
@@ -163,7 +166,11 @@ var scanCmd = &cobra.Command{
 				fileHasMatch := false
 
 				for i, line := range lines {
-					if re.MatchString(line) {
+					matched := re.MatchString(line)
+					if scanInvert {
+						matched = !matched
+					}
+					if matched {
 						if scanFilesOnly {
 							if !fileHasMatch {
 								res.Files = append(res.Files, rel)

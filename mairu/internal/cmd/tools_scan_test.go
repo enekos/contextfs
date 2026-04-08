@@ -61,3 +61,22 @@ func TestScanExclude(t *testing.T) {
 		}
 	}
 }
+
+func TestScanInvert(t *testing.T) {
+	resetScanFlags()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("alpha\nbeta\ngamma"), 0644)
+
+	scanInvert = true
+	res := runScanCmd(t, "beta", dir)
+
+	// "alpha" and "gamma" should match (lines NOT containing "beta")
+	if res.Total != 2 {
+		t.Errorf("expected 2 inverted matches, got %d", res.Total)
+	}
+	for _, m := range res.Matches {
+		if m.C == "beta" {
+			t.Errorf("inverted match should not contain 'beta'")
+		}
+	}
+}
