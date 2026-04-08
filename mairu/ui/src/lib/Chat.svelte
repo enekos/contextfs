@@ -154,7 +154,7 @@
   }
 </script>
 
-<div class="w-full max-w-4xl mx-auto flex-1 flex flex-col relative bg-[#0d0d12] border border-indigo-800/50 rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(137,220,235,0.15)] transition-all max-h-[calc(100vh-140px)]">
+<div class="w-full max-w-4xl mx-auto flex-1 flex flex-col relative bg-[#0d0d12] border border-indigo-800/50  overflow-hidden shadow-[0_0_40px_rgba(137,220,235,0.15)] transition-all max-h-[calc(100vh-140px)]">
     <!-- Faded green background image -->
     <div class="absolute inset-0 pointer-events-none z-0 opacity-[0.08] mix-blend-screen" style="background-image: url('/mairu.png'); background-size: cover; background-position: center; background-repeat: no-repeat; filter: invert(1) sepia(1) hue-rotate(280deg) saturate(300%);"></div>
 
@@ -163,9 +163,9 @@
       <div class="text-[15px] font-bold tracking-wide flex items-center gap-3 text-cyan-300">
         Mairu Agent
         {#if $connectionState === "connected"}
-          <span class="w-2.5 h-2.5 rounded-full bg-pink-400 shadow-[0_0_10px_rgba(245,194,231,0.6)] animate-pulse"></span>
+          <span class="w-2.5 h-2.5  bg-pink-400 shadow-[0_0_10px_rgba(245,194,231,0.6)] animate-pulse"></span>
         {:else}
-          <span class="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]"></span>
+          <span class="w-2.5 h-2.5  bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]"></span>
         {/if}
       </div>
       <p class="text-[11px] tracking-wide text-indigo-400/90">Codebase assistant with live tool traces</p>
@@ -174,7 +174,7 @@
       <label class="text-[10px] font-bold uppercase tracking-widest text-cyan-400/80 px-1.5" for="session-select">Session</label>
       <select
         id="session-select"
-        class="bg-[#11111b] border border-indigo-800/60 rounded-lg px-3.5 py-2 text-xs font-medium text-pink-200 min-w-40 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 outline-none transition-colors"
+        class="bg-[#11111b] border border-indigo-800/60  px-3.5 py-2 text-xs font-medium text-pink-200 min-w-40 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 outline-none transition-colors"
         value={$currentSession}
         on:change={handleSessionSwitch}
         disabled={$isGenerating}
@@ -184,7 +184,7 @@
         {/each}
       </select>
       <button
-        class="p-2.5 rounded-lg border border-indigo-800/60 hover:border-cyan-400 hover:bg-indigo-800/20 hover:text-pink-200 text-cyan-400 transition-all active:scale-95 disabled:opacity-50"
+        class="p-2.5  border border-indigo-800/60 hover:border-cyan-400 hover:bg-indigo-800/20 hover:text-pink-200 text-cyan-400 transition-all active:scale-95 disabled:opacity-50"
         on:click={handleCreateSession}
         disabled={$isGenerating || creatingSession}
         title="Create session"
@@ -205,7 +205,7 @@
 
     {#each $messages as msg (msg.id)}
       <div class="flex flex-col gap-4 chat-item-inset" in:fly={{ y: 20, duration: 400 }}>
-        <div class="flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-400 px-7 py-2.5 sm:px-9 sm:py-3">
+        <div class="flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-400 px-7 py-2.5 mx-4 sm:mx-8 sm:px-9 sm:py-3">
           {#if msg.role === 'user'}
             <User size={14} class="text-cyan-300" /> You
           {:else if msg.role === 'assistant'}
@@ -218,9 +218,9 @@
         {#if msg.role === 'assistant'}
           {#if msg.toolCalls && msg.toolCalls.length > 0}
             <div class="flex flex-col gap-3 my-1">
-              <div class="px-8 sm:px-10 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Tool activity</div>
+              <div class="px-8 sm:px-10 mx-4 sm:mx-8 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Tool activity</div>
               {#each msg.toolCalls as tc}
-                <div class="flex flex-col text-xs bg-[#11111b]/30 border border-indigo-800/50 rounded-xl overflow-hidden font-mono shadow-sm transition-all hover:border-indigo-600/50">
+                <div class="flex flex-col text-xs bg-[#11111b]/30 border border-indigo-800/50 mx-4 sm:mx-8 rounded-sm overflow-hidden font-mono shadow-sm transition-all hover:border-indigo-600/50">
                   <button class="flex items-center gap-3 px-8 py-4 text-cyan-300 hover:bg-indigo-800/20 transition-colors" on:click={() => toggleTool(tc.id)}>
                     {#if expandedTools[tc.id]}
                       <ChevronDown size={14} class="shrink-0" />
@@ -256,9 +256,9 @@
           {/if}
           {#if msg.statuses && msg.statuses.length > 0}
             <div class="flex flex-col gap-2.5 my-1">
-              <div class="px-8 sm:px-10 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Progress</div>
+              <div class="px-8 sm:px-10 mx-4 sm:mx-8 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Progress</div>
               {#each msg.statuses as status}
-                <div in:slide={{ duration: 200 }} class="text-xs text-pink-300/90 bg-[#11111b]/40 rounded-xl px-8 py-3.5 flex items-start gap-4 border border-indigo-800/40 font-mono shadow-sm">
+                <div in:slide={{ duration: 200 }} class="text-xs text-pink-300/90 bg-[#11111b]/40 mx-4 sm:mx-8 rounded-sm px-8 py-3.5 flex items-start gap-4 border border-indigo-800/40 font-mono shadow-sm">
                   <Wrench size={14} class="mt-0.5 shrink-0 opacity-70" />
                   <span class="leading-relaxed">{status}</span>
                 </div>
@@ -267,14 +267,14 @@
           {/if}
           {#if msg.bashOutput}
             <div class="flex flex-col gap-2.5 my-1" transition:slide={{ duration: 200 }}>
-              <div class="px-8 sm:px-10 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Running Bash...</div>
-              <div class="text-xs text-pink-300/90 bg-[#11111b]/80 rounded-xl px-8 py-3.5 mx-8 border border-indigo-800/80 font-mono shadow-sm overflow-x-auto">
+              <div class="px-8 sm:px-10 mx-4 sm:mx-8 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Running Bash...</div>
+              <div class="text-xs text-pink-300/90 bg-[#11111b]/80 mx-4 sm:mx-8 rounded-sm px-8 py-3.5 border border-indigo-800/80 font-mono shadow-sm overflow-x-auto">
                 <pre class="whitespace-pre-wrap">{msg.bashOutput}</pre>
               </div>
             </div>
           {/if}
-          <div class="px-8 sm:px-10 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Response</div>
-          <div class="prose prose-invert prose-sm max-w-none px-8 sm:px-10 py-4 rounded-xl bg-[#11111b]/50 border border-indigo-800/35 prose-pre:bg-[#11111b] prose-pre:border prose-pre:border-indigo-800/50 prose-pre:px-6 prose-pre:py-3 prose-a:text-cyan-300 prose-p:leading-relaxed prose-headings:text-pink-200 prose-strong:text-pink-200" 
+          <div class="px-8 sm:px-10 mx-4 sm:mx-8 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Response</div>
+          <div class="prose prose-invert prose-sm max-w-none mx-4 sm:mx-8 rounded-sm px-8 sm:px-10 py-6 bg-[#11111b]/50 border border-indigo-800/35 prose-pre:bg-[#11111b] prose-pre:border prose-pre:border-indigo-800/50 prose-pre:px-6 prose-pre:py-3 prose-a:text-cyan-300 prose-p:leading-relaxed prose-headings:text-pink-200 prose-strong:text-pink-200" 
                class:animate-pulse={$isGenerating && msg.id === $messages[$messages.length-1].id && !msg.content}
                style="word-wrap: break-word;">
             {#if msg.content}
@@ -288,18 +288,18 @@
             {/if}
           </div>
         {:else if msg.role === 'user'}
-          <div class="px-8 sm:px-10 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Prompt</div>
-          <div class="bg-indigo-800/10 border border-indigo-800/60 rounded-2xl rounded-tl-sm px-8 sm:px-10 py-5 text-pink-200 shadow-sm leading-relaxed">
+          <div class="px-8 sm:px-10 mx-4 sm:mx-8 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Prompt</div>
+          <div class="bg-indigo-800/10 border border-indigo-800/60 mx-4 sm:mx-8 rounded-sm px-8 sm:px-10 py-5 text-pink-200 shadow-sm leading-relaxed">
             {msg.content}
           </div>
         {:else}
-          <div class="px-8 sm:px-10 text-[10px] font-bold uppercase tracking-[0.2em] text-rose-400/80">System</div>
-          <div class="bg-rose-500/10 border border-rose-500/20 rounded-2xl rounded-tl-sm px-8 sm:px-10 py-5 text-rose-200 font-mono text-sm shadow-sm leading-relaxed whitespace-pre-wrap">
+          <div class="px-8 sm:px-10 mx-4 sm:mx-8 text-[10px] font-bold uppercase tracking-[0.2em] text-rose-400/80">System</div>
+          <div class="bg-rose-500/10 border border-rose-500/20 mx-4 sm:mx-8 rounded-sm px-8 sm:px-10 py-5 text-rose-200 font-mono text-sm shadow-sm leading-relaxed whitespace-pre-wrap">
             {msg.content}
             {#if msg.content.includes('/approve')}
               <div class="mt-4 flex gap-4">
-                <button on:click={() => sendMessage('/approve')} class="px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/50 rounded hover:bg-green-500/30 transition-colors cursor-pointer">Approve</button>
-                <button on:click={() => sendMessage('/deny')} class="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/50 rounded hover:bg-red-500/30 transition-colors cursor-pointer">Deny</button>
+                <button on:click={() => sendMessage('/approve')} class="px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/50  hover:bg-green-500/30 transition-colors cursor-pointer">Approve</button>
+                <button on:click={() => sendMessage('/deny')} class="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/50  hover:bg-red-500/30 transition-colors cursor-pointer">Deny</button>
               </div>
             {/if}
           </div>
@@ -309,33 +309,35 @@
   </div>
 
   <div class="relative z-10 chat-gutter py-5 sm:py-7 bg-[#0d0d12]/90 backdrop-blur-md border-t border-indigo-800/60 shrink-0">
-    <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-400/85 mb-3 px-1.5">Compose</div>
-    <div class="relative bg-[#11111b] rounded-xl border border-indigo-800 focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-400/50 focus-within:shadow-[0_0_15px_rgba(137,220,235,0.2)] transition-all shadow-inner p-1">
-      <textarea
-        bind:value={inputStr}
-        on:keydown={handleKeydown}
-        disabled={$isGenerating || $connectionState !== "connected"}
-        placeholder={$connectionState === "connected" ? "Ask anything about your codebase..." : "Connecting..."}
-        class="w-full bg-transparent resize-none outline-none px-8 sm:px-10 py-5 pr-[4.75rem] min-h-[56px] max-h-64 overflow-y-auto text-pink-200 disabled:opacity-50 placeholder:text-indigo-500"
-        rows="1"
-      ></textarea>
-      
-      <div class="absolute bottom-3 right-3 flex items-center">
-        <button 
-          on:click={handleSend}
-          disabled={!inputStr.trim() || $isGenerating || $connectionState !== "connected"}
-          class="p-2.5 rounded-lg bg-indigo-800/80 text-pink-200 disabled:opacity-50 disabled:bg-[#11111b]/50 disabled:text-indigo-400 transition-all hover:bg-indigo-700 hover:text-pink-100 active:scale-95"
-        >
-          {#if $isGenerating}
-            <Loader2 size={18} class="animate-spin" />
-          {:else}
-            <Send size={18} />
-          {/if}
-        </button>
+    <div class="chat-item-inset mx-4 sm:mx-8">
+      <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-400/85 mb-3 px-1.5">Compose</div>
+      <div class="relative bg-[#11111b] rounded-sm border border-indigo-800 focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-400/50 focus-within:shadow-[0_0_15px_rgba(137,220,235,0.2)] transition-all shadow-inner p-1">
+        <textarea
+          bind:value={inputStr}
+          on:keydown={handleKeydown}
+          disabled={$isGenerating || $connectionState !== "connected"}
+          placeholder={$connectionState === "connected" ? "Ask anything about your codebase..." : "Connecting..."}
+          class="w-full bg-transparent resize-none outline-none px-8 sm:px-10 py-5 pr-[4.75rem] min-h-[56px] max-h-64 overflow-y-auto text-pink-200 disabled:opacity-50 placeholder:text-indigo-500"
+          rows="1"
+        ></textarea>
+        
+        <div class="absolute bottom-3 right-3 flex items-center">
+          <button 
+            on:click={handleSend}
+            disabled={!inputStr.trim() || $isGenerating || $connectionState !== "connected"}
+            class="p-2.5 rounded-sm bg-indigo-800/80 text-pink-200 disabled:opacity-50 disabled:bg-[#11111b]/50 disabled:text-indigo-400 transition-all hover:bg-indigo-700 hover:text-pink-100 active:scale-95"
+          >
+            {#if $isGenerating}
+              <Loader2 size={18} class="animate-spin" />
+            {:else}
+              <Send size={18} />
+            {/if}
+          </button>
+        </div>
       </div>
-    </div>
-    <div class="text-[10px] text-center text-cyan-400 mt-4 chat-gutter font-medium opacity-70 leading-relaxed">
-      Press <kbd class="px-1.5 py-0.5 bg-[#11111b] rounded border border-indigo-800 mx-0.5">Enter</kbd> to send, <kbd class="px-1.5 py-0.5 bg-[#11111b] rounded border border-indigo-800 mx-0.5">Shift+Enter</kbd> for new line
+      <div class="text-[10px] text-center text-cyan-400 mt-4 font-medium opacity-70 leading-relaxed">
+        Press <kbd class="px-1.5 py-0.5 bg-[#11111b] rounded-sm border border-indigo-800 mx-0.5">Enter</kbd> to send, <kbd class="px-1.5 py-0.5 bg-[#11111b] rounded-sm border border-indigo-800 mx-0.5">Shift+Enter</kbd> for new line
+      </div>
     </div>
   </div>
 </div>

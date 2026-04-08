@@ -1,0 +1,61 @@
+{
+  "file_summary": "File containing 5 exported symbols (1 cls, 4 mtds): EventEmitter, on, off, emit, clear.",
+  "symbols": [
+    {
+      "ID": "cls:EventEmitter",
+      "Name": "EventEmitter",
+      "Kind": "cls",
+      "Exported": true,
+      "Doc": ""
+    },
+    {
+      "ID": "mtd:EventEmitter.clear",
+      "Name": "clear",
+      "Kind": "mtd",
+      "Exported": true,
+      "Doc": "Removes all listeners for a given event, or all events if none specified."
+    },
+    {
+      "ID": "mtd:EventEmitter.emit",
+      "Name": "emit",
+      "Kind": "mtd",
+      "Exported": true,
+      "Doc": "Fires all listeners registered for the given event."
+    },
+    {
+      "ID": "mtd:EventEmitter.off",
+      "Name": "off",
+      "Kind": "mtd",
+      "Exported": true,
+      "Doc": "Removes a previously registered listener."
+    },
+    {
+      "ID": "mtd:EventEmitter.on",
+      "Name": "on",
+      "Kind": "mtd",
+      "Exported": true,
+      "Doc": "Registers a listener for the given event name."
+    },
+    {
+      "ID": "type:Listener",
+      "Name": "Listener",
+      "Kind": "type",
+      "Exported": false,
+      "Doc": ""
+    }
+  ],
+  "edges": [
+    {
+      "From": "mtd:EventEmitter.clear",
+      "To": "mtd:EventEmitter.clear",
+      "Kind": "call"
+    }
+  ],
+  "imports": [],
+  "symbol_descriptions": {
+    "mtd:EventEmitter.clear": "1. If `event`, calling `this.listeners.delete` with `event`. Otherwise, calling `this.listeners.clear`",
+    "mtd:EventEmitter.emit": "1. Assigns calling `this.listeners.get` with `event` to `set`\n2. If `set` is falsy, Returns\n3. Iterates over each `fn` in `set`, calling `fn` with `...args`",
+    "mtd:EventEmitter.off": "1. Assigns calling `this.listeners.get` with `event` to `set`\n2. If `set`, calling `set.delete` with `listener`",
+    "mtd:EventEmitter.on": "1. If `this.listeners.has(event)` is falsy, calling `this.listeners.set` with `event`, `new Set()`\n2. calling `this.listeners.get(event)!.add` with `listener`"
+  }
+}

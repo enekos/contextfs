@@ -1,0 +1,104 @@
+{
+  "file_summary": "TSX/JSX component graph extracted.",
+  "symbols": [
+    {
+      "ID": "fn:TodoList",
+      "Name": "TodoList",
+      "Kind": "fn",
+      "Exported": true,
+      "Doc": ""
+    },
+    {
+      "ID": "fn:addTodo",
+      "Name": "addTodo",
+      "Kind": "fn",
+      "Exported": true,
+      "Doc": ""
+    },
+    {
+      "ID": "fn:removeTodo",
+      "Name": "removeTodo",
+      "Kind": "fn",
+      "Exported": true,
+      "Doc": ""
+    },
+    {
+      "ID": "fn:toggleTodo",
+      "Name": "toggleTodo",
+      "Kind": "fn",
+      "Exported": true,
+      "Doc": ""
+    }
+  ],
+  "edges": [
+    {
+      "From": "fn:TodoList",
+      "To": "fn:addTodo",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:TodoList",
+      "To": "fn:removeTodo",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:TodoList",
+      "To": "fn:toggleTodo",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:addTodo",
+      "To": "fn:TodoList",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:addTodo",
+      "To": "fn:removeTodo",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:addTodo",
+      "To": "fn:toggleTodo",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:removeTodo",
+      "To": "fn:TodoList",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:removeTodo",
+      "To": "fn:addTodo",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:removeTodo",
+      "To": "fn:toggleTodo",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:toggleTodo",
+      "To": "fn:TodoList",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:toggleTodo",
+      "To": "fn:addTodo",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:toggleTodo",
+      "To": "fn:removeTodo",
+      "Kind": "call"
+    }
+  ],
+  "imports": [
+    "react"
+  ],
+  "symbol_descriptions": {
+    "fn:TodoList": "Describes TodoList",
+    "fn:addTodo": "Describes addTodo",
+    "fn:removeTodo": "Describes removeTodo",
+    "fn:toggleTodo": "Describes toggleTodo"
+  }
+}

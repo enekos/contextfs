@@ -8,7 +8,7 @@
       <SettingsIcon size={16} />
       Agent Settings
     </h1>
-    <button class="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-black rounded-md text-sm font-medium transition-colors shadow-sm">
+    <button class="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-black  text-sm font-medium transition-colors shadow-sm">
       <Save size={14} />
       Save Changes
     </button>
@@ -28,7 +28,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="space-y-1.5">
               <label class="text-sm font-medium text-green-600">Primary Provider</label>
-              <select class="w-full bg-black border border-green-900 rounded-lg px-3 py-2 text-sm text-green-400 focus:outline-none focus:border-green-500 transition-colors">
+              <select class="w-full bg-black border border-green-900  px-3 py-2 text-sm text-green-400 focus:outline-none focus:border-green-500 transition-colors">
                 <option value="gemini">Google Gemini</option>
                 <option value="anthropic">Anthropic Claude</option>
                 <option value="openai">OpenAI</option>
@@ -37,7 +37,7 @@
             </div>
             <div class="space-y-1.5">
               <label class="text-sm font-medium text-green-600">Model Name</label>
-              <select class="w-full bg-black border border-green-900 rounded-lg px-3 py-2 text-sm text-green-400 focus:outline-none focus:border-green-500 transition-colors">
+              <select class="w-full bg-black border border-green-900  px-3 py-2 text-sm text-green-400 focus:outline-none focus:border-green-500 transition-colors">
                 <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
               </select>
@@ -49,7 +49,7 @@
               <Key size={14} /> API Key
             </label>
             <div class="flex gap-2">
-              <input type="password" value="************************" class="flex-1 bg-black border border-green-900 rounded-lg px-3 py-2 text-sm text-green-400 focus:outline-none focus:border-green-500 transition-colors" />
+              <input type="password" value="************************" class="flex-1 bg-black border border-green-900  px-3 py-2 text-sm text-green-400 focus:outline-none focus:border-green-500 transition-colors" />
             </div>
             <p class="text-xs text-green-600 mt-1">Leave blank to use environment variables (e.g. GEMINI_API_KEY).</p>
           </div>
@@ -67,7 +67,7 @@
           <label class="text-sm font-medium text-green-600">Custom System Instructions</label>
           <textarea 
             rows="4" 
-            class="w-full bg-black border border-green-900 rounded-lg px-3 py-2 text-sm text-green-400 focus:outline-none focus:border-green-500 transition-colors resize-none font-mono text-xs"
+            class="w-full bg-black border border-green-900  px-3 py-2 text-sm text-green-400 focus:outline-none focus:border-green-500 transition-colors resize-none font-mono text-xs"
             placeholder="Additional instructions for the agent..."
           >You are Mairu, an expert software engineering assistant.
 You specialize in navigating the contextfs workspace.</textarea>
@@ -82,11 +82,11 @@ You specialize in navigating the contextfs workspace.</textarea>
           Security & Permissions
         </h2>
         
-        <div class="space-y-3 bg-black border border-green-900 rounded-xl p-4">
+        <div class="space-y-3 bg-black border border-green-900  p-4">
           <label class="flex items-start gap-3 cursor-pointer">
             <div class="relative flex items-center mt-0.5">
               <input type="checkbox" checked class="peer sr-only" />
-              <div class="w-9 h-5 bg-green-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-black after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-black after:border-green-900 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+              <div class="w-9 h-5 bg-green-800 peer-focus:outline-none  peer peer-checked:after:translate-x-full peer-checked:after:border-black after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-black after:border-green-900 after:border after: after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
             </div>
             <div>
               <div class="text-sm font-medium text-green-400">Require approval for bash commands</div>
@@ -97,7 +97,7 @@ You specialize in navigating the contextfs workspace.</textarea>
           <label class="flex items-start gap-3 cursor-pointer">
             <div class="relative flex items-center mt-0.5">
               <input type="checkbox" checked class="peer sr-only" />
-              <div class="w-9 h-5 bg-green-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-black after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-black after:border-green-900 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+              <div class="w-9 h-5 bg-green-800 peer-focus:outline-none  peer peer-checked:after:translate-x-full peer-checked:after:border-black after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-black after:border-green-900 after:border after: after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
             </div>
             <div>
               <div class="text-sm font-medium text-green-400">Require approval for file modifications</div>

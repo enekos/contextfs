@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/iterator"
-	"mairu/crawler"
+	"mairu/internal/crawler"
 	"mairu/internal/contextsrv"
 	"mairu/internal/llm"
 	"mairu/internal/prompts"

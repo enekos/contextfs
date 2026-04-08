@@ -14,10 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"mairu/crawler"
 	"mairu/internal/contextsrv"
+	"mairu/internal/crawler"
 	"mairu/internal/llm"
-	"mairu/internal/scraper"
 
 	"github.com/spf13/cobra"
 )
@@ -1206,9 +1205,9 @@ func newScrapeCmd() *cobra.Command {
 			urlStr := args[0]
 			fmt.Printf("Crawling %s...\n", urlStr)
 
-			opts := scraper.ScrapeOptions{
+			opts := crawler.ScrapeOptions{
 				Project: project,
-				CrawlOptions: scraper.CrawlOptions{
+				CrawlOptions: crawler.CrawlOptions{
 					SeedURL:     urlStr,
 					MaxPages:    maxPages,
 					MaxDepth:    maxDepth,
@@ -1226,7 +1225,7 @@ func newScrapeCmd() *cobra.Command {
 			}
 
 			apiKey := GetAPIKey()
-			res, err := scraper.ScrapeAndIngest(cmd.Context(), opts, storeFn, apiKey)
+			res, err := crawler.ScrapeAndIngest(cmd.Context(), opts, storeFn, apiKey)
 			if err != nil {
 				return err
 			}

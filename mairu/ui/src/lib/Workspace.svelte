@@ -14,10 +14,10 @@
         <input 
           type="text" 
           placeholder="Search files..." 
-          class="bg-black border border-green-900 rounded-md pl-8 pr-3 py-1 text-xs text-green-300 focus:outline-none focus:border-green-500 w-48 transition-colors"
+          class="bg-black border border-green-900  pl-8 pr-3 py-1 text-xs text-green-300 focus:outline-none focus:border-green-500 w-48 transition-colors"
         />
       </div>
-      <button class="p-1.5 text-green-600 hover:text-green-400 hover:bg-green-900 rounded-md transition-colors">
+      <button class="p-1.5 text-green-600 hover:text-green-400 hover:bg-green-900  transition-colors">
         <RefreshCw size={14} />
       </button>
     </div>
@@ -27,23 +27,23 @@
     <div class="text-xs font-semibold text-green-600 uppercase tracking-wider mb-2 font-sans">Project Explorer</div>
     
     <div class="flex flex-col gap-1">
-      <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-green-900/50 rounded-md cursor-pointer text-green-400">
+      <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-green-900/50  cursor-pointer text-green-400">
         <FolderOpen size={16} class="text-green-400" />
         <span>mairu/</span>
       </div>
       <div class="flex flex-col gap-1 pl-4 border-l border-green-900 ml-2">
-        <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-green-900/50 rounded-md cursor-pointer text-green-400">
+        <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-green-900/50  cursor-pointer text-green-400">
           <FolderOpen size={16} class="text-green-400" />
           <span>internal/</span>
         </div>
         <div class="flex flex-col gap-1 pl-4 border-l border-green-900 ml-2">
-          <div class="flex items-center justify-between px-2 py-1.5 hover:bg-green-900/50 rounded-md cursor-pointer text-green-500 group">
+          <div class="flex items-center justify-between px-2 py-1.5 hover:bg-green-900/50  cursor-pointer text-green-500 group">
             <div class="flex items-center gap-2">
               <FolderOpen size={16} class="text-green-400" />
               <span>agent/</span>
             </div>
           </div>
-          <div class="flex items-center justify-between px-2 py-1.5 hover:bg-green-900/50 rounded-md cursor-pointer text-green-500 group">
+          <div class="flex items-center justify-between px-2 py-1.5 hover:bg-green-900/50  cursor-pointer text-green-500 group">
             <div class="flex items-center gap-2">
               <FolderOpen size={16} class="text-green-400" />
               <span>web/</span>
@@ -51,42 +51,42 @@
           </div>
         </div>
         
-        <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-green-900/50 rounded-md cursor-pointer text-green-400">
+        <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-green-900/50  cursor-pointer text-green-400">
           <FolderOpen size={16} class="text-green-400" />
           <span>ui/</span>
         </div>
         <div class="flex flex-col gap-1 pl-4 border-l border-green-900 ml-2">
-          <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-green-900/50 rounded-md cursor-pointer text-green-400">
+          <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-green-900/50  cursor-pointer text-green-400">
             <FolderOpen size={16} class="text-amber-400" />
             <span>src/</span>
           </div>
           <div class="flex flex-col gap-1 pl-4 border-l border-green-900 ml-2">
-            <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-green-900/50 rounded-md cursor-pointer text-green-400">
+            <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-green-900/50  cursor-pointer text-green-400">
               <FolderOpen size={16} class="text-amber-400" />
               <span>lib/</span>
             </div>
             <div class="flex flex-col gap-1 pl-4 border-l border-green-900 ml-2">
-              <div class="flex items-center justify-between px-2 py-1.5 bg-indigo-500/10 border border-green-500/20 rounded-md cursor-pointer text-indigo-300 group">
+              <div class="flex items-center justify-between px-2 py-1.5 bg-indigo-500/10 border border-green-500/20  cursor-pointer text-indigo-300 group">
                 <div class="flex items-center gap-2">
                   <FileCode size={16} class="text-orange-400" />
                   <span>Workspace.svelte</span>
                 </div>
-                <span class="text-[10px] bg-indigo-500/20 px-1.5 py-0.5 rounded text-green-400 font-sans">Active</span>
+                <span class="text-[10px] bg-indigo-500/20 px-1.5 py-0.5  text-green-400 font-sans">Active</span>
               </div>
-              <div class="flex items-center justify-between px-2 py-1.5 hover:bg-green-900/50 rounded-md cursor-pointer text-green-500 group">
+              <div class="flex items-center justify-between px-2 py-1.5 hover:bg-green-900/50  cursor-pointer text-green-500 group">
                 <div class="flex items-center gap-2">
                   <FileCode size={16} class="text-orange-400" />
                   <span>Chat.svelte</span>
                 </div>
               </div>
-              <div class="flex items-center justify-between px-2 py-1.5 hover:bg-green-900/50 rounded-md cursor-pointer text-green-500 group">
+              <div class="flex items-center justify-between px-2 py-1.5 hover:bg-green-900/50  cursor-pointer text-green-500 group">
                 <div class="flex items-center gap-2">
                   <FileCode size={16} class="text-blue-400" />
                   <span>store.ts</span>
                 </div>
               </div>
             </div>
-            <div class="flex items-center px-2 py-1.5 hover:bg-green-900/50 rounded-md cursor-pointer text-green-500">
+            <div class="flex items-center px-2 py-1.5 hover:bg-green-900/50  cursor-pointer text-green-500">
               <FileCode size={16} class="text-orange-400" />
               <span>App.svelte</span>
             </div>

@@ -48,7 +48,7 @@
   .custom-node {
     position: relative;
     padding: 12px;
-    border-radius: 8px;
+    
     border-style: solid;
     width: 280px;
     color: var(--text-main);
@@ -75,7 +75,7 @@
     font-weight: bold;
     background: var(--bg-main);
     padding: 2px 6px;
-    border-radius: 4px;
+    
   }
 
   .node-abstract {
@@ -98,7 +98,7 @@
   .badge {
     font-size: 10px;
     padding: 2px 6px;
-    border-radius: 4px;
+    
     background: var(--border-main);
     color: var(--text-dim);
     font-weight: bold;

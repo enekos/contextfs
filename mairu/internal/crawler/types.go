@@ -1,4 +1,4 @@
-package scraper
+package crawler
 
 type CrawlOptions struct {
 	SeedURL     string

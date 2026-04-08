@@ -151,7 +151,7 @@
   }
 
   .chart-card {
-    background: var(--bg-card); border: 1px solid var(--border-main); border-radius: var(--radius-xl);
+    background: var(--bg-card); border: 1px solid var(--border-main); 
     padding: 32px;
     box-shadow: var(--shadow-sm);
   }
@@ -167,13 +167,13 @@
     display: flex; align-items: center; gap: 6px;
     font-size: 12px; color: var(--text-secondary); width: 100px; flex-shrink: 0;
   }
-  .bar-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .bar-dot { width: 8px; height: 8px;  flex-shrink: 0; }
   .bar-track {
-    flex: 1; height: 6px; background: var(--bg-main); border-radius: 3px;
+    flex: 1; height: 6px; background: var(--bg-main); 
     overflow: hidden;
   }
   .bar-fill {
-    height: 100%; border-radius: 3px; transition: width 0.3s ease;
+    height: 100%;  transition: width 0.3s ease;
     min-width: 2px;
   }
   .bar-count { font-size: 12px; color: var(--text-muted); width: 28px; text-align: right; }
@@ -187,11 +187,11 @@
     flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
   }
   .imp-bar-track {
-    width: 100%; height: 70px; background: var(--bg-main); border-radius: 3px;
+    width: 100%; height: 70px; background: var(--bg-main); 
     overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end;
   }
   .imp-bar-fill {
-    border-radius: 3px 3px 0 0; transition: height 0.3s ease;
+     transition: height 0.3s ease;
     min-height: 0;
   }
   .imp-bar-fill.imp-high { background: #22c55e; }
@@ -206,12 +206,12 @@
   }
   .owner-pill {
     font-size: 11px; color: var(--text-secondary); background: var(--bg-main);
-    padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border-main);
+    padding: 3px 10px;  border: 1px solid var(--border-main);
   }
   .owner-pill strong { color: var(--text-main); margin-left: 4px; }
 
   .imp-pill {
-    display: inline-block; width: 22px; height: 22px; border-radius: 50%;
+    display: inline-block; width: 22px; height: 22px; 
     text-align: center; line-height: 22px; font-size: 10px; font-weight: 700;
     flex-shrink: 0;
   }

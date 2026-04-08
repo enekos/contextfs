@@ -1,0 +1,213 @@
+{
+  "file_summary": "Python module with extracted symbols.",
+  "symbols": [
+    {
+      "ID": "fn:compute_score",
+      "Name": "compute_score",
+      "Kind": "fn",
+      "Exported": false,
+      "Doc": ""
+    },
+    {
+      "ID": "fn:load_records",
+      "Name": "load_records",
+      "Kind": "fn",
+      "Exported": false,
+      "Doc": ""
+    },
+    {
+      "ID": "fn:run_pipeline",
+      "Name": "run_pipeline",
+      "Kind": "fn",
+      "Exported": false,
+      "Doc": ""
+    },
+    {
+      "ID": "fn:save_results",
+      "Name": "save_results",
+      "Kind": "fn",
+      "Exported": false,
+      "Doc": ""
+    },
+    {
+      "ID": "fn:transform",
+      "Name": "transform",
+      "Kind": "fn",
+      "Exported": false,
+      "Doc": ""
+    },
+    {
+      "ID": "fn:validate",
+      "Name": "validate",
+      "Kind": "fn",
+      "Exported": false,
+      "Doc": ""
+    }
+  ],
+  "edges": [
+    {
+      "From": "fn:compute_score",
+      "To": "fn:load_records",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:compute_score",
+      "To": "fn:run_pipeline",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:compute_score",
+      "To": "fn:save_results",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:compute_score",
+      "To": "fn:transform",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:compute_score",
+      "To": "fn:validate",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:load_records",
+      "To": "fn:compute_score",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:load_records",
+      "To": "fn:run_pipeline",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:load_records",
+      "To": "fn:save_results",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:load_records",
+      "To": "fn:transform",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:load_records",
+      "To": "fn:validate",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:run_pipeline",
+      "To": "fn:compute_score",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:run_pipeline",
+      "To": "fn:load_records",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:run_pipeline",
+      "To": "fn:save_results",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:run_pipeline",
+      "To": "fn:transform",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:run_pipeline",
+      "To": "fn:validate",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:save_results",
+      "To": "fn:compute_score",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:save_results",
+      "To": "fn:load_records",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:save_results",
+      "To": "fn:run_pipeline",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:save_results",
+      "To": "fn:transform",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:save_results",
+      "To": "fn:validate",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:transform",
+      "To": "fn:compute_score",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:transform",
+      "To": "fn:load_records",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:transform",
+      "To": "fn:run_pipeline",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:transform",
+      "To": "fn:save_results",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:transform",
+      "To": "fn:validate",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:validate",
+      "To": "fn:compute_score",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:validate",
+      "To": "fn:load_records",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:validate",
+      "To": "fn:run_pipeline",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:validate",
+      "To": "fn:save_results",
+      "Kind": "call"
+    },
+    {
+      "From": "fn:validate",
+      "To": "fn:transform",
+      "Kind": "call"
+    }
+  ],
+  "imports": [
+    "json",
+    "logging",
+    "pathlib",
+    "typing"
+  ],
+  "symbol_descriptions": {
+    "fn:compute_score": "Describes compute_score",
+    "fn:load_records": "Describes load_records",
+    "fn:run_pipeline": "Describes run_pipeline",
+    "fn:save_results": "Describes save_results",
+    "fn:transform": "Describes transform",
+    "fn:validate": "Describes validate"
+  }
+}

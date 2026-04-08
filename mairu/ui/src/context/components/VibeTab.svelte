@@ -375,7 +375,7 @@
 
   .vibe-controls {
     display: flex; flex-direction: column; gap: 16px;
-    background: var(--bg-card); border: 1px solid var(--border-main); border-radius: var(--radius-xl);
+    background: var(--bg-card); border: 1px solid var(--border-main); 
     padding: 24px; box-shadow: var(--shadow-sm);
   }
 
@@ -385,8 +385,8 @@
     padding: 8px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
     transition: all 0.15s;
   }
-  .vibe-mode-toggle button:first-child { border-radius: 8px 0 0 8px; }
-  .vibe-mode-toggle button:last-child { border-radius: 0 8px 8px 0; }
+  .vibe-mode-toggle button:first-child {  }
+  .vibe-mode-toggle button:last-child {  }
   .vibe-mode-toggle button.active {
     background: var(--bg-active); border-color: #4f46e5; color: var(--text-active);
   }
@@ -395,7 +395,7 @@
 
   .vibe-input {
     flex: 1; background: var(--bg-main); border: 1px solid var(--border-main); color: var(--text-main);
-    border-radius: var(--radius-md); padding: 16px; font-size: 15px; outline: none;
+     padding: 16px; font-size: 15px; outline: none;
     font-family: inherit; resize: vertical; min-height: 56px;
   }
   .vibe-input:focus { border-color: var(--accent-main); }
@@ -410,7 +410,7 @@
   }
   .vibe-opt-input {
     background: var(--bg-main); border: 1px solid var(--border-main); color: var(--text-main);
-    border-radius: var(--radius-sm); padding: 8px 10px; font-size: 13px; outline: none;
+     padding: 8px 10px; font-size: 13px; outline: none;
     width: 90px;
   }
   .vibe-opt-num { width: 60px; text-align: center; }
@@ -421,21 +421,21 @@
   .vibe-error {
     display: flex; align-items: center; gap: 12px;
     padding: 10px 14px; background: var(--bg-error); color: var(--text-error);
-    border-radius: 8px; font-size: 13px;
+     font-size: 13px;
   }
   .vibe-error button { margin-left: auto; background: none; border: none; color: var(--text-error); cursor: pointer; }
 
   /* Reasoning */
   .vibe-reasoning {
     background: #1a1a2e; border: 1px solid #2d2b55;
-    border-radius: 8px; padding: 12px 14px;
+     padding: 12px 14px;
     font-size: 13px; color: var(--text-active); line-height: 1.5;
   }
   .vibe-reasoning-label {
     display: inline-block; font-size: 10px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.05em;
     color: var(--accent-main); margin-right: 8px;
-    background: var(--bg-active); padding: 2px 7px; border-radius: 4px;
+    background: var(--bg-active); padding: 2px 7px; 
   }
 
   .vibe-meta {
@@ -458,7 +458,7 @@
 
   .vibe-item {
     display: flex; gap: 16px;
-    background: var(--bg-card); border: 1px solid var(--border-main); border-radius: var(--radius-lg);
+    background: var(--bg-card); border: 1px solid var(--border-main); 
     padding: 16px 20px; transition: border-color 0.15s;
   }
   .vibe-item:hover { border-color: var(--text-light); }
@@ -473,7 +473,7 @@
   .vibe-item-overview { margin-top: 4px; font-size: 12px; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; }
   .vibe-item-project {
     display: inline-block; font-size: 10px; color: var(--text-muted);
-    background: var(--bg-main); padding: 2px 6px; border-radius: 4px; width: fit-content;
+    background: var(--bg-main); padding: 2px 6px;  width: fit-content;
   }
 
   /* Mutation plan */
@@ -484,7 +484,7 @@
   }
   .vibe-select-all {
     background: none; border: 1px solid var(--border-main); color: var(--text-secondary);
-    padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    padding: 4px 10px;  cursor: pointer; font-size: 12px;
   }
   .vibe-select-all:hover { background: var(--border-main); }
 
@@ -492,7 +492,7 @@
 
   .vibe-op {
     display: flex; gap: 16px; align-items: flex-start;
-    background: var(--bg-card); border: 1px solid var(--border-main); border-radius: var(--radius-lg);
+    background: var(--bg-card); border: 1px solid var(--border-main); 
     padding: 16px 20px; transition: all 0.15s;
   }
   .vibe-op-selected { border-color: #4f46e5; background: #1e2640; }
@@ -514,7 +514,7 @@
 
   .vibe-op-data {
     display: flex; flex-direction: column; gap: 2px;
-    background: var(--bg-main); border-radius: 6px; padding: 8px 10px;
+    background: var(--bg-main);  padding: 8px 10px;
     font-family: monospace; font-size: 12px;
   }
   .vibe-op-field { display: flex; gap: 6px; }
@@ -523,7 +523,7 @@
 
   .vibe-op-result {
     font-size: 12px; color: var(--text-success);
-    background: var(--bg-success); padding: 6px 10px; border-radius: 6px;
+    background: var(--bg-success); padding: 6px 10px; 
     margin-top: 4px;
   }
   .vibe-op-error { color: var(--text-error); background: #2a0f0f; }
@@ -537,7 +537,7 @@
 
   .vibe-done-bar {
     padding: 12px 16px; background: var(--bg-success); border: 1px solid #166534;
-    border-radius: 8px; color: var(--text-success); font-size: 13px; font-weight: 500;
+     color: var(--text-success); font-size: 13px; font-weight: 500;
   }
 
   /* History */
@@ -548,14 +548,14 @@
   }
   .vibe-history-item {
     display: flex; align-items: center; gap: 10px;
-    background: var(--bg-card); border: 1px solid var(--border-main); border-radius: 8px;
+    background: var(--bg-card); border: 1px solid var(--border-main); 
     padding: 8px 12px; cursor: pointer; text-align: left;
     transition: border-color 0.15s; color: inherit;
   }
   .vibe-history-item:hover { border-color: var(--text-light); }
   .vibe-history-mode {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 22px; height: 22px; border-radius: 5px;
+    width: 22px; height: 22px; 
     font-size: 11px; font-weight: 700;
     background: var(--bg-active); color: var(--text-active);
   }
@@ -573,7 +573,7 @@
   .vibe-empty-icon { font-size: 48px; color: var(--border-main); font-family: monospace; font-weight: 700; }
   .vibe-empty p { font-size: 14px; }
   .vibe-empty kbd {
-    background: var(--bg-card); border: 1px solid var(--border-main); border-radius: 4px;
+    background: var(--bg-card); border: 1px solid var(--border-main); 
     padding: 1px 5px; font-size: 11px; color: var(--text-secondary);
   }
 
@@ -583,7 +583,7 @@
   }
   .vibe-examples-title { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
   .vibe-example {
-    background: var(--bg-card); border: 1px solid var(--border-main); border-radius: 8px;
+    background: var(--bg-card); border: 1px solid var(--border-main); 
     padding: 8px 16px; cursor: pointer; color: var(--text-link); font-size: 13px;
     font-style: italic; transition: border-color 0.15s;
   }

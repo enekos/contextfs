@@ -1,0 +1,46 @@
+{
+  "file_summary": "File containing 2 exported symbols (2 fns): authenticate, requireRole.",
+  "symbols": [
+    {
+      "ID": "fn:authenticate",
+      "Name": "authenticate",
+      "Kind": "fn",
+      "Exported": true,
+      "Doc": "Validates JWT tokens and attaches user info to the request."
+    },
+    {
+      "ID": "fn:requireRole",
+      "Name": "requireRole",
+      "Kind": "fn",
+      "Exported": true,
+      "Doc": "Checks if the authenticated user has the required role."
+    },
+    {
+      "ID": "iface:TokenPayload",
+      "Name": "TokenPayload",
+      "Kind": "iface",
+      "Exported": false,
+      "Doc": ""
+    }
+  ],
+  "edges": [
+    {
+      "From": "file",
+      "To": "module:express",
+      "Kind": "import"
+    },
+    {
+      "From": "file",
+      "To": "module:jsonwebtoken",
+      "Kind": "import"
+    }
+  ],
+  "imports": [
+    "express",
+    "jsonwebtoken"
+  ],
+  "symbol_descriptions": {
+    "fn:authenticate": "1. Assigns `req.headers.authorization` to `header`\n2. If `header` is falsy, calling `res.status(401).json` with `{ error: 'Missing token' }`; Returns\n3. Assigns calling `header.replace` with `'Bearer '`, `''` to `token`\n4. Attempts to Assigns `verify(token, process.env.JWT_SECRET!) as TokenPayload` to `payload`; assigning `payload` to `req.user`; calling `next`. If an error occurs (e), calling `res.status(403).json` with `{ error: 'Invalid token' }`",
+    "fn:requireRole": "1. Returns `function checkRole(req: Request, res: Response, next: NextFunction) {\n    if (req.user?.role !== role) {\n      res.status(403).json({ error: 'Forbidden' });\n      return;\n    }\n    next();\n  }`"
+  }
+}

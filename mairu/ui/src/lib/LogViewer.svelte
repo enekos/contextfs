@@ -39,8 +39,8 @@
         </div>
 
         <div class="grid grid-cols-2 gap-4">
-          <div class="p-6 rounded-2xl bg-green-950 border border-green-900">
-            <div class="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-4">
+          <div class="p-6  bg-green-950 border border-green-900">
+            <div class="w-10 h-10  bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-4">
               <Cpu size={20} />
             </div>
             <h3 class="font-semibold mb-1">Mairu Agent</h3>
@@ -54,8 +54,8 @@
             </div>
           </div>
 
-          <div class="p-6 rounded-2xl bg-green-950 border border-green-900">
-            <div class="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center mb-4">
+          <div class="p-6  bg-green-950 border border-green-900">
+            <div class="w-10 h-10  bg-blue-500/10 text-blue-500 flex items-center justify-center mb-4">
               <Database size={20} />
             </div>
             <h3 class="font-semibold mb-1">Code Graph</h3>
@@ -65,27 +65,27 @@
           </div>
         </div>
 
-        <div class="p-6 rounded-2xl bg-indigo-500/5 border border-green-500/20">
+        <div class="p-6  bg-indigo-500/5 border border-green-500/20">
           <h3 class="font-semibold text-green-400 mb-4 flex items-center gap-2">
             <ShieldAlert size={18} /> Capabilities
           </h3>
           <ul class="space-y-3 text-sm text-green-400">
             <li class="flex items-start gap-3">
-              <div class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5"></div>
+              <div class="w-1.5 h-1.5  bg-indigo-500 mt-1.5"></div>
               <div>
                 <strong class="text-green-300">Surgical Reading</strong> <br/>
                 Reads specific AST nodes instead of dumping entire files into context.
               </div>
             </li>
             <li class="flex items-start gap-3">
-              <div class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5"></div>
+              <div class="w-1.5 h-1.5  bg-indigo-500 mt-1.5"></div>
               <div>
                 <strong class="text-green-300">Multi-Agent Dispatch</strong> <br/>
                 Spawns sub-agents to parallelize codebase research.
               </div>
             </li>
             <li class="flex items-start gap-3">
-              <div class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5"></div>
+              <div class="w-1.5 h-1.5  bg-indigo-500 mt-1.5"></div>
               <div>
                 <strong class="text-green-300">Terminal Native</strong> <br/>
                 Executes bash commands, tests, and git operations autonomously.
@@ -99,25 +99,25 @@
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold font-sans">System Logs</h2>
         </div>
-        <div class="flex-1 bg-green-950 border border-green-900 rounded-xl p-4 overflow-y-auto space-y-2">
+        <div class="flex-1 bg-green-950 border border-green-900  p-4 overflow-y-auto space-y-2">
           {#each $messages as msg}
             {#each msg.statuses as status}
-              <div class="text-green-500 border-l-2 border-green-500 pl-3 py-1 bg-black/50 rounded-r">
+              <div class="text-green-500 border-l-2 border-green-500 pl-3 py-1 bg-black/50 ">
                 <span class="text-green-400">[{new Date().toLocaleTimeString()}]</span> {status}
               </div>
             {/each}
             {#each msg.logs as log}
-              <div class="text-green-500 border-l-2 border-amber-500 pl-3 py-1 bg-black/50 rounded-r">
+              <div class="text-green-500 border-l-2 border-amber-500 pl-3 py-1 bg-black/50 ">
                 <span class="text-amber-400">[{new Date().toLocaleTimeString()}]</span> {log}
               </div>
             {/each}
             {#each msg.toolCalls as tc}
-              <div class="text-green-500 border-l-2 border-emerald-500 pl-3 py-1 bg-black/50 rounded-r">
+              <div class="text-green-500 border-l-2 border-emerald-500 pl-3 py-1 bg-black/50 ">
                 <span class="text-emerald-400">[{new Date().toLocaleTimeString()}]</span> 
                 TOOL CALL: {tc.name} 
                 <span class="text-green-600 text-xs">({tc.status})</span>
                 {#if tc.status === 'error'}
-                  <div class="text-rose-400 text-xs mt-1 bg-rose-500/10 p-2 rounded">
+                  <div class="text-rose-400 text-xs mt-1 bg-rose-500/10 p-2 ">
                     {JSON.stringify(tc.result)}
                   </div>
                 {/if}
@@ -132,7 +132,7 @@
     {:else if activeTab === 'graph'}
       <div class="max-w-3xl mx-auto h-full flex flex-col">
         <h2 class="text-xl font-semibold mb-4">Code Graph Explorer</h2>
-        <div class="flex-1 bg-green-950 border border-green-900 rounded-xl flex items-center justify-center text-green-600 p-8">
+        <div class="flex-1 bg-green-950 border border-green-900  flex items-center justify-center text-green-600 p-8">
           <div class="text-center">
             <Database size={48} class="mx-auto mb-4 opacity-20" />
             <h3 class="text-lg font-semibold text-green-400 mb-2">Graph Visualization Not Connected</h3>
