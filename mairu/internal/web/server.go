@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,15 +12,45 @@ import (
 	"os"
 	"strings"
 
-	"encoding/json"
-
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins for the dashboard
-	},
+// Server holds the configuration and dependencies for the web server
+type Server struct {
+	mux                *http.ServeMux
+	projectRoot        string
+	apiKey             string
+	meiliURL           string
+	meiliAPIKey        string
+	contextServerURL   string
+	contextServerToken string
+	upgrader           websocket.Upgrader
+}
+
+// NewServer creates a new instance of the Server
+func NewServer(apiKey, meiliURL, meiliAPIKey string) (*Server, error) {
+	projectRoot, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	s := &Server{
+		mux:                http.NewServeMux(),
+		projectRoot:        projectRoot,
+		apiKey:             apiKey,
+		meiliURL:           meiliURL,
+		meiliAPIKey:        meiliAPIKey,
+		contextServerURL:   strings.TrimSpace(os.Getenv("MAIRU_CONTEXT_SERVER_URL")),
+		contextServerToken: strings.TrimSpace(os.Getenv("MAIRU_CONTEXT_SERVER_TOKEN")),
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				return true // Allow all origins for the dashboard
+			},
+		},
+	}
+
+	s.routes()
+	return s, nil
 }
 
 type createSessionRequest struct {
@@ -34,48 +65,117 @@ func sessionNameFromQuery(r *http.Request) string {
 	return name
 }
 
-func SetupRouter(apiKey, meiliURL, meiliAPIKey string) (*http.ServeMux, error) {
-	r := http.NewServeMux()
-	contextServerURL := strings.TrimSpace(os.Getenv("MAIRU_CONTEXT_SERVER_URL"))
-	contextServerToken := strings.TrimSpace(os.Getenv("MAIRU_CONTEXT_SERVER_TOKEN"))
+// writeJSON writes a JSON response with the given status code
+func writeJSON(w http.ResponseWriter, status int, data any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		slog.Error("failed to encode json response", "error", err)
+	}
+}
 
-	projectRoot, err := os.Getwd()
-	if err != nil {
-		return nil, err
+// writeError writes a JSON error response with the given status code
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// routes registers all the HTTP handlers
+func (s *Server) routes() {
+	s.mux.HandleFunc("GET /api/ping", s.handlePing())
+	s.mux.HandleFunc("GET /api/chat", s.handleChat())
+	s.mux.HandleFunc("GET /api/sessions", s.handleGetSessions())
+	s.mux.HandleFunc("POST /api/sessions", s.handleCreateSession())
+	s.mux.HandleFunc("GET /api/sessions/:name/messages", s.handleGetSessionMessages())
+
+	if s.contextServerURL != "" {
+		s.registerForwardingRoutes()
 	}
 
-	// API routes
+	s.mux.HandleFunc("/", s.handleStaticFiles())
+}
 
-	r.HandleFunc("GET /api/ping", func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]any{"message": "pong from mairu"})
-	})
+func (s *Server) handlePing() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"message": "pong from mairu"})
+	}
+}
 
-	r.HandleFunc("GET /api/chat", func(w http.ResponseWriter, req *http.Request) {
-		sessionName := sessionNameFromQuery(req)
-		if err := agent.ValidateSessionName(sessionName); err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+func (s *Server) handleGetSessions() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		sessions, err := agent.ListSessions(s.projectRoot)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to list sessions: "+err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
+	}
+}
+
+func (s *Server) handleCreateSession() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		var payload createSessionRequest
+		if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if err := agent.ValidateSessionName(payload.Name); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
-		ws, err := upgrader.Upgrade(w, req, nil)
+		if err := agent.CreateEmptySession(s.projectRoot, payload.Name); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to create session: "+err.Error())
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]string{"name": payload.Name})
+	}
+}
+
+func (s *Server) handleGetSessionMessages() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		sessionName := req.PathValue("name")
+		if err := agent.ValidateSessionName(sessionName); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		saved, err := agent.LoadSavedSessionMessages(s.projectRoot, sessionName)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				writeJSON(w, http.StatusOK, map[string]any{"messages": []agent.SavedMessage{}})
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "failed to load session: "+err.Error())
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{"messages": saved})
+	}
+}
+
+func (s *Server) handleChat() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		sessionName := sessionNameFromQuery(req)
+		if err := agent.ValidateSessionName(sessionName); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		ws, err := s.upgrader.Upgrade(w, req, nil)
 		if err != nil {
 			slog.Error("upgrade error", "error", err)
 			return
 		}
 		defer ws.Close()
 
-		if apiKey == "" {
+		if s.apiKey == "" {
 			ws.WriteJSON(agent.AgentEvent{Type: "error", Content: "GEMINI_API_KEY not set"})
 			return
 		}
 
-		ag, err := agent.New(projectRoot, apiKey, agent.Config{
-			MeiliURL:    meiliURL,
-			MeiliAPIKey: meiliAPIKey,
+		ag, err := agent.New(s.projectRoot, s.apiKey, agent.Config{
+			MeiliURL:    s.meiliURL,
+			MeiliAPIKey: s.meiliAPIKey,
 		})
 		if err != nil {
 			slog.Error("failed to init agent", "error", err)
@@ -95,206 +195,151 @@ func SetupRouter(apiKey, meiliURL, meiliAPIKey string) (*http.ServeMux, error) {
 			}
 		}()
 
-		promptChan := make(chan string)
-		go func() {
-			for {
-				_, msg, err := ws.ReadMessage()
-				if err != nil {
-					close(promptChan)
-					break
-				}
-				prompt := string(msg)
-				cmd := strings.TrimSpace(prompt)
-				if cmd == "/approve" {
-					ag.ApproveAction(true)
-				} else if cmd == "/deny" {
-					ag.ApproveAction(false)
-				} else {
-					promptChan <- prompt
-				}
+		s.processWebSocketChat(ws, ag, sessionName)
+	}
+}
+
+func (s *Server) processWebSocketChat(ws *websocket.Conn, ag *agent.Agent, sessionName string) {
+	promptChan := make(chan string)
+	go func() {
+		defer close(promptChan)
+		for {
+			_, msg, err := ws.ReadMessage()
+			if err != nil {
+				break
 			}
-		}()
-
-		for prompt := range promptChan {
-			outChan := make(chan agent.AgentEvent)
-			go ag.RunStream(prompt, outChan)
-
-			for ev := range outChan {
-				err := ws.WriteJSON(ev)
-				if err != nil {
-					break
-				}
+			prompt := string(msg)
+			cmd := strings.TrimSpace(prompt)
+			if cmd == "/approve" {
+				ag.ApproveAction(true)
+			} else if cmd == "/deny" {
+				ag.ApproveAction(false)
+			} else {
+				promptChan <- prompt
 			}
+		}
+	}()
 
-			if err := ag.SaveSession(sessionName); err != nil {
-				_ = ws.WriteJSON(agent.AgentEvent{Type: "error", Content: "Failed to save session: " + err.Error()})
+	for prompt := range promptChan {
+		outChan := make(chan agent.AgentEvent)
+		go ag.RunStream(prompt, outChan)
+
+		for ev := range outChan {
+			err := ws.WriteJSON(ev)
+			if err != nil {
 				break
 			}
 		}
-	})
 
-	r.HandleFunc("GET /api/sessions", func(w http.ResponseWriter, req *http.Request) {
-		sessions, err := agent.ListSessions(projectRoot)
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]any{"error": "failed to list sessions: " + err.Error()})
-			return
+		if err := ag.SaveSession(sessionName); err != nil {
+			_ = ws.WriteJSON(agent.AgentEvent{Type: "error", Content: "Failed to save session: " + err.Error()})
+			break
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]any{"sessions": sessions})
-	})
+	}
+}
 
-	r.HandleFunc("POST /api/sessions", func(w http.ResponseWriter, req *http.Request) {
-		var payload createSessionRequest
-		if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]any{"error": "invalid request body"})
-			return
-		}
-		if err := agent.ValidateSessionName(payload.Name); err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
-			return
-		}
-
-		if err := agent.CreateEmptySession(projectRoot, payload.Name); err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]any{"error": "failed to create session: " + err.Error()})
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]any{"name": payload.Name})
-	})
-
-	r.HandleFunc("GET /api/sessions/:name/messages", func(w http.ResponseWriter, req *http.Request) {
-		sessionName := req.PathValue("name")
-		if err := agent.ValidateSessionName(sessionName); err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
-			return
-		}
-
-		saved, err := agent.LoadSavedSessionMessages(projectRoot, sessionName)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(map[string]any{"messages": []agent.SavedMessage{}})
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]any{"error": "failed to load session: " + err.Error()})
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]any{"messages": saved})
-	})
-
-	// Optional compatibility bridge to centralized context server.
-	if contextServerURL != "" {
-		forward := func(w http.ResponseWriter, req *http.Request) {
-			target := strings.TrimSuffix(contextServerURL, "/") + req.URL.Path
-			if q := req.URL.RawQuery; q != "" {
-				target += "?" + q
-			}
-
-			var body io.Reader
-			if req.Body != nil {
-				raw, _ := io.ReadAll(req.Body)
-				body = bytes.NewReader(raw)
-			}
-
-			req, err := http.NewRequest(req.Method, target, body)
-			if err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusBadGateway)
-				json.NewEncoder(w).Encode(map[string]any{"error": "failed to build context upstream request"})
-				return
-			}
-			req.Header.Set("Content-Type", "application/json")
-			if contextServerToken != "" {
-				req.Header.Set("X-Context-Token", contextServerToken)
-			}
-
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusBadGateway)
-				json.NewEncoder(w).Encode(map[string]any{"error": "failed to reach centralized context server"})
-				return
-			}
-			defer resp.Body.Close()
-
-			payload, _ := io.ReadAll(resp.Body)
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			w.WriteHeader(resp.StatusCode)
-			w.Write(payload)
-		}
-
-		r.HandleFunc("GET /api/search", forward)
-		r.HandleFunc("GET /api/dashboard", forward)
-		r.HandleFunc("GET /api/cluster", forward)
-		r.HandleFunc("GET /api/memories", forward)
-		r.HandleFunc("POST /api/memories", forward)
-		r.HandleFunc("PUT /api/memories", forward)
-		r.HandleFunc("DELETE /api/memories", forward)
-		r.HandleFunc("GET /api/skills", forward)
-		r.HandleFunc("POST /api/skills", forward)
-		r.HandleFunc("PUT /api/skills", forward)
-		r.HandleFunc("DELETE /api/skills", forward)
-		r.HandleFunc("GET /api/context", forward)
-		r.HandleFunc("POST /api/context", forward)
-		r.HandleFunc("PUT /api/context", forward)
-		r.HandleFunc("DELETE /api/context", forward)
-		r.HandleFunc("POST /api/context/restore", forward)
-		r.HandleFunc("POST /api/vibe/query", forward)
-		r.HandleFunc("POST /api/vibe/mutation/plan", forward)
-		r.HandleFunc("POST /api/vibe/mutation/execute", forward)
-		r.HandleFunc("POST /api/autocomplete", forward)
-		r.HandleFunc("GET /api/moderation/queue", forward)
-		r.HandleFunc("POST /api/moderation/review", forward)
+func (s *Server) registerForwardingRoutes() {
+	routes := []string{
+		"GET /api/search",
+		"GET /api/dashboard",
+		"GET /api/cluster",
+		"GET /api/memories",
+		"POST /api/memories",
+		"PUT /api/memories",
+		"DELETE /api/memories",
+		"GET /api/skills",
+		"POST /api/skills",
+		"PUT /api/skills",
+		"DELETE /api/skills",
+		"GET /api/context",
+		"POST /api/context",
+		"PUT /api/context",
+		"DELETE /api/context",
+		"POST /api/context/restore",
+		"POST /api/vibe/query",
+		"POST /api/vibe/mutation/plan",
+		"POST /api/vibe/mutation/execute",
+		"POST /api/autocomplete",
+		"GET /api/moderation/queue",
+		"POST /api/moderation/review",
 	}
 
-	// Serve the embedded Svelte UI
-	// Fallback since ui module isn't strictly defined as a go module yet
-	// We'll serve from local dist directory directly
-	distFS := os.DirFS("ui/dist")
+	for _, route := range routes {
+		s.mux.HandleFunc(route, s.handleForward())
+	}
+}
 
-	r.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+func (s *Server) handleForward() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		target := strings.TrimSuffix(s.contextServerURL, "/") + req.URL.Path
+		if q := req.URL.RawQuery; q != "" {
+			target += "?" + q
+		}
+
+		var body io.Reader
+		if req.Body != nil {
+			raw, _ := io.ReadAll(req.Body)
+			body = bytes.NewReader(raw)
+		}
+
+		proxyReq, err := http.NewRequestWithContext(req.Context(), req.Method, target, body)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "failed to build context upstream request")
+			return
+		}
+		proxyReq.Header.Set("Content-Type", "application/json")
+		if s.contextServerToken != "" {
+			proxyReq.Header.Set("X-Context-Token", s.contextServerToken)
+		}
+
+		resp, err := http.DefaultClient.Do(proxyReq)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "failed to reach centralized context server")
+			return
+		}
+		defer resp.Body.Close()
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+	}
+}
+
+func (s *Server) handleStaticFiles() http.HandlerFunc {
+	distFS := os.DirFS("ui/dist")
+	fileServer := http.FileServer(http.FS(distFS))
+
+	return func(w http.ResponseWriter, req *http.Request) {
 		path := req.URL.Path
 		if strings.HasPrefix(path, "/api/") {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]any{"error": "API route not found or context server not configured"})
+			writeError(w, http.StatusNotFound, "API route not found or context server not configured")
 			return
 		}
 		f, err := distFS.Open(path[1:])
 		if err != nil {
-			http.FileServer(http.FS(distFS)).ServeHTTP(w, req)
+			fileServer.ServeHTTP(w, req)
 			return
 		}
 		defer f.Close()
-		http.FileServer(http.FS(distFS)).ServeHTTP(w, req)
-	})
-
-	return r, nil
+		fileServer.ServeHTTP(w, req)
+	}
 }
 
+// SetupRouter is kept for backwards compatibility and easy setup
+func SetupRouter(apiKey, meiliURL, meiliAPIKey string) (*http.ServeMux, error) {
+	s, err := NewServer(apiKey, meiliURL, meiliAPIKey)
+	if err != nil {
+		return nil, err
+	}
+	return s.mux, nil
+}
+
+// StartServer starts the HTTP server on the given port
 func StartServer(port int, apiKey, meiliURL, meiliAPIKey string) error {
-	r, err := SetupRouter(apiKey, meiliURL, meiliAPIKey)
+	s, err := NewServer(apiKey, meiliURL, meiliAPIKey)
 	if err != nil {
 		return err
 	}
 	addr := fmt.Sprintf(":%d", port)
-	return http.ListenAndServe(addr, r)
+	return http.ListenAndServe(addr, s.mux)
 }
