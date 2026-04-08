@@ -24,6 +24,8 @@ type Agent struct {
 	root    string
 	apiKey  string
 
+	Unattended bool
+
 	mu           sync.Mutex
 	cancel       context.CancelFunc
 	approvalChan chan bool
@@ -32,6 +34,7 @@ type Agent struct {
 type Config struct {
 	MeiliURL    string
 	MeiliAPIKey string
+	Unattended  bool
 }
 
 func New(projectRoot string, apiKey string, cfg ...Config) (*Agent, error) {
@@ -56,11 +59,17 @@ func New(projectRoot string, apiKey string, cfg ...Config) (*Agent, error) {
 
 	indexer := contextsrv.NewMeiliIndexer(meiliURL, meiliAPIKey, llmProvider)
 
+	unattended := false
+	if len(cfg) > 0 {
+		unattended = cfg[0].Unattended
+	}
+
 	return &Agent{
-		llm:     llmProvider,
-		indexer: indexer,
-		root:    projectRoot,
-		apiKey:  apiKey,
+		llm:        llmProvider,
+		indexer:    indexer,
+		root:       projectRoot,
+		apiKey:     apiKey,
+		Unattended: unattended,
 	}, nil
 }
 
@@ -381,33 +390,37 @@ func (a *Agent) executeToolCall(ctx context.Context, funcCall genai.FunctionCall
 		}
 
 		if IsDangerousCommand(command) {
-			// Create the approval channel and capture a local reference before
-			// emitting the event.  ApproveAction may be called (and the struct
-			// field nil'd) before the select below is entered, so we select on
-			// the local copy to avoid a receive on a nil channel.
-			approvalCh := make(chan bool, 1)
-			a.mu.Lock()
-			a.approvalChan = approvalCh
-			a.mu.Unlock()
+			if a.Unattended {
+				outChan <- AgentEvent{Type: "status", Content: "✅ Command execution auto-approved (Minion Mode)."}
+			} else {
+				// Create the approval channel and capture a local reference before
+				// emitting the event.  ApproveAction may be called (and the struct
+				// field nil'd) before the select below is entered, so we select on
+				// the local copy to avoid a receive on a nil channel.
+				approvalCh := make(chan bool, 1)
+				a.mu.Lock()
+				a.approvalChan = approvalCh
+				a.mu.Unlock()
 
-			outChan <- AgentEvent{
-				Type:    "approval_request",
-				Content: fmt.Sprintf("⚠️ The agent wants to execute a potentially dangerous command:\n\n```bash\n%s\n```\n\nApprove or deny this action by typing `/approve` or `/deny`.", command),
-			}
+				outChan <- AgentEvent{
+					Type:    "approval_request",
+					Content: fmt.Sprintf("⚠️ The agent wants to execute a potentially dangerous command:\n\n```bash\n%s\n```\n\nApprove or deny this action by typing `/approve` or `/deny`.", command),
+				}
 
-			// Block until approved or denied, or context cancelled
-			approved := false
-			select {
-			case <-ctx.Done():
-				return map[string]any{"error": "tool execution cancelled"}
-			case approved = <-approvalCh:
-			}
+				// Block until approved or denied, or context cancelled
+				approved := false
+				select {
+				case <-ctx.Done():
+					return map[string]any{"error": "tool execution cancelled"}
+				case approved = <-approvalCh:
+				}
 
-			if !approved {
-				outChan <- AgentEvent{Type: "status", Content: "❌ Command execution denied by user."}
-				return map[string]any{"error": "User denied command execution."}
+				if !approved {
+					outChan <- AgentEvent{Type: "status", Content: "❌ Command execution denied by user."}
+					return map[string]any{"error": "User denied command execution."}
+				}
+				outChan <- AgentEvent{Type: "status", Content: "✅ Command execution approved."}
 			}
-			outChan <- AgentEvent{Type: "status", Content: "✅ Command execution approved."}
 		}
 
 		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🖥️ Running bash: %s", command)}
