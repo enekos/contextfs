@@ -202,6 +202,10 @@ func (s *stubService) Ingest(text, baseURI string) ([]llm.ProposedContextNode, e
 	return nil, nil
 }
 
+func (s *stubService) Autocomplete(req AutocompleteRequest) (AutocompleteResponse, error) {
+	return AutocompleteResponse{Completion: "mock completion"}, nil
+}
+
 func (s *stubService) ApplyMemoryFeedback(id string, reward int) (Memory, error) {
 	return Memory{ID: id, Importance: reward}, nil
 }

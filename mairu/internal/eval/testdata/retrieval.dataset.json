@@ -1,0 +1,156 @@
+{
+  "project": "eval-approved-test",
+  "fixtures": [
+    {
+      "type": "memory",
+      "payload": {
+        "id": "eval-mem-auth-1",
+        "project": "eval-approved-test",
+        "content": "Use JWT tokens with 1-hour expiry for session authentication. Refresh tokens are stored server-side and rotated on each use.",
+        "category": "security",
+        "owner": "agent",
+        "importance": 9,
+        "created_at": "2024-06-01T12:00:00Z"
+      }
+    },
+    {
+      "type": "memory",
+      "payload": {
+        "id": "eval-mem-testing-1",
+        "project": "eval-approved-test",
+        "content": "All unit tests use table-driven test patterns in Go. Each test function covers a single behaviour and uses t.Run for subtests.",
+        "category": "practice",
+        "owner": "agent",
+        "importance": 7,
+        "created_at": "2024-06-01T12:00:00Z"
+      }
+    },
+    {
+      "type": "memory",
+      "payload": {
+        "id": "eval-mem-db-1",
+        "project": "eval-approved-test",
+        "content": "Database connections use a connection pool with max 20 connections. Queries timeout after 5 seconds.",
+        "category": "architecture",
+        "owner": "agent",
+        "importance": 8,
+        "created_at": "2024-06-01T12:00:00Z"
+      }
+    },
+    {
+      "type": "memory",
+      "payload": {
+        "id": "eval-mem-perf-1",
+        "project": "eval-approved-test",
+        "content": "Cache API responses in Redis with 5-minute TTL to reduce latency. Use cache-aside pattern and invalidate on write.",
+        "category": "performance",
+        "owner": "agent",
+        "importance": 7,
+        "created_at": "2024-06-01T12:00:00Z"
+      }
+    },
+    {
+      "type": "memory",
+      "payload": {
+        "id": "eval-mem-style-1",
+        "project": "eval-approved-test",
+        "content": "Code formatting follows gofmt conventions. All exported functions must have a doc comment.",
+        "category": "practice",
+        "owner": "agent",
+        "importance": 6,
+        "created_at": "2024-06-01T12:00:00Z"
+      }
+    },
+    {
+      "type": "skill",
+      "payload": {
+        "id": "eval-skill-auth-1",
+        "project": "eval-approved-test",
+        "name": "auth-handler",
+        "description": "Handles JWT token creation, validation, and refresh for user authentication flows.",
+        "created_at": "2024-06-01T12:00:00Z"
+      }
+    },
+    {
+      "type": "skill",
+      "payload": {
+        "id": "eval-skill-search-1",
+        "project": "eval-approved-test",
+        "name": "semantic-search",
+        "description": "Hybrid vector and keyword search for knowledge retrieval with re-ranking.",
+        "created_at": "2024-06-01T12:00:00Z"
+      }
+    },
+    {
+      "type": "skill",
+      "payload": {
+        "id": "eval-skill-db-1",
+        "project": "eval-approved-test",
+        "name": "db-migrator",
+        "description": "Manages database schema migrations, connection pooling, and query timeouts.",
+        "created_at": "2024-06-01T12:00:00Z"
+      }
+    },
+    {
+      "type": "context_node",
+      "payload": {
+        "id": "contextfs:__eval-approved-test_backend",
+        "uri": "contextfs://eval-approved-test/backend",
+        "project": "eval-approved-test",
+        "name": "Backend Architecture",
+        "abstract": "Core backend services including API gateway, authentication middleware, and database layer.",
+        "content": "The backend is structured around three layers: API gateway handles routing and rate limiting, auth middleware validates JWT tokens, and the data layer uses SQLite with a connection pool.",
+        "created_at": "2024-06-01T12:00:00Z"
+      }
+    },
+    {
+      "type": "context_node",
+      "payload": {
+        "id": "contextfs:__eval-approved-test_backend_auth",
+        "uri": "contextfs://eval-approved-test/backend/auth",
+        "project": "eval-approved-test",
+        "name": "Auth Module",
+        "abstract": "JWT-based authentication using RSA-256 signatures with refresh token rotation.",
+        "content": "Tokens are issued with a 1-hour expiry. Refresh tokens are stored in a server-side store keyed by user ID and rotated on each use to prevent replay attacks.",
+        "created_at": "2024-06-01T12:00:00Z"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "auth-mem",
+      "domain": "memory",
+      "query": "JWT authentication tokens",
+      "top_k": 5,
+      "expected": ["eval-mem-auth-1"]
+    },
+    {
+      "id": "testing-mem",
+      "domain": "memory",
+      "query": "how to write Go tests",
+      "top_k": 5,
+      "expected": ["eval-mem-testing-1"]
+    },
+    {
+      "id": "db-mem",
+      "domain": "memory",
+      "query": "database connection pool",
+      "top_k": 5,
+      "expected": ["eval-mem-db-1"]
+    },
+    {
+      "id": "auth-skill",
+      "domain": "skill",
+      "query": "token validation and authentication",
+      "top_k": 5,
+      "expected": ["eval-skill-auth-1"]
+    },
+    {
+      "id": "auth-ctx",
+      "domain": "context",
+      "query": "authentication architecture",
+      "top_k": 5,
+      "expected": ["contextfs://eval-approved-test/backend/auth", "contextfs://eval-approved-test/backend"]
+    }
+  ]
+}

@@ -112,12 +112,26 @@ function M.vibe_mutation(prompt, callback)
         path = "/vibe/mutation/execute",
         method = "POST",
         body = {
-          plan = plan_data.plan,
+          operations = plan_data.operations,
           project = config.options.server.project,
         },
         callback = callback
       })
     end
+  })
+end
+
+function M.autocomplete(opts, callback)
+  make_request({
+    path = "/autocomplete",
+    method = "POST",
+    body = {
+      prefix = opts.prefix,
+      suffix = opts.suffix,
+      filename = opts.filename,
+      project = config.options.server.project,
+    },
+    callback = callback
   })
 end
 

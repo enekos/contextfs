@@ -36,10 +36,10 @@ local function format_results(data)
   local lines = {}
   
   -- Handle Context Nodes
-  if data.nodes and #data.nodes > 0 then
+  if data.contextNodes and #data.contextNodes > 0 then
     table.insert(lines, "# Context Nodes")
     table.insert(lines, "")
-    for _, item in ipairs(data.nodes) do
+    for _, item in ipairs(data.contextNodes) do
       local node = item.node or item -- Handle potential wrapper
       table.insert(lines, "## " .. (node.name or "Unnamed Node"))
       table.insert(lines, "**URI:** `" .. (node.uri or "") .. "`")

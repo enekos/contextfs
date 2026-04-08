@@ -27,9 +27,9 @@ end
 local function format_ambient_results(data, query)
   local lines = { "### Ambient Context", "*Query: " .. query .. "*", "" }
   
-  if data.nodes and #data.nodes > 0 then
+  if data.contextNodes and #data.contextNodes > 0 then
     table.insert(lines, "**Nodes**")
-    for i, item in ipairs(data.nodes) do
+    for i, item in ipairs(data.contextNodes) do
       if i > 3 then break end -- Limit to top 3
       local node = item.node or item
       table.insert(lines, "- " .. (node.name or "Unnamed"))

@@ -25,6 +25,8 @@ function M.setup(opts)
   end
   
   -- 4. Setup user commands
+  require("mairu.autocomplete").setup()
+  
   vim.api.nvim_create_user_command("MairuSearch", function(args)
     if args.args and args.args ~= "" then
       require("mairu.ui.popup").open_search(args.args)
@@ -34,7 +36,7 @@ function M.setup(opts)
   end, { nargs = "?" })
   
   vim.api.nvim_create_user_command("MairuCommands", function()
-    require("mairu.telescope").command_palette()
+    require("mairu.commands").command_palette()
   end, {})
   
   vim.api.nvim_create_user_command("MairuSidebar", function()
@@ -63,6 +65,19 @@ function M.set_default_keymaps()
   vim.keymap.set("n", "<leader>mc", ":MairuCommands<CR>", { desc = "Mairu Command Palette" })
   vim.keymap.set("n", "<leader>ma", ":MairuChat<CR>", { desc = "Mairu Chat" })
   vim.keymap.set("n", "<leader>mb", ":MairuSidebar<CR>", { desc = "Mairu Sidebar Toggle" })
+  
+  -- Autocomplete mappings
+  vim.keymap.set("i", "<C-g>", function()
+    require("mairu.autocomplete").trigger()
+  end, { desc = "Mairu Autocomplete Trigger" })
+  
+  vim.keymap.set("i", "<Tab>", function()
+    if require("mairu.autocomplete").accept() then
+      return ""
+    else
+      return "<Tab>"
+    end
+  end, { expr = true, replace_keycodes = true, desc = "Mairu Autocomplete Accept" })
 end
 
 return M

@@ -68,6 +68,7 @@ type Service interface {
 	Dashboard(limit int, project string) (map[string]any, error)
 	ClusterStats() map[string]any
 	Ingest(text, baseURI string) ([]llm.ProposedContextNode, error)
+	Autocomplete(req AutocompleteRequest) (AutocompleteResponse, error)
 }
 
 // ---- repository sub-interfaces ----

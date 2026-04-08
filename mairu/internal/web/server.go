@@ -260,6 +260,7 @@ func SetupRouter(apiKey, meiliURL, meiliAPIKey string) (*http.ServeMux, error) {
 		r.HandleFunc("POST /api/vibe/query", forward)
 		r.HandleFunc("POST /api/vibe/mutation/plan", forward)
 		r.HandleFunc("POST /api/vibe/mutation/execute", forward)
+		r.HandleFunc("POST /api/autocomplete", forward)
 		r.HandleFunc("GET /api/moderation/queue", forward)
 		r.HandleFunc("POST /api/moderation/review", forward)
 	}

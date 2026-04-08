@@ -4,5 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 cd "${ROOT_DIR}"
 
+echo "[pre-commit] Checking fixture consistency..."
+./scripts/check-fixtures.sh
+
 echo "[pre-commit] Running Go checks..."
 make check-go

@@ -127,20 +127,39 @@ local function send_query()
       return
     end
     
-    -- Assuming vibe_query returns a `answer` or `message` field
-    local reply = data.answer or data.message or vim.fn.json_encode(data)
+    -- vibe_query returns { reasoning = "...", results = [ { store, items } ] }
+    local reply = ""
+    if data.reasoning then
+      reply = reply .. data.reasoning .. "\n\n"
+    end
+    
+    local found_any = false
+    if data.results then
+      for _, group in ipairs(data.results) do
+        if group.items and #group.items > 0 then
+          found_any = true
+          reply = reply .. "**" .. group.store:gsub("^%l", string.upper) .. " Matches:**\n"
+          for _, item in ipairs(group.items) do
+             local label = item.content or item.name or item.abstract or item.uri or item.id or "Unknown"
+             -- Truncate label if it's too long
+             if string.len(label) > 100 then
+               label = string.sub(label, 1, 100) .. "..."
+             end
+             -- Format on one line
+             reply = reply .. "- " .. label:gsub("\n", " ") .. "\n"
+          end
+          reply = reply .. "\n"
+        end
+      end
+    end
+    
+    if not found_any then
+      reply = reply .. "*(No matching context found)*"
+    end
+    
     append_to_history(reply, false)
     
-    -- If there's a proposed mutation plan, show it and add a way to execute it
-    if data.plan and data.plan.mutations and #data.plan.mutations > 0 then
-      append_raw("---")
-      append_raw("**Proposed Mutations:**")
-      for _, mut in ipairs(data.plan.mutations) do
-        append_raw(string.format("- [%s] %s", mut.type, mut.description or mut.content or mut.uri or ""))
-      end
-      -- Note: for a true interactive experience, we'd add a command to execute this plan
-      -- For now, we just display it.
-    end
+
   end)
 end
 
