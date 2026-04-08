@@ -221,4 +221,4 @@ Agents are encouraged to use the `mairu` binary for token-dense, strictly parsab
 - `mairu scan <regex> [dir] -C 1` -> Token-budgeted regex search preventing context window blowouts
 - `mairu sys` -> Quick system status and memory check
 - `mairu info [dir]` -> Repository analytics (token sizes, file counts, extensions)
-- `mairu env [file]` -> Reads `.env` safely by extracting only the keys (prevents secret leakage)
+- `mairu env [file] -r` -> Smart env reader. Extracts keys, flags secrets (`is_secret: true`), and safely reveals non-sensitive config values (booleans, ports)
