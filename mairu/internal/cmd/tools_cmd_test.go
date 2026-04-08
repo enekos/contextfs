@@ -294,3 +294,124 @@ func TestMapDirs(t *testing.T) {
 		t.Errorf("expected directory entry with 'd' flag, got: %s", buf.String())
 	}
 }
+
+func TestEnvDiff(t *testing.T) {
+	f1, _ := os.CreateTemp("", "env1*.env")
+	defer os.Remove(f1.Name())
+	f1.WriteString("PORT=3000\nDEBUG=true\nOLD_KEY=val\n")
+	f1.Close()
+
+	f2, _ := os.CreateTemp("", "env2*.env")
+	defer os.Remove(f2.Name())
+	f2.WriteString("PORT=8080\nDEBUG=true\nNEW_KEY=val\n")
+	f2.Close()
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	envReveal = false
+	envPattern = ""
+	envDiff = f2.Name()
+	envRequired = ""
+	envCmd.Run(envCmd, []string{f1.Name()})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+
+	var raw map[string]interface{}
+	json.Unmarshal(buf.Bytes(), &raw)
+
+	if _, ok := raw["added"]; !ok {
+		t.Errorf("expected 'added' field in diff output, got: %s", buf.String())
+	}
+	if _, ok := raw["removed"]; !ok {
+		t.Errorf("expected 'removed' field in diff output")
+	}
+
+	added := raw["added"].([]interface{})
+	if len(added) != 1 || added[0] != "NEW_KEY" {
+		t.Errorf("expected [NEW_KEY] added, got %v", added)
+	}
+}
+
+func TestEnvRequired(t *testing.T) {
+	f, _ := os.CreateTemp("", "envreq*.env")
+	defer os.Remove(f.Name())
+	f.WriteString("PORT=3000\nDEBUG=true\n")
+	f.Close()
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	envReveal = false
+	envPattern = ""
+	envDiff = ""
+	envRequired = "PORT,DEBUG"
+
+	envCmd.Run(envCmd, []string{f.Name()})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+
+	var raw map[string]interface{}
+	json.Unmarshal(buf.Bytes(), &raw)
+
+	if ok, exists := raw["ok"]; !exists || ok != true {
+		t.Errorf("expected ok=true when all required keys present, got: %s", buf.String())
+	}
+}
+
+func TestEnvMultiFile(t *testing.T) {
+	f1, _ := os.CreateTemp("", "env1*.env")
+	defer os.Remove(f1.Name())
+	f1.WriteString("PORT=3000\nDEBUG=false\n")
+	f1.Close()
+
+	f2, _ := os.CreateTemp("", "env2*.env")
+	defer os.Remove(f2.Name())
+	f2.WriteString("DEBUG=true\nNEW_VAR=hello\n")
+	f2.Close()
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	envReveal = true
+	envPattern = ""
+	envDiff = ""
+	envRequired = ""
+	envCmd.Run(envCmd, []string{f1.Name(), f2.Name()})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+
+	var res envResult
+	json.Unmarshal(buf.Bytes(), &res)
+
+	// DEBUG should be overridden to "true" from f2
+	found := false
+	for _, v := range res.Vars {
+		if v.Key == "DEBUG" && v.Value == "true" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected DEBUG=true (overridden by second file), got: %s", buf.String())
+	}
+
+	// Should have 3 unique keys
+	if len(res.Vars) != 3 {
+		t.Errorf("expected 3 merged vars, got %d: %s", len(res.Vars), buf.String())
+	}
+}
