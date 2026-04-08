@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -112,5 +115,79 @@ func TestEnvCmd(t *testing.T) {
 	}
 	if bytes.Contains(buf2.Bytes(), []byte("secret_hash_here")) {
 		t.Errorf("envCmd LEAKED A SECRET: %s", out2)
+	}
+}
+
+func TestInfoStructuredOutput(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\n\nfunc main() {\n}\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "b.ts"), []byte("export function hello() {\n  return 1\n}\n"), 0644)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	infoTop = 0
+	infoExtensions = ""
+	infoCmd.Run(infoCmd, []string{dir})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+
+	var raw map[string]interface{}
+	json.Unmarshal(buf.Bytes(), &raw)
+
+	if _, ok := raw["lines"]; !ok {
+		t.Errorf("expected 'lines' field in output, got: %s", buf.String())
+	}
+
+	langs, ok := raw["languages"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected languages map, got: %s", buf.String())
+	}
+	goLang, ok := langs[".go"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected .go to be an object, got: %v", langs[".go"])
+	}
+	if _, ok := goLang["files"]; !ok {
+		t.Errorf("expected 'files' in language entry")
+	}
+	if _, ok := goLang["pct"]; !ok {
+		t.Errorf("expected 'pct' in language entry")
+	}
+}
+
+func TestInfoTop(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "small.go"), []byte("x\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "big.go"), []byte(strings.Repeat("x\n", 1000)), 0644)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	infoTop = 1
+	infoExtensions = ""
+	infoCmd.Run(infoCmd, []string{dir})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+
+	var raw map[string]interface{}
+	json.Unmarshal(buf.Bytes(), &raw)
+
+	top, ok := raw["top"].([]interface{})
+	if !ok || len(top) != 1 {
+		t.Fatalf("expected top array with 1 entry, got: %s", buf.String())
+	}
+	entry := top[0].(map[string]interface{})
+	if entry["p"] != "big.go" {
+		t.Errorf("expected big.go as top file, got %v", entry["p"])
 	}
 }
