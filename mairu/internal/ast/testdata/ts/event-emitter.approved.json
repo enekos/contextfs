@@ -6,42 +6,48 @@
       "Name": "EventEmitter",
       "Kind": "cls",
       "Exported": true,
-      "Doc": ""
+      "Doc": "",
+      "Line": 3
     },
     {
       "ID": "mtd:EventEmitter.clear",
       "Name": "clear",
       "Kind": "mtd",
       "Exported": true,
-      "Doc": "Removes all listeners for a given event, or all events if none specified."
+      "Doc": "Removes all listeners for a given event, or all events if none specified.",
+      "Line": 34
     },
     {
       "ID": "mtd:EventEmitter.emit",
       "Name": "emit",
       "Kind": "mtd",
       "Exported": true,
-      "Doc": "Fires all listeners registered for the given event."
+      "Doc": "Fires all listeners registered for the given event.",
+      "Line": 23
     },
     {
       "ID": "mtd:EventEmitter.off",
       "Name": "off",
       "Kind": "mtd",
       "Exported": true,
-      "Doc": "Removes a previously registered listener."
+      "Doc": "Removes a previously registered listener.",
+      "Line": 15
     },
     {
       "ID": "mtd:EventEmitter.on",
       "Name": "on",
       "Kind": "mtd",
       "Exported": true,
-      "Doc": "Registers a listener for the given event name."
+      "Doc": "Registers a listener for the given event name.",
+      "Line": 7
     },
     {
       "ID": "type:Listener",
       "Name": "Listener",
       "Kind": "type",
       "Exported": false,
-      "Doc": ""
+      "Doc": "",
+      "Line": 1
     }
   ],
   "edges": [

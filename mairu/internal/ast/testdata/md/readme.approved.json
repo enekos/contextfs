@@ -6,28 +6,32 @@
       "Name": "My Project",
       "Kind": "h1",
       "Exported": false,
-      "Doc": ""
+      "Doc": "",
+      "Line": 1
     },
     {
       "ID": "h2:Installation",
       "Name": "Installation",
       "Kind": "h2",
       "Exported": false,
-      "Doc": ""
+      "Doc": "",
+      "Line": 5
     },
     {
       "ID": "h2:Usage",
       "Name": "Usage",
       "Kind": "h2",
       "Exported": false,
-      "Doc": ""
+      "Doc": "",
+      "Line": 9
     },
     {
       "ID": "h3:Advanced Usage",
       "Name": "Advanced Usage",
       "Kind": "h3",
       "Exported": false,
-      "Doc": ""
+      "Doc": "",
+      "Line": 13
     }
   ],
   "edges": [],

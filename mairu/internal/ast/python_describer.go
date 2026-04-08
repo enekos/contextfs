@@ -3,6 +3,7 @@ package ast
 import (
 	"regexp"
 	"sort"
+	"strings"
 )
 
 var (
@@ -16,8 +17,11 @@ func (d PythonDescriber) LanguageID() string   { return "python" }
 func (d PythonDescriber) Extensions() []string { return []string{".py"} }
 func (d PythonDescriber) ExtractFileGraph(_ string, source string) FileGraph {
 	symbols := []LogicSymbol{}
-	for _, m := range rePyDef.FindAllStringSubmatch(source, -1) {
-		symbols = append(symbols, LogicSymbol{ID: "fn:" + m[1], Name: m[1], Kind: "fn"})
+	lines := strings.Split(source, "\n")
+	for i, line := range lines {
+		if m := rePyDef.FindStringSubmatch(line); m != nil {
+			symbols = append(symbols, LogicSymbol{ID: "fn:" + m[1], Name: m[1], Kind: "fn", Line: i + 1})
+		}
 	}
 
 	idsByName := map[string]string{}

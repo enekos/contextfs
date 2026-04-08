@@ -6,28 +6,32 @@
       "Name": "TodoList",
       "Kind": "fn",
       "Exported": true,
-      "Doc": ""
+      "Doc": "",
+      "Line": 9
     },
     {
       "ID": "fn:addTodo",
       "Name": "addTodo",
       "Kind": "fn",
       "Exported": true,
-      "Doc": ""
+      "Doc": "",
+      "Line": 13
     },
     {
       "ID": "fn:removeTodo",
       "Name": "removeTodo",
       "Kind": "fn",
       "Exported": true,
-      "Doc": ""
+      "Doc": "",
+      "Line": 23
     },
     {
       "ID": "fn:toggleTodo",
       "Name": "toggleTodo",
       "Kind": "fn",
       "Exported": true,
-      "Doc": ""
+      "Doc": "",
+      "Line": 19
     }
   ],
   "edges": [

@@ -3,6 +3,7 @@ package ast
 import (
 	"regexp"
 	"sort"
+	"strings"
 )
 
 type LogicSymbol struct {
@@ -11,6 +12,7 @@ type LogicSymbol struct {
 	Kind     string
 	Exported bool
 	Doc      string
+	Line     int
 }
 
 // LogicEdge represents a relationship between two LogicSymbols, such as a function call.
@@ -51,14 +53,19 @@ var (
 // that do not have a robust Tree-sitter implementation yet.
 func BaseExtract(source string) FileGraph {
 	symbols := []LogicSymbol{}
-	for _, m := range reFunc.FindAllStringSubmatch(source, -1) {
-		symbols = append(symbols, LogicSymbol{ID: "fn:" + m[1], Name: m[1], Kind: "fn", Exported: true})
+	lines := strings.Split(source, "\n")
+	for i, line := range lines {
+		if m := reFunc.FindStringSubmatch(line); m != nil {
+			symbols = append(symbols, LogicSymbol{ID: "fn:" + m[1], Name: m[1], Kind: "fn", Exported: true, Line: i + 1})
+		}
+		if m := reClass.FindStringSubmatch(line); m != nil {
+			symbols = append(symbols, LogicSymbol{ID: "cls:" + m[1], Name: m[1], Kind: "cls", Exported: true, Line: i + 1})
+		}
 	}
 
 	seenClass := ""
 	for _, m := range reClass.FindAllStringSubmatch(source, -1) {
 		name := m[1]
-		symbols = append(symbols, LogicSymbol{ID: "cls:" + name, Name: name, Kind: "cls", Exported: true})
 		seenClass = name
 	}
 

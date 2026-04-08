@@ -6,21 +6,24 @@
       "Name": "evictStale",
       "Kind": "fn",
       "Exported": true,
-      "Doc": ""
+      "Doc": "",
+      "Line": 10
     },
     {
       "ID": "fn:getOrSet",
       "Name": "getOrSet",
       "Kind": "fn",
       "Exported": true,
-      "Doc": ""
+      "Doc": "",
+      "Line": 1
     },
     {
       "ID": "fn:warmUp",
       "Name": "warmUp",
       "Kind": "fn",
       "Exported": true,
-      "Doc": ""
+      "Doc": "",
+      "Line": 22
     }
   ],
   "edges": [],

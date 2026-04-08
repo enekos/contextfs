@@ -3,6 +3,7 @@ package ast
 import (
 	"regexp"
 	"sort"
+	"strings"
 )
 
 var (
@@ -16,8 +17,11 @@ func (d GoDescriber) LanguageID() string   { return "go" }
 func (d GoDescriber) Extensions() []string { return []string{".go"} }
 func (d GoDescriber) ExtractFileGraph(_ string, source string) FileGraph {
 	symbols := []LogicSymbol{}
-	for _, m := range reGoFn.FindAllStringSubmatch(source, -1) {
-		symbols = append(symbols, LogicSymbol{ID: "fn:" + m[1], Name: m[1], Kind: "fn"})
+	lines := strings.Split(source, "\n")
+	for i, line := range lines {
+		if m := reGoFn.FindStringSubmatch(line); m != nil {
+			symbols = append(symbols, LogicSymbol{ID: "fn:" + m[1], Name: m[1], Kind: "fn", Line: i + 1})
+		}
 	}
 
 	idsByName := map[string]string{}

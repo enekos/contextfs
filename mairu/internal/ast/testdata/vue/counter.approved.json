@@ -6,28 +6,32 @@
       "Name": "decrement",
       "Kind": "fn",
       "Exported": false,
-      "Doc": ""
+      "Doc": "",
+      "Line": 12
     },
     {
       "ID": "fn:increment",
       "Name": "increment",
       "Kind": "fn",
       "Exported": false,
-      "Doc": ""
+      "Doc": "",
+      "Line": 8
     },
     {
       "ID": "fn:reset",
       "Name": "reset",
       "Kind": "fn",
       "Exported": false,
-      "Doc": ""
+      "Doc": "",
+      "Line": 18
     },
     {
       "ID": "fn:useCounter",
       "Name": "useCounter",
       "Kind": "fn",
       "Exported": false,
-      "Doc": ""
+      "Doc": "",
+      "Line": 4
     }
   ],
   "edges": [

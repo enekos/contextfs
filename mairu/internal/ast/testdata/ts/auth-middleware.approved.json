@@ -6,21 +6,24 @@
       "Name": "authenticate",
       "Kind": "fn",
       "Exported": true,
-      "Doc": "Validates JWT tokens and attaches user info to the request."
+      "Doc": "Validates JWT tokens and attaches user info to the request.",
+      "Line": 11
     },
     {
       "ID": "fn:requireRole",
       "Name": "requireRole",
       "Kind": "fn",
       "Exported": true,
-      "Doc": "Checks if the authenticated user has the required role."
+      "Doc": "Checks if the authenticated user has the required role.",
+      "Line": 29
     },
     {
       "ID": "iface:TokenPayload",
       "Name": "TokenPayload",
       "Kind": "iface",
       "Exported": false,
-      "Doc": ""
+      "Doc": "",
+      "Line": 4
     }
   ],
   "edges": [

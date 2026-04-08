@@ -3,6 +3,7 @@ package ast
 import (
 	"regexp"
 	"sort"
+	"strings"
 )
 
 var (
@@ -15,8 +16,11 @@ func (d VueDescriber) LanguageID() string   { return "vue" }
 func (d VueDescriber) Extensions() []string { return []string{".vue"} }
 func (d VueDescriber) ExtractFileGraph(_ string, source string) FileGraph {
 	symbols := []LogicSymbol{}
-	for _, m := range reVueSetup.FindAllStringSubmatch(source, -1) {
-		symbols = append(symbols, LogicSymbol{ID: "fn:" + m[1], Name: m[1], Kind: "fn"})
+	lines := strings.Split(source, "\n")
+	for i, line := range lines {
+		if m := reVueSetup.FindStringSubmatch(line); m != nil {
+			symbols = append(symbols, LogicSymbol{ID: "fn:" + m[1], Name: m[1], Kind: "fn", Line: i + 1})
+		}
 	}
 
 	idsByName := map[string]string{}

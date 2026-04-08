@@ -96,7 +96,7 @@ func parseTypeScript(source string) FileGraph {
 				className = nameNode.Content([]byte(source))
 			}
 			classId := "cls:" + className
-			pushSymbol(LogicSymbol{ID: classId, Kind: "cls", Name: className, Exported: isExport, Doc: extractJsDoc(child, []byte(source))})
+			pushSymbol(LogicSymbol{ID: classId, Kind: "cls", Name: className, Exported: isExport, Doc: extractJsDoc(child, []byte(source)), Line: int(declNode.StartPoint().Row) + 1})
 
 			superClass := getExtendsClause(declNode, []byte(source))
 			if superClass != "" {
@@ -113,7 +113,7 @@ func parseTypeScript(source string) FileGraph {
 					methodName = mNameNode.Content([]byte(source))
 				}
 				methodId := "mtd:" + className + "." + methodName
-				pushSymbol(LogicSymbol{ID: methodId, Kind: "mtd", Name: methodName, Exported: isExport, Doc: extractJsDoc(method, []byte(source))})
+				pushSymbol(LogicSymbol{ID: methodId, Kind: "mtd", Name: methodName, Exported: isExport, Doc: extractJsDoc(method, []byte(source)), Line: int(method.StartPoint().Row) + 1})
 				methodByClassAndName[className+"."+methodName] = methodId
 				methodIdsByName[methodName] = append(methodIdsByName[methodName], methodId)
 				callableNodes = append(callableNodes, CallableNodeRef{SymbolID: methodId, ClassName: className, Node: method})
@@ -126,7 +126,7 @@ func parseTypeScript(source string) FileGraph {
 				fnName = nameNode.Content([]byte(source))
 			}
 			fnId := "fn:" + fnName
-			pushSymbol(LogicSymbol{ID: fnId, Kind: "fn", Name: fnName, Exported: isExport, Doc: extractJsDoc(child, []byte(source))})
+			pushSymbol(LogicSymbol{ID: fnId, Kind: "fn", Name: fnName, Exported: isExport, Doc: extractJsDoc(child, []byte(source)), Line: int(declNode.StartPoint().Row) + 1})
 			callableNodes = append(callableNodes, CallableNodeRef{SymbolID: fnId, ClassName: "", Node: declNode})
 
 		case "lexical_declaration", "variable_declaration":
@@ -142,7 +142,7 @@ func parseTypeScript(source string) FileGraph {
 					variableName = vNameNode.Content([]byte(source))
 				}
 				symbolId := "var:" + variableName
-				pushSymbol(LogicSymbol{ID: symbolId, Kind: "var", Name: variableName, Exported: isExport, Doc: doc})
+				pushSymbol(LogicSymbol{ID: symbolId, Kind: "var", Name: variableName, Exported: isExport, Doc: doc, Line: int(declarator.StartPoint().Row) + 1})
 				moduleVariableByName[variableName] = symbolId
 			}
 
@@ -152,7 +152,7 @@ func parseTypeScript(source string) FileGraph {
 			if nameNode != nil {
 				name = nameNode.Content([]byte(source))
 			}
-			pushSymbol(LogicSymbol{ID: "iface:" + name, Kind: "iface", Name: name, Exported: isExport, Doc: extractJsDoc(child, []byte(source))})
+			pushSymbol(LogicSymbol{ID: "iface:" + name, Kind: "iface", Name: name, Exported: isExport, Doc: extractJsDoc(child, []byte(source)), Line: int(declNode.StartPoint().Row) + 1})
 
 		case "enum_declaration":
 			nameNode := declNode.ChildByFieldName("name")
@@ -160,7 +160,7 @@ func parseTypeScript(source string) FileGraph {
 			if nameNode != nil {
 				name = nameNode.Content([]byte(source))
 			}
-			pushSymbol(LogicSymbol{ID: "enum:" + name, Kind: "enum", Name: name, Exported: isExport, Doc: extractJsDoc(child, []byte(source))})
+			pushSymbol(LogicSymbol{ID: "enum:" + name, Kind: "enum", Name: name, Exported: isExport, Doc: extractJsDoc(child, []byte(source)), Line: int(declNode.StartPoint().Row) + 1})
 
 		case "type_alias_declaration":
 			nameNode := declNode.ChildByFieldName("name")
@@ -168,7 +168,7 @@ func parseTypeScript(source string) FileGraph {
 			if nameNode != nil {
 				name = nameNode.Content([]byte(source))
 			}
-			pushSymbol(LogicSymbol{ID: "type:" + name, Kind: "type", Name: name, Exported: isExport, Doc: extractJsDoc(child, []byte(source))})
+			pushSymbol(LogicSymbol{ID: "type:" + name, Kind: "type", Name: name, Exported: isExport, Doc: extractJsDoc(child, []byte(source)), Line: int(declNode.StartPoint().Row) + 1})
 		}
 	}
 

@@ -29,20 +29,22 @@ func (MarkdownDescriber) ExtractFileGraph(filePath, source string) FileGraph {
 }
 
 func extractMarkdownHeadings(source string) []LogicSymbol {
-	matches := reMarkdownHeading.FindAllStringSubmatch(source, -1)
 	seen := map[string]int{}
 	var symbols []LogicSymbol
-	for _, m := range matches {
-		level := len(m[1])
-		text := strings.TrimSpace(m[2])
-		kind := fmt.Sprintf("h%d", level)
-		baseID := kind + ":" + text
-		id := baseID
-		if n := seen[baseID]; n > 0 {
-			id = fmt.Sprintf("%s:%d", baseID, n+1)
+	lines := strings.Split(source, "\n")
+	for i, line := range lines {
+		if m := reMarkdownHeading.FindStringSubmatch(line); m != nil {
+			level := len(m[1])
+			text := strings.TrimSpace(m[2])
+			kind := fmt.Sprintf("h%d", level)
+			baseID := kind + ":" + text
+			id := baseID
+			if n := seen[baseID]; n > 0 {
+				id = fmt.Sprintf("%s:%d", baseID, n+1)
+			}
+			seen[baseID]++
+			symbols = append(symbols, LogicSymbol{ID: id, Name: text, Kind: kind, Line: i + 1})
 		}
-		seen[baseID]++
-		symbols = append(symbols, LogicSymbol{ID: id, Name: text, Kind: kind})
 	}
 	return symbols
 }
