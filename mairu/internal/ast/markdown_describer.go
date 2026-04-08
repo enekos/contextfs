@@ -85,11 +85,12 @@ func extractMarkdownSummary(source string) string {
 			}
 			continue
 		}
-		// Stop at next heading or HTML/image lines
-		if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "![") || strings.HasPrefix(trimmed, "<") {
-			if len(descLines) > 0 {
-				break
-			}
+		// Any subsequent heading ends the intro paragraph
+		if strings.HasPrefix(trimmed, "#") {
+			break
+		}
+		// Skip standalone image/HTML lines (e.g. badges) but keep scanning
+		if strings.HasPrefix(trimmed, "![") || strings.HasPrefix(trimmed, "<") {
 			continue
 		}
 		descLines = append(descLines, trimmed)

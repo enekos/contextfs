@@ -41,11 +41,19 @@ type Manager interface {
 	DeleteContextNode(ctx context.Context, uri string) error
 }
 
+// MarkdownSummarizer enriches markdown file summaries using an LLM.
+// When non-nil, it replaces the heuristic abstract and overview with
+// semantically richer descriptions optimized for retrieval.
+type MarkdownSummarizer interface {
+	SummarizeMarkdown(ctx context.Context, filename, content string) (abstract, overview string, err error)
+}
+
 // Options configures the background Daemon behavior for processing files.
 type Options struct {
 	MaxFileSizeBytes     int64
 	ProcessingDebounceMs int
 	Concurrency          int
+	MarkdownSummarizer   MarkdownSummarizer
 }
 
 type cacheEntry struct {
@@ -77,7 +85,8 @@ type Daemon struct {
 	fileContentHashes map[string]string
 	nodePayloadHashes map[string]string
 
-	describers []ast.LanguageDescriber
+	describers   []ast.LanguageDescriber
+	mdSummarizer MarkdownSummarizer
 }
 
 // New creates a new Daemon instance that watches a specified directory.
@@ -109,6 +118,7 @@ func New(manager Manager, project, watchDir string, opts Options) *Daemon {
 			ast.PythonDescriber{},
 			ast.MarkdownDescriber{},
 		},
+		mdSummarizer: opts.MarkdownSummarizer,
 	}
 }
 
@@ -245,7 +255,7 @@ func (d *Daemon) ProcessFile(ctx context.Context, filePath string) error {
 		return nil
 	}
 
-	summary := d.summarizeSourceFile(abs, string(raw))
+	summary := d.summarizeSourceFile(ctx, abs, string(raw))
 	metadata := map[string]any{
 		"type":        "file",
 		"path":        abs,
@@ -393,7 +403,7 @@ type sourceSummary struct {
 	LogicGraph map[string]any
 }
 
-func (d *Daemon) summarizeSourceFile(filePath, src string) sourceSummary {
+func (d *Daemon) summarizeSourceFile(ctx context.Context, filePath, src string) sourceSummary {
 	var fileDoc string
 	var abstract string
 	var overview string
@@ -455,6 +465,19 @@ func (d *Daemon) summarizeSourceFile(filePath, src string) sourceSummary {
 			"symbols": fg.Symbols,
 			"edges":   fg.Edges,
 			"imports": fg.Imports,
+		}
+
+		// LLM enrichment pass for markdown files: replaces heuristic abstract and
+		// overview with semantically richer descriptions optimized for retrieval.
+		if fg.RawContent != "" && d.mdSummarizer != nil {
+			if ab, ov, err := d.mdSummarizer.SummarizeMarkdown(ctx, filepath.Base(filePath), src); err == nil {
+				abstract = ab
+				if ov != "" {
+					overview = ov
+				}
+			} else {
+				fmt.Printf("[Daemon] markdown LLM enrichment failed for %s: %v\n", filepath.Base(filePath), err)
+			}
 		}
 	} else {
 		// Fallback for languages without describer

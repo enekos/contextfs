@@ -6,9 +6,19 @@ import (
 	"os"
 
 	"mairu/internal/daemon"
+	"mairu/internal/llm"
 
 	"github.com/spf13/cobra"
 )
+
+// geminiMarkdownSummarizer wraps GeminiProvider to implement daemon.MarkdownSummarizer.
+type geminiMarkdownSummarizer struct {
+	provider *llm.GeminiProvider
+}
+
+func (s *geminiMarkdownSummarizer) SummarizeMarkdown(ctx context.Context, filename, content string) (string, string, error) {
+	return llm.SummarizeMarkdownDoc(ctx, s.provider, "gemini-2.5-flash", filename, content)
+}
 
 type remoteManager struct{}
 
@@ -48,7 +58,15 @@ func init() {
 			if _, err := os.Stat(dir); err != nil {
 				return err
 			}
-			d := daemon.New(remoteManager{}, project, dir, daemon.Options{})
+			opts := daemon.Options{}
+			if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
+				if p, err := llm.NewGeminiProvider(cmd.Context(), apiKey); err == nil {
+					opts.MarkdownSummarizer = &geminiMarkdownSummarizer{provider: p}
+				} else {
+					slog.Warn("failed to init Gemini for markdown summarization", "err", err)
+				}
+			}
+			d := daemon.New(remoteManager{}, project, dir, opts)
 			d.LoadCache()
 			if err := d.ProcessAllFiles(context.Background()); err != nil {
 				return err

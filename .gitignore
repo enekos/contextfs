@@ -51,3 +51,9 @@ mairu/ui/playwright-report/
 .data/
 .logs/
 .worktrees/
+
+.claude/settings.local.json
+
+mairu.db
+mairu.db-shm
+mairu.db-wal
