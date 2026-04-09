@@ -102,7 +102,7 @@ fn find_main_content(doc: &Html) -> Option<ElementRef<'_>> {
 // Nodes we completely ignore
 const SKIP_TAGS: &[&str] = &[
     "nav", "footer", "header", "aside", "script", "style", "noscript", "iframe", "svg", "form",
-    "button", "img", "canvas", "video", "audio", "map", "menu",
+    "canvas", "video", "audio", "map", "menu",
 ];
 
 // Substrings in id or class that usually indicate boilerplate
@@ -209,6 +209,39 @@ fn extract_from_node(node: ElementRef, sections: &mut Vec<ContentSection>) {
             }
             return;
         }
+        "img" => {
+            let alt = node.value().attr("alt").unwrap_or("");
+            let aria_label = node.value().attr("aria-label").unwrap_or("");
+
+            let mut text = String::new();
+            if !alt.is_empty() {
+                text.push_str(&format!("[Image: {}]", alt));
+            } else if !aria_label.is_empty() {
+                text.push_str(&format!("[Image: {}]", aria_label));
+            }
+
+            if !text.is_empty() {
+                sections.push(ContentSection {
+                    kind: SectionKind::Paragraph,
+                    text,
+                    depth: None,
+                    selector: "img".to_string(),
+                });
+            }
+            return;
+        }
+        "button" => {
+            let text = collect_text(node).trim().to_string();
+            if !text.is_empty() {
+                sections.push(ContentSection {
+                    kind: SectionKind::Paragraph,
+                    text: format!("[Button: {}]", text),
+                    depth: None,
+                    selector: "button".to_string(),
+                });
+            }
+            return;
+        }
         _ => {}
     }
 
@@ -244,8 +277,21 @@ fn collect_text(node: ElementRef) -> String {
         // just concatenates text nodes. We will pad slightly.
         result.push(' ');
     }
-    // Clean up extra whitespace
-    result.split_whitespace().collect::<Vec<_>>().join(" ")
+
+    let mut cleaned = result.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    // Fallback to accessibility attributes if text is empty
+    if cleaned.is_empty() {
+        if let Some(aria_label) = node.value().attr("aria-label") {
+            cleaned = aria_label.to_string();
+        } else if let Some(alt) = node.value().attr("alt") {
+            cleaned = alt.to_string();
+        } else if let Some(title) = node.value().attr("title") {
+            cleaned = title.to_string();
+        }
+    }
+
+    cleaned
 }
 
 fn extract_list(node: ElementRef) -> Vec<String> {

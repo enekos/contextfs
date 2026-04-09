@@ -38,6 +38,9 @@ pub struct PageSnapshot {
     pub content_hash: u64,
     pub sections: Vec<ContentSection>,
     pub metadata: PageMetadata,
+    pub selection: Option<String>,
+    pub active_element: Option<String>,
+    pub console_errors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -132,6 +135,9 @@ mod tests {
                 selector: "h1".to_string(),
             }],
             metadata: PageMetadata::default(),
+            selection: None,
+            active_element: None,
+            console_errors: vec![],
         };
         let json = serde_json::to_string(&snap).unwrap();
         // content_hash should be a hex string, not a number

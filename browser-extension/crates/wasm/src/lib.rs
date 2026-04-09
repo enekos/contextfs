@@ -15,7 +15,16 @@ pub fn init_session(session_id: &str) {
 }
 
 #[wasm_bindgen]
-pub fn process_page(url: &str, html: &str, timestamp: u64) -> JsValue {
+pub fn process_page(
+    url: &str,
+    html: &str,
+    timestamp: u64,
+    selection: Option<String>,
+    active_element: Option<String>,
+    console_errors_json: &str,
+) -> JsValue {
+    let console_errors: Vec<String> = serde_json::from_str(console_errors_json).unwrap_or_default();
+
     let extracted = extractor::extract(html);
     let content_hash = dedup::simhash(
         &extracted
@@ -33,6 +42,9 @@ pub fn process_page(url: &str, html: &str, timestamp: u64) -> JsValue {
         content_hash,
         sections: extracted.sections,
         metadata: extracted.metadata,
+        selection,
+        active_element,
+        console_errors,
     };
 
     let is_new = SESSION.with(|s| {

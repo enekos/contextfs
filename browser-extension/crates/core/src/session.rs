@@ -137,6 +137,9 @@ mod tests {
                 selector: "p".to_string(),
             }],
             metadata: PageMetadata::default(),
+            selection: None,
+            active_element: None,
+            console_errors: vec![],
         }
     }
 

@@ -32,8 +32,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!wasmReady) return;
 
   if (message.type === "page_content") {
-    const { url, html, timestamp } = message.payload;
-    const result = process_page(url, html, timestamp);
+    const { url, html, timestamp, selection, active_element, console_errors } = message.payload;
+    const result = process_page(url, html, timestamp, selection, active_element, JSON.stringify(console_errors || []));
     console.log("[mairu-ext] Processed page:", url, result);
   }
 });
@@ -78,18 +78,31 @@ async function syncToMairu() {
   for (const page of batch) {
     try {
       const urlHash = page.content_hash.toString(16);
+      
+      let extraContent = "";
+      if (page.selection) {
+        extraContent += `\n\n### Current Selection\n${page.selection}\n`;
+      }
+      if (page.active_element) {
+        extraContent += `\n\n### Active Element (Focus)\n${page.active_element}\n`;
+      }
+      if (page.console_errors && page.console_errors.length > 0) {
+        extraContent += `\n\n### Console Errors\n${page.console_errors.join("\n")}\n`;
+      }
+
       const body = {
         uri: `contextfs://browser/${btoa(page.url)}`,
+        project: "browser",
         name: page.title,
         abstract: page.sections.slice(0, 1).map((s) => s.text).join(" ").slice(0, 200),
         overview: page.sections
           .filter((s) => s.kind === "heading" || s.kind === "Heading")
           .map((s) => s.text)
           .join("\n"),
-        content: page.sections.map((s) => s.text).join("\n\n"),
+        content: page.sections.map((s) => s.text).join("\n\n") + extraContent,
       };
 
-      const resp = await fetch(`${MAIRU_API_URL}/api/nodes`, {
+      const resp = await fetch(`${MAIRU_API_URL}/api/context`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
