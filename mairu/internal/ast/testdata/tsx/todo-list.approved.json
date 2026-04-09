@@ -1,109 +1,67 @@
 {
-  "file_summary": "TSX/JSX component graph extracted.",
-  "symbols": [
-    {
-      "ID": "fn:TodoList",
-      "Name": "TodoList",
-      "Kind": "fn",
-      "Exported": true,
-      "Doc": "",
-      "Line": 9,
-      "Signature": "",
-      "ControlFlow": ""
-    },
-    {
-      "ID": "fn:addTodo",
-      "Name": "addTodo",
-      "Kind": "fn",
-      "Exported": true,
-      "Doc": "",
-      "Line": 13,
-      "Signature": "",
-      "ControlFlow": ""
-    },
-    {
-      "ID": "fn:removeTodo",
-      "Name": "removeTodo",
-      "Kind": "fn",
-      "Exported": true,
-      "Doc": "",
-      "Line": 23,
-      "Signature": "",
-      "ControlFlow": ""
-    },
-    {
-      "ID": "fn:toggleTodo",
-      "Name": "toggleTodo",
-      "Kind": "fn",
-      "Exported": true,
-      "Doc": "",
-      "Line": 19,
-      "Signature": "",
-      "ControlFlow": ""
-    }
-  ],
   "edges": [
     {
       "From": "fn:TodoList",
-      "To": "fn:addTodo",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:addTodo"
     },
     {
       "From": "fn:TodoList",
-      "To": "fn:removeTodo",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:removeTodo"
     },
     {
       "From": "fn:TodoList",
-      "To": "fn:toggleTodo",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:toggleTodo"
     },
     {
       "From": "fn:addTodo",
-      "To": "fn:TodoList",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:TodoList"
     },
     {
       "From": "fn:addTodo",
-      "To": "fn:removeTodo",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:removeTodo"
     },
     {
       "From": "fn:addTodo",
-      "To": "fn:toggleTodo",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:toggleTodo"
     },
     {
       "From": "fn:removeTodo",
-      "To": "fn:TodoList",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:TodoList"
     },
     {
       "From": "fn:removeTodo",
-      "To": "fn:addTodo",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:addTodo"
     },
     {
       "From": "fn:removeTodo",
-      "To": "fn:toggleTodo",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:toggleTodo"
     },
     {
       "From": "fn:toggleTodo",
-      "To": "fn:TodoList",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:TodoList"
     },
     {
       "From": "fn:toggleTodo",
-      "To": "fn:addTodo",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:addTodo"
     },
     {
       "From": "fn:toggleTodo",
-      "To": "fn:removeTodo",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:removeTodo"
     }
   ],
+  "file_summary": "TSX/JSX component graph extracted.",
   "imports": [
     "react"
   ],
@@ -112,5 +70,47 @@
     "fn:addTodo": "Describes addTodo",
     "fn:removeTodo": "Describes removeTodo",
     "fn:toggleTodo": "Describes toggleTodo"
-  }
+  },
+  "symbols": [
+    {
+      "ControlFlow": "",
+      "Doc": "",
+      "Exported": true,
+      "ID": "fn:TodoList",
+      "Kind": "fn",
+      "Line": 9,
+      "Name": "TodoList",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "",
+      "Doc": "",
+      "Exported": true,
+      "ID": "fn:addTodo",
+      "Kind": "fn",
+      "Line": 13,
+      "Name": "addTodo",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "",
+      "Doc": "",
+      "Exported": true,
+      "ID": "fn:removeTodo",
+      "Kind": "fn",
+      "Line": 23,
+      "Name": "removeTodo",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "",
+      "Doc": "",
+      "Exported": true,
+      "ID": "fn:toggleTodo",
+      "Kind": "fn",
+      "Line": 19,
+      "Name": "toggleTodo",
+      "Signature": ""
+    }
+  ]
 }
