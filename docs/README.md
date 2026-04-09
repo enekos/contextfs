@@ -8,6 +8,7 @@ Welcome to the Mairu documentation. This repository contains detailed guides and
 - **Memories**: Fact-based storage for project knowledge, rules, and preferences.
 - **Skills**: Capability definitions for agents.
 - **Context Nodes**: URI-addressed nodes containing abstract, overview, and content fields (AST-based).
+- **Browser Extension**: A Chrome extension (Rust/WASM) that syncs real-time web browsing context into Mairu.
 - **Vibe Engine**: An LLM-powered engine for high-level queries and state mutations.
 - **Daemon**: A background process for automatic codebase ingestion and AST extraction.
 

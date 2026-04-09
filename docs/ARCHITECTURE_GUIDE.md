@@ -9,6 +9,20 @@ Mairu is a context-aware coding agent ecosystem. It bridges the gap between raw 
 2. **Hybrid Search**: A retrieval pipeline combining vector embeddings and keyword search, enhanced by app-side re-ranking.
 3. **Daemon**: A background process that automatically scans and translates code into human-readable Natural Language descriptions.
 4. **Vibe Engine**: An LLM-powered orchestration layer for high-level tasks like query planning, memory mutation, and deduplication.
+5. **Browser Extension**: A Chrome MV3 extension with a WASM core that synchronizes web browsing sessions with Mairu's agent context.
+
+## Browser Extension Architecture
+
+The `browser-extension` module bridges `mairu chat` to live web content, enabling the agent to search your browser history and read current pages.
+
+1. **DOM Extraction (WASM/Rust)**: 
+   Content scripts send DOM snapshots to the service worker. A compiled Rust WASM core (`browser-extension-core` & `browser-extension-wasm`) executes DOM-based semantic heuristics (using `scraper` rather than regex) to filter noise (nav/footers/ads), extract markdown tables, blockquotes, code blocks, and chunk text.
+2. **Session State & Deduplication**:
+   The WASM module maintains a rolling session queue (e.g., 50 pages). It hashes pages via `SimHash` (comparing via Hamming distance) to reject functionally duplicate snapshots of the same SPA states.
+3. **TF-IDF Search**:
+   The WASM module maintains a lightweight `TfIdfIndex` over the session memory, allowing the agent to issue queries like "what was that rust config flag?" against recent browsing.
+4. **Native Messaging Bridge**:
+   The `browser-extension-host` (Rust binary) serves as a persistent standard I/O bridge linking the Chrome Extension to the Go runtime via local HTTP (`127.0.0.1:7081`). When the Go agent executes the `browser_context` tool, it requests data from this bridge.
 
 ## Data Model
 

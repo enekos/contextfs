@@ -9,6 +9,11 @@ This repository is organized as a single project named **Mairu** with a unified 
   - `internal/agent/` - coding agent engine
   - `internal/contextsrv/` - centralized context server (HTTP API)
   - `ui/` - unified Svelte web UI for chat + context dashboard features
+- `browser-extension/` - Chrome extension for web context extraction
+  - `crates/core/` - Rust pure-logic crate (HTML extraction, SimHash, TF-IDF)
+  - `crates/wasm/` - WASM bindings wrapping the core crate
+  - `extension/` - MV3 Extension files (service worker, content scripts)
+  - `native-host/` - Native Messaging Host binary bridging Go to Chrome
 - `docs/` - project-level docs, specs, and plans
 
 ## Typical Flows
