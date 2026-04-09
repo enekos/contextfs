@@ -27,6 +27,16 @@ func TestStuckDetector_RepeatedAction_Nudge(t *testing.T) {
 	}
 }
 
+func TestStuckDetector_RepeatedAction_NudgeAgain(t *testing.T) {
+	d := NewStuckDetector()
+	for i := 0; i < 4; i++ {
+		d.Record(sig("bash", map[string]any{"command": "ls"}))
+	}
+	if v := d.Check(); v != VerdictNudge {
+		t.Fatalf("expected Nudge at count=4 (above nudge, below stop threshold), got %v", v)
+	}
+}
+
 func TestStuckDetector_RepeatedAction_Stop(t *testing.T) {
 	d := NewStuckDetector()
 	for i := 0; i < 5; i++ {

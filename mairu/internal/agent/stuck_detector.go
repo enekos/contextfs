@@ -41,7 +41,9 @@ type ToolSignature struct {
 func NewToolSignature(name string, args map[string]any) ToolSignature {
 	raw, err := json.Marshal(args)
 	if err != nil {
-		panic(fmt.Sprintf("stuck_detector: cannot marshal args for tool %q: %v", name, err))
+		// If args can't be marshalled, fall back to name-only identity.
+		// This is safe: it may cause false-positive loop detection but won't crash.
+		return ToolSignature{Name: name, ArgsHash: ""}
 	}
 	h := sha256.Sum256(raw)
 	return ToolSignature{Name: name, ArgsHash: fmt.Sprintf("%x", h)}
