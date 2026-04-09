@@ -1,5 +1,6 @@
 // mairu-ext/crates/core/src/session.rs
 use crate::dedup;
+use crate::importance::compute_importance;
 use crate::scorer::TfIdfIndex;
 use crate::types::*;
 
@@ -24,15 +25,45 @@ impl SessionManager {
         }
     }
 
-    pub fn add_page(&mut self, snapshot: PageSnapshot) -> bool {
-        // Check for duplicate content
+    pub fn add_page(&mut self, mut snapshot: PageSnapshot) -> AddPageResult {
+        // Compute importance before inserting
+        snapshot.importance_score = compute_importance(&snapshot);
+
+        // SPA dedup: same URL already exists → update in-place with revision bump
+        if let Some(existing) = self
+            .session
+            .pages
+            .iter_mut()
+            .find(|p| p.url == snapshot.url)
+        {
+            // Skip if content hasn't changed meaningfully
+            if dedup::is_near_duplicate(existing.content_hash, snapshot.content_hash, 3) {
+                return AddPageResult::Duplicate;
+            }
+            snapshot.revision = existing.revision + 1;
+            // Remove old index entry before replacing
+            self.synced_hashes.remove(&existing.content_hash);
+            *existing = snapshot;
+            // Re-index with updated content
+            let doc_id = existing.url.clone();
+            let full_text: String = existing
+                .sections
+                .iter()
+                .map(|s| s.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            self.index.add(&doc_id, &full_text);
+            return AddPageResult::Updated;
+        }
+
+        // Cross-URL near-duplicate check (same content, different URL)
         if self
             .session
             .pages
             .iter()
             .any(|p| dedup::is_near_duplicate(p.content_hash, snapshot.content_hash, 3))
         {
-            return false;
+            return AddPageResult::Duplicate;
         }
 
         // Record nav event
@@ -55,10 +86,12 @@ impl SessionManager {
         // Add to pages, evict oldest if needed
         self.session.pages.push_back(snapshot);
         while self.session.pages.len() > MAX_PAGES {
-            self.session.pages.pop_front();
+            if let Some(evicted) = self.session.pages.pop_front() {
+                self.synced_hashes.remove(&evicted.content_hash);
+            }
         }
 
-        true
+        AddPageResult::Added
     }
 
     pub fn current_page(&self) -> Option<&PageSnapshot> {
@@ -70,7 +103,15 @@ impl SessionManager {
     }
 
     pub fn search(&self, query: &str, limit: usize) -> Vec<SearchResult> {
-        let ranked = self.index.search(query);
+        // Re-rank with page importance scores
+        let ranked = self.index.search_with_importance(query, |url| {
+            self.session
+                .pages
+                .iter()
+                .find(|p| p.url == url)
+                .map(|p| p.importance_score)
+                .unwrap_or(0.0)
+        });
         ranked
             .into_iter()
             .take(limit)
@@ -117,6 +158,33 @@ impl SessionManager {
     pub fn mark_synced(&mut self, content_hash: u64) {
         self.synced_hashes.insert(content_hash);
     }
+
+    /// Serialize the full session state to JSON for persistence (e.g. chrome.storage.session).
+    pub fn export_session(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(&self.session)
+    }
+
+    /// Restore session state from a previously exported JSON blob.
+    /// Re-indexes all pages into the TF-IDF index.
+    pub fn import_session(json: &str) -> Result<Self, serde_json::Error> {
+        let session: BrowserSession = serde_json::from_str(json)?;
+        let mut index = TfIdfIndex::new();
+        for page in &session.pages {
+            let doc_id = page.url.clone();
+            let full_text: String = page
+                .sections
+                .iter()
+                .map(|s| s.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            index.add(&doc_id, &full_text);
+        }
+        Ok(Self {
+            session,
+            index,
+            synced_hashes: std::collections::HashSet::new(),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -143,6 +211,11 @@ mod tests {
             network_errors: vec![],
             visual_rects: std::collections::HashMap::new(),
             storage_state: std::collections::HashMap::new(),
+            revision: 0,
+            importance_score: 0.0,
+            dwell_ms: 0,
+            interaction_count: 0,
+            iframe_content: vec![],
         }
     }
 
@@ -150,7 +223,7 @@ mod tests {
     fn test_add_page_and_current() {
         let mut mgr = SessionManager::new("s1".to_string());
         let snap = make_snapshot("https://a.com", "A", "hello world", 1000);
-        assert!(mgr.add_page(snap));
+        assert_eq!(mgr.add_page(snap), AddPageResult::Added);
         let current = mgr.current_page().unwrap();
         assert_eq!(current.url, "https://a.com");
     }
@@ -160,8 +233,44 @@ mod tests {
         let mut mgr = SessionManager::new("s1".to_string());
         let snap1 = make_snapshot("https://a.com", "A", "hello world", 1000);
         let snap2 = make_snapshot("https://a.com", "A", "hello world", 1001);
-        assert!(mgr.add_page(snap1));
-        assert!(!mgr.add_page(snap2), "duplicate content should be rejected");
+        assert_eq!(mgr.add_page(snap1), AddPageResult::Added);
+        assert_eq!(
+            mgr.add_page(snap2),
+            AddPageResult::Duplicate,
+            "duplicate content should be rejected"
+        );
+    }
+
+    #[test]
+    fn test_spa_url_update_in_place() {
+        let mut mgr = SessionManager::new("s1".to_string());
+        let snap1 = make_snapshot(
+            "https://app.com/page",
+            "Page v1",
+            "initial content here",
+            1000,
+        );
+        assert_eq!(mgr.add_page(snap1), AddPageResult::Added);
+        assert_eq!(mgr.session.pages.len(), 1);
+
+        // Same URL, different content (SPA navigation)
+        let snap2 = make_snapshot(
+            "https://app.com/page",
+            "Page v2",
+            "completely different updated content",
+            2000,
+        );
+        assert_eq!(mgr.add_page(snap2), AddPageResult::Updated);
+
+        // Should still have only 1 page (updated in-place)
+        assert_eq!(mgr.session.pages.len(), 1);
+        assert_eq!(mgr.session.pages[0].title, "Page v2");
+        assert_eq!(mgr.session.pages[0].revision, 1);
+
+        // Search should find the new content
+        let results = mgr.search("updated content", 5);
+        assert!(!results.is_empty());
+        assert_eq!(results[0].url, "https://app.com/page");
     }
 
     #[test]
@@ -230,5 +339,39 @@ mod tests {
         assert_eq!(mgr.pending_sync().len(), 1);
         mgr.mark_synced(hash);
         assert_eq!(mgr.pending_sync().len(), 0);
+    }
+
+    #[test]
+    fn test_export_import_roundtrip() {
+        let mut mgr = SessionManager::new("s1".to_string());
+        mgr.add_page(make_snapshot(
+            "https://a.com",
+            "A",
+            "rust systems programming",
+            1,
+        ));
+        mgr.add_page(make_snapshot(
+            "https://b.com",
+            "B",
+            "python scripting language",
+            2,
+        ));
+
+        let json = mgr.export_session().expect("export should succeed");
+        let restored = SessionManager::import_session(&json).expect("import should succeed");
+
+        assert_eq!(restored.summary().page_count, 2);
+        assert_eq!(restored.summary().id, "s1");
+
+        // Search should work on restored session
+        let results = restored.search("rust programming", 5);
+        assert!(!results.is_empty());
+        assert_eq!(results[0].url, "https://a.com");
+    }
+
+    #[test]
+    fn test_import_invalid_json_fails() {
+        let result = SessionManager::import_session("not valid json");
+        assert!(result.is_err());
     }
 }
