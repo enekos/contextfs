@@ -1,1 +1,143 @@
-// placeholder
+// mairu-ext/crates/core/src/types.rs
+use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SectionKind {
+    Heading,
+    Paragraph,
+    CodeBlock,
+    Table,
+    List,
+    Link,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContentSection {
+    pub kind: SectionKind,
+    pub text: String,
+    pub depth: u8,
+    pub selector: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PageMetadata {
+    pub og_title: Option<String>,
+    pub og_description: Option<String>,
+    pub lang: Option<String>,
+    pub canonical_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageSnapshot {
+    pub url: String,
+    pub title: String,
+    pub timestamp: u64,
+    pub content_hash: u64,
+    pub sections: Vec<ContentSection>,
+    pub metadata: PageMetadata,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NavEvent {
+    pub url: String,
+    pub timestamp: u64,
+    pub referrer: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserSession {
+    pub id: String,
+    pub started_at: u64,
+    pub pages: VecDeque<PageSnapshot>,
+    pub nav_history: Vec<NavEvent>,
+}
+
+impl BrowserSession {
+    pub fn new(id: String, started_at: u64) -> Self {
+        Self {
+            id,
+            started_at,
+            pages: VecDeque::new(),
+            nav_history: Vec::new(),
+        }
+    }
+}
+
+/// Response format for the browser_context tool
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data")]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserResponse {
+    Current(PageSnapshot),
+    History(Vec<NavEvent>),
+    Search(Vec<SearchResult>),
+    Session(SessionSummary),
+    Error(String),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResult {
+    pub url: String,
+    pub title: String,
+    pub snippet: String,
+    pub score: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SessionSummary {
+    pub id: String,
+    pub started_at: u64,
+    pub page_count: usize,
+    pub urls: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_section_kind_serializes_snake_case() {
+        let kind = SectionKind::CodeBlock;
+        let json = serde_json::to_string(&kind).unwrap();
+        assert_eq!(json, r#""code_block""#);
+    }
+
+    #[test]
+    fn test_page_snapshot_roundtrip() {
+        let snap = PageSnapshot {
+            url: "https://example.com".to_string(),
+            title: "Test".to_string(),
+            timestamp: 1000,
+            content_hash: 42,
+            sections: vec![ContentSection {
+                kind: SectionKind::Heading,
+                text: "Hello".to_string(),
+                depth: 1,
+                selector: "h1".to_string(),
+            }],
+            metadata: PageMetadata::default(),
+        };
+        let json = serde_json::to_string(&snap).unwrap();
+        let back: PageSnapshot = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.url, "https://example.com");
+        assert_eq!(back.sections.len(), 1);
+    }
+
+    #[test]
+    fn test_browser_session_new() {
+        let session = BrowserSession::new("sess-1".to_string(), 1000);
+        assert_eq!(session.id, "sess-1");
+        assert!(session.pages.is_empty());
+        assert!(session.nav_history.is_empty());
+    }
+
+    #[test]
+    fn test_browser_response_tagged_enum() {
+        let resp = BrowserResponse::Error("not found".to_string());
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains(r#""type":"error""#));
+        assert!(json.contains("not found"));
+    }
+}
