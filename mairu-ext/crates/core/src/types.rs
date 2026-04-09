@@ -13,15 +13,15 @@ pub enum SectionKind {
     Link,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ContentSection {
     pub kind: SectionKind,
     pub text: String,
-    pub depth: u8,
+    pub depth: Option<u8>,
     pub selector: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct PageMetadata {
     pub og_title: Option<String>,
     pub og_description: Option<String>,
@@ -29,24 +29,25 @@ pub struct PageMetadata {
     pub canonical_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PageSnapshot {
     pub url: String,
     pub title: String,
     pub timestamp: u64,
+    #[serde(with = "hex_serde")]
     pub content_hash: u64,
     pub sections: Vec<ContentSection>,
     pub metadata: PageMetadata,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NavEvent {
     pub url: String,
     pub timestamp: u64,
     pub referrer: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BrowserSession {
     pub id: String,
     pub started_at: u64,
@@ -65,8 +66,22 @@ impl BrowserSession {
     }
 }
 
+mod hex_serde {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(value: &u64, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&format!("{:016x}", value))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<u64, D::Error> {
+        let s = String::deserialize(d)?;
+        u64::from_str_radix(s.trim_start_matches("0x"), 16)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
 /// Response format for the browser_context tool
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 #[serde(rename_all = "snake_case")]
 pub enum BrowserResponse {
@@ -77,7 +92,7 @@ pub enum BrowserResponse {
     Error(String),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
     pub url: String,
     pub title: String,
@@ -85,7 +100,7 @@ pub struct SearchResult {
     pub score: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionSummary {
     pub id: String,
     pub started_at: u64,
@@ -114,15 +129,19 @@ mod tests {
             sections: vec![ContentSection {
                 kind: SectionKind::Heading,
                 text: "Hello".to_string(),
-                depth: 1,
+                depth: Some(1),
                 selector: "h1".to_string(),
             }],
             metadata: PageMetadata::default(),
         };
         let json = serde_json::to_string(&snap).unwrap();
+        // content_hash should be a hex string, not a number
+        assert!(json.contains(r#""content_hash":"000000000000002a""#), "content_hash should serialize as hex string, got: {}", json);
         let back: PageSnapshot = serde_json::from_str(&json).unwrap();
         assert_eq!(back.url, "https://example.com");
+        assert_eq!(back.content_hash, 42);
         assert_eq!(back.sections.len(), 1);
+        assert_eq!(back.sections[0].text, "Hello");  // verify nested field
     }
 
     #[test]
