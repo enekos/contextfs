@@ -15,8 +15,8 @@ func (d GoDescriber) LanguageID() string   { return "go" }
 func (d GoDescriber) Extensions() []string { return []string{".go"} }
 func (d GoDescriber) ExtractFileGraph(_ string, source string) FileGraph {
 	sourceBytes := []byte(source)
-	parser := sitter.NewParser()
-	defer parser.Close()
+	parser := GetParser()
+	defer PutParser(parser)
 	parser.SetLanguage(golang.GetLanguage())
 	tree, _ := parser.ParseCtx(context.Background(), nil, sourceBytes)
 	if tree != nil {

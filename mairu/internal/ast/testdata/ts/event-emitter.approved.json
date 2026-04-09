@@ -72,8 +72,8 @@
   "imports": [],
   "symbol_descriptions": {
     "mtd:EventEmitter.clear": "1. If `event`, calling `this.listeners.delete` with `event`. Otherwise, calling `this.listeners.clear`",
-    "mtd:EventEmitter.emit": "1. Assigns calling `this.listeners.get` with `event` to `set`\n2. If `set` is falsy, Returns\n3. Iterates over each `fn` in `set`, calling `fn` with `...args`",
-    "mtd:EventEmitter.off": "1. Assigns calling `this.listeners.get` with `event` to `set`\n2. If `set`, calling `set.delete` with `listener`",
+    "mtd:EventEmitter.emit": "1. Assigns calling `this.listeners.get` with `event` to constant `set`\n2. If `set` is falsy, Returns\n3. Iterates over each `fn` in `set`, calling `fn` with `...args`",
+    "mtd:EventEmitter.off": "1. Assigns calling `this.listeners.get` with `event` to constant `set`\n2. If `set`, calling `set.delete` with `listener`",
     "mtd:EventEmitter.on": "1. If `this.listeners.has(event)` is falsy, calling `this.listeners.set` with `event`, `new Set()`\n2. calling `this.listeners.get(event)!.add` with `listener`"
   }
 }

@@ -10,8 +10,8 @@ import (
 )
 
 func parseStatement(source string) (*sitter.Node, []byte) {
-	parser := sitter.NewParser()
-	defer parser.Close()
+	parser := GetParser()
+	defer PutParser(parser)
 	parser.SetLanguage(typescript.GetLanguage())
 	fullSource := "function f() { " + source + " }"
 	srcBytes := []byte(fullSource)
@@ -38,9 +38,9 @@ func TestDescribeStatement(t *testing.T) {
 		code     string
 		expected string
 	}{
-		{"let x = 1;", "Assigns `1` to `x`"},
-		{"const y = 2;", "Assigns `2` to `y`"},
-		{"var z;", "Declares `z`"},
+		{"let x = 1;", "Assigns `1` to let variable `x`"},
+		{"const y = 2;", "Assigns `2` to constant `y`"},
+		{"var z;", "Declares var variable `z`"},
 		{"return x;", "Returns `x`"},
 		{"if (x) { return 1; }", "If `x`, Returns `1`"},
 		{"if (x) { return 1; } else { return 2; }", "If `x`, Returns `1`. Otherwise, Returns `2`"},
@@ -138,15 +138,15 @@ func TestDescribeExpression(t *testing.T) {
 
 func TestDescribeStatements(t *testing.T) {
 	code := "function f() { let x = 1; foo(); return x; }"
-	parser := sitter.NewParser()
-	defer parser.Close()
+	parser := GetParser()
+	defer PutParser(parser)
 	parser.SetLanguage(typescript.GetLanguage())
 	src := []byte(code)
 	tree, _ := parser.ParseCtx(context.Background(), nil, src)
 	fn := tree.RootNode().NamedChild(0)
 
 	actual := DescribeStatements(fn, src)
-	expected := "1. Assigns `1` to `x`\n2. calling `foo`\n3. Returns `x`"
+	expected := "1. Assigns `1` to let variable `x`\n2. calling `foo`\n3. Returns `x`"
 	if actual != expected {
 		t.Errorf("DescribeStatements():\nExpected:\n%s\nGot:\n%s", expected, actual)
 	}

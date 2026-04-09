@@ -54,6 +54,6 @@
   ],
   "symbol_descriptions": {
     "cls:MyClass": "Class `MyClass` with methods: ",
-    "fn:outerFunction": "1. `function innerFunction() {\n        console.log(\"inner\");\n    }`\n2. Assigns a function to `anotherInner`\n3. Returns `anotherInner`"
+    "fn:outerFunction": "1. `function innerFunction() {\n        console.log(\"inner\");\n    }`\n2. Assigns a function to constant `anotherInner`\n3. Returns `anotherInner`"
   }
 }

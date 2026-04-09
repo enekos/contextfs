@@ -63,6 +63,19 @@ func describeStatement(node *sitter.Node, source []byte) string {
 
 func describeVariableStatement(node *sitter.Node, source []byte) string {
 	var parts []string
+
+	kind := "variable"
+	if node.ChildCount() > 0 {
+		first := node.Child(0)
+		if first.Type() == "const" {
+			kind = "constant"
+		} else if first.Type() == "let" {
+			kind = "let variable"
+		} else if first.Type() == "var" {
+			kind = "var variable"
+		}
+	}
+
 	count := node.NamedChildCount()
 	for i := 0; i < int(count); i++ {
 		decl := node.NamedChild(i)
@@ -71,18 +84,39 @@ func describeVariableStatement(node *sitter.Node, source []byte) string {
 		}
 		nameNode := decl.ChildByFieldName("name")
 		valueNode := decl.ChildByFieldName("value")
+		typeNode := decl.ChildByFieldName("type")
+
 		name := "unknown"
+		isPattern := false
 		if nameNode != nil {
 			name = nameNode.Content(source)
+			if nameNode.Type() == "object_pattern" || nameNode.Type() == "array_pattern" {
+				isPattern = true
+				name = strings.ReplaceAll(name, "\n", " ")
+				name = strings.Join(strings.Fields(name), " ")
+			}
 		}
+
+		typeInfo := ""
+		if typeNode != nil {
+			typeText := strings.TrimPrefix(strings.TrimSpace(typeNode.Content(source)), ":")
+			typeText = strings.TrimSpace(typeText)
+			typeInfo = fmt.Sprintf(" of type `%s`", typeText)
+		}
+
 		if valueNode != nil {
-			parts = append(parts, fmt.Sprintf("Assigns %s to `%s`", describeExpression(valueNode, source), name))
+			valDesc := describeExpression(valueNode, source)
+			if isPattern {
+				parts = append(parts, fmt.Sprintf("Destructures `%s` from %s as %s", name, valDesc, kind))
+			} else {
+				parts = append(parts, fmt.Sprintf("Assigns %s to %s `%s`%s", valDesc, kind, name, typeInfo))
+			}
 		} else {
-			parts = append(parts, fmt.Sprintf("Declares `%s`", name))
+			parts = append(parts, fmt.Sprintf("Declares %s `%s`%s", kind, name, typeInfo))
 		}
 	}
 	if len(parts) == 0 {
-		return "Declares variable"
+		return fmt.Sprintf("Declares %s", kind)
 	}
 	return strings.Join(parts, ". ")
 }

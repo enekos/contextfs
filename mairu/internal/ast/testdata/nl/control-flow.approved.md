@@ -5,7 +5,7 @@
 ## exampleLoops (fn)
 
 1. Loops with let i = 0; while i < 5; i++: calling `console.log` with `i`
-2. Assigns `0` to `j`
+2. Assigns `0` to let variable `j`
 3. Loops while `j < 5`: increments `j`
 4. Iterates over each `k` in `[1, 2, 3]`, calling `console.log` with `k`
 
