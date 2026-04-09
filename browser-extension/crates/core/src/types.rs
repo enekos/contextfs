@@ -75,8 +75,7 @@ mod hex_serde {
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<u64, D::Error> {
         let s = String::deserialize(d)?;
-        u64::from_str_radix(s.trim_start_matches("0x"), 16)
-            .map_err(serde::de::Error::custom)
+        u64::from_str_radix(s.trim_start_matches("0x"), 16).map_err(serde::de::Error::custom)
     }
 }
 
@@ -136,12 +135,16 @@ mod tests {
         };
         let json = serde_json::to_string(&snap).unwrap();
         // content_hash should be a hex string, not a number
-        assert!(json.contains(r#""content_hash":"000000000000002a""#), "content_hash should serialize as hex string, got: {}", json);
+        assert!(
+            json.contains(r#""content_hash":"000000000000002a""#),
+            "content_hash should serialize as hex string, got: {}",
+            json
+        );
         let back: PageSnapshot = serde_json::from_str(&json).unwrap();
         assert_eq!(back.url, "https://example.com");
         assert_eq!(back.content_hash, 42);
         assert_eq!(back.sections.len(), 1);
-        assert_eq!(back.sections[0].text, "Hello");  // verify nested field
+        assert_eq!(back.sections[0].text, "Hello"); // verify nested field
     }
 
     #[test]

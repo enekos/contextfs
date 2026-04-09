@@ -67,7 +67,7 @@ fn extract_metadata(doc: &Html, meta: &mut PageMetadata) -> String {
     title
 }
 
-fn find_main_content(doc: &Html) -> Option<ElementRef> {
+fn find_main_content(doc: &Html) -> Option<ElementRef<'_>> {
     // Priority heuristics to find the real content
     let candidate_selectors = [
         "article",
@@ -287,7 +287,7 @@ fn extract_table(node: ElementRef) -> String {
             markdown.push_str(" |\n");
 
             if is_first_row {
-                markdown.push_str("|");
+                markdown.push('|');
                 for _ in 0..row_data.len() {
                     markdown.push_str("---|");
                 }

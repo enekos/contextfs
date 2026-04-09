@@ -10,6 +10,12 @@ pub struct TfIdfIndex {
     total_docs: usize,
 }
 
+impl Default for TfIdfIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TfIdfIndex {
     pub fn new() -> Self {
         Self {

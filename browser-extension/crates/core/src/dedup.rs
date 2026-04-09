@@ -69,14 +69,20 @@ mod tests {
     fn test_similar_text_low_hamming() {
         let h1 = simhash("the quick brown fox jumps over the lazy dog");
         let h2 = simhash("the quick brown fox leaps over the lazy dog");
-        assert!(hamming_distance(h1, h2) < 10, "similar texts should have low hamming distance");
+        assert!(
+            hamming_distance(h1, h2) < 10,
+            "similar texts should have low hamming distance"
+        );
     }
 
     #[test]
     fn test_different_text_high_hamming() {
         let h1 = simhash("the quick brown fox jumps over the lazy dog");
         let h2 = simhash("rust programming language systems memory safety");
-        assert!(hamming_distance(h1, h2) > 10, "different texts should have high hamming distance");
+        assert!(
+            hamming_distance(h1, h2) > 10,
+            "different texts should have high hamming distance"
+        );
     }
 
     #[test]

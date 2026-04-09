@@ -25,7 +25,7 @@ pub fn chunk_text(text: &str, max_chars: usize) -> Vec<String> {
         // Look backward for a sentence boundary (. ! ?)
         let window = &text[start..end];
         let split_at = window
-            .rfind(|c: char| c == '.' || c == '!' || c == '?')
+            .rfind(['.', '!', '?'])
             .map(|pos| pos + 1) // include the punctuation
             .unwrap_or_else(|| {
                 // No sentence boundary — split at last space

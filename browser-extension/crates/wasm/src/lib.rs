@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 
 thread_local! {
-    static SESSION: RefCell<Option<SessionManager>> = RefCell::new(None);
+    static SESSION: RefCell<Option<SessionManager>> = const { RefCell::new(None) };
 }
 
 #[wasm_bindgen]

@@ -1,0 +1,50 @@
+name: Browser Extension CI
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'browser-extension/**'
+      - '.github/workflows/browser-extension-ci.yml'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'browser-extension/**'
+      - '.github/workflows/browser-extension-ci.yml'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./browser-extension
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy, rustfmt
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./browser-extension
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace
+
+      - name: Run tests
+        run: cargo test --workspace
+
+      - name: Build wasm package
+        run: cargo build -p browser-extension-wasm --target wasm32-unknown-unknown
+
+      - name: Build native host
+        run: cargo build --release -p browser-extension-host
