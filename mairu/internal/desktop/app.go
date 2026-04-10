@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -15,6 +16,39 @@ import (
 	"github.com/gen2brain/beeep"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+type WindowState struct {
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+func (a *App) windowStatePath() string {
+	homeDir, _ := os.UserHomeDir()
+	return filepath.Join(homeDir, ".mairu", "window-state.json")
+}
+
+func (a *App) LoadWindowState() *WindowState {
+	data, err := os.ReadFile(a.windowStatePath())
+	if err != nil {
+		return nil
+	}
+	var state WindowState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil
+	}
+	return &state
+}
+
+func (a *App) SaveWindowState() {
+	x, y := wailsRuntime.WindowGetPosition(a.ctx)
+	w, h := wailsRuntime.WindowGetSize(a.ctx)
+	state := WindowState{X: x, Y: y, Width: w, Height: h}
+	data, _ := json.Marshal(state)
+	_ = os.MkdirAll(filepath.Dir(a.windowStatePath()), 0o755)
+	_ = os.WriteFile(a.windowStatePath(), data, 0o644)
+}
 
 // ShowNotification sends an OS notification.
 func (a *App) ShowNotification(title, body string) {
@@ -101,10 +135,16 @@ func (a *App) Startup(ctx context.Context) {
 	a.ShowNotification("Mairu", "Meilisearch is ready")
 	wailsRuntime.EventsEmit(ctx, "app:ready", true)
 	a.SetupTray()
+
+	if state := a.LoadWindowState(); state != nil {
+		wailsRuntime.WindowSetPosition(a.ctx, state.X, state.Y)
+		wailsRuntime.WindowSetSize(a.ctx, state.Width, state.Height)
+	}
 }
 
 // Shutdown is called by Wails when the window is closing.
 func (a *App) Shutdown(ctx context.Context) {
+	a.SaveWindowState()
 	if a.meili != nil {
 		if err := a.meili.Stop(); err != nil {
 			slog.Error("failed to stop meilisearch", "error", err)
