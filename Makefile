@@ -2,7 +2,16 @@ SHELL := /bin/bash
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install-dashboard setup build lint test clean dashboard dashboard-api dashboard-dev mairu-build mairu-web
+desktop-dev:
+	cd mairu && wails dev -config ui/wails.json
+
+desktop-build:
+	cd mairu && wails build -config ui/wails.json -o mairu-desktop
+
+desktop-clean:
+	rm -rf mairu/build/bin
+
+.PHONY: help install install-dashboard setup build lint test clean dashboard dashboard-api dashboard-dev mairu-build mairu-web desktop-dev desktop-build desktop-clean
 .PHONY: fmt-go fmt-go-check lint-go test-go test-go-race test-go-cover check-go check-go-ci install-hooks
 .PHONY: eval-retrieval eval-seed eval-llm
 .PHONY: meili-up meili-down meili-status meili-clean setup-no-docker dev-no-docker mairu-no-docker
