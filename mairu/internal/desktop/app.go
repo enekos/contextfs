@@ -108,3 +108,61 @@ func (a *App) Shutdown(ctx context.Context) {
 func (a *App) Ping() string {
 	return "pong"
 }
+
+// ── Memory bindings ─────────────────────────────────────────────
+
+func (a *App) ListMemories(project string, limit int) ([]contextsrv.Memory, error) {
+	return a.svc.ListMemories(project, limit)
+}
+
+func (a *App) CreateMemory(input contextsrv.MemoryCreateInput) (contextsrv.Memory, error) {
+	return a.svc.CreateMemory(input)
+}
+
+func (a *App) UpdateMemory(input contextsrv.MemoryUpdateInput) (contextsrv.Memory, error) {
+	return a.svc.UpdateMemory(input)
+}
+
+func (a *App) DeleteMemory(id string) error {
+	return a.svc.DeleteMemory(id)
+}
+
+func (a *App) ApplyMemoryFeedback(id string, reward int) (contextsrv.Memory, error) {
+	return a.svc.ApplyMemoryFeedback(id, reward)
+}
+
+// ── Skill bindings ──────────────────────────────────────────────
+
+func (a *App) ListSkills(project string, limit int) ([]contextsrv.Skill, error) {
+	return a.svc.ListSkills(project, limit)
+}
+
+func (a *App) CreateSkill(input contextsrv.SkillCreateInput) (contextsrv.Skill, error) {
+	return a.svc.CreateSkill(input)
+}
+
+func (a *App) UpdateSkill(input contextsrv.SkillUpdateInput) (contextsrv.Skill, error) {
+	return a.svc.UpdateSkill(input)
+}
+
+func (a *App) DeleteSkill(id string) error {
+	return a.svc.DeleteSkill(id)
+}
+
+// ── Context Node bindings ───────────────────────────────────────
+
+func (a *App) ListContextNodes(project string, parentURI *string, limit int) ([]contextsrv.ContextNode, error) {
+	return a.svc.ListContextNodes(project, parentURI, limit)
+}
+
+func (a *App) CreateContextNode(input contextsrv.ContextCreateInput) (contextsrv.ContextNode, error) {
+	return a.svc.CreateContextNode(input)
+}
+
+func (a *App) UpdateContextNode(input contextsrv.ContextUpdateInput) (contextsrv.ContextNode, error) {
+	return a.svc.UpdateContextNode(input)
+}
+
+func (a *App) DeleteContextNode(uri string) error {
+	return a.svc.DeleteContextNode(uri)
+}
