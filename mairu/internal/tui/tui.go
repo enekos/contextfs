@@ -63,6 +63,9 @@ type model struct {
 	mdRenderer        *glamour.TermRenderer
 	activeStream      chan agent.AgentEvent
 
+	sessionName    string
+	queuedMessages []string
+
 	showList  bool
 	listModel list.Model
 	listType  string // "session" or "model"
@@ -138,6 +141,10 @@ func initialModel(a *agent.Agent, sessionName string) model {
 	l := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	l.SetShowTitle(true)
 
+	if sessionName == "" {
+		sessionName = "default"
+	}
+
 	m := model{
 		showAnim:        true,
 		animFrame:       0,
@@ -155,6 +162,7 @@ func initialModel(a *agent.Agent, sessionName string) model {
 		selectedEvent:   -1,
 		rng:             rand.New(rand.NewSource(time.Now().UnixNano())),
 		activePane:      paneAgent,
+		sessionName:     sessionName,
 	}
 	m.refreshThinkingIndicator(time.Now(), true)
 	m.renderMessages()

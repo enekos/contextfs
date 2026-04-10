@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"strings"
@@ -11,6 +12,47 @@ type Config struct {
 	Level      string
 	Structured bool
 }
+
+// MultiplexHandler allows writing to multiple handlers
+type MultiplexHandler struct {
+	handlers []slog.Handler
+}
+
+func (m *MultiplexHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	for _, h := range m.handlers {
+		if h.Enabled(ctx, level) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *MultiplexHandler) Handle(ctx context.Context, r slog.Record) error {
+	for _, h := range m.handlers {
+		if h.Enabled(ctx, r.Level) {
+			_ = h.Handle(ctx, r.Clone())
+		}
+	}
+	return nil
+}
+
+func (m *MultiplexHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	newHandlers := make([]slog.Handler, len(m.handlers))
+	for i, h := range m.handlers {
+		newHandlers[i] = h.WithAttrs(attrs)
+	}
+	return &MultiplexHandler{handlers: newHandlers}
+}
+
+func (m *MultiplexHandler) WithGroup(name string) slog.Handler {
+	newHandlers := make([]slog.Handler, len(m.handlers))
+	for i, h := range m.handlers {
+		newHandlers[i] = h.WithGroup(name)
+	}
+	return &MultiplexHandler{handlers: newHandlers}
+}
+
+var GlobalHandlers []slog.Handler
 
 // Init initializes the global slog logger.
 func Init(cfg Config) {
@@ -30,14 +72,18 @@ func Init(cfg Config) {
 		Level: level,
 	}
 
-	var handler slog.Handler
+	var mainHandler slog.Handler
 	if cfg.Structured {
-		handler = slog.NewJSONHandler(os.Stderr, opts)
+		mainHandler = slog.NewJSONHandler(os.Stderr, opts)
 	} else {
-		handler = slog.NewTextHandler(os.Stderr, opts)
+		mainHandler = slog.NewTextHandler(os.Stderr, opts)
 	}
 
-	logger := slog.New(handler)
+	handlers := []slog.Handler{mainHandler}
+	handlers = append(handlers, GlobalHandlers...)
+
+	multi := &MultiplexHandler{handlers: handlers}
+	logger := slog.New(multi)
 	slog.SetDefault(logger)
 }
 

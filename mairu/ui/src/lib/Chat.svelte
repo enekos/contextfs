@@ -245,27 +245,24 @@
   }
 </script>
 
-<div class="w-full max-w-4xl mx-auto flex-1 flex flex-col relative bg-[#0d0d12] border border-indigo-800/50  overflow-hidden shadow-[0_0_40px_rgba(137,220,235,0.15)] transition-all max-h-[calc(100vh-140px)]">
-    <!-- Faded green background image -->
-    <div class="absolute inset-0 pointer-events-none z-0 opacity-[0.08] mix-blend-screen" style="background-image: url('/mairu.png'); background-size: cover; background-position: center; background-repeat: no-repeat; filter: invert(1) sepia(1) hue-rotate(280deg) saturate(300%);"></div>
-
-  <div class="relative z-10 min-h-16 border-b border-indigo-800/60 flex items-center gap-4 chat-gutter py-4 sm:py-5 shrink-0 bg-[#0d0d12]/95 backdrop-blur-md sticky top-0 shadow-sm">
-    <div class="flex flex-col gap-1 pl-0.5">
-      <div class="text-[15px] font-bold tracking-wide flex items-center gap-3 text-cyan-300">
+<div class="w-full h-full flex flex-col relative bg-[#09090b] border-l border-indigo-900/30 overflow-hidden transition-all">
+  <div class="relative z-10 min-h-12 border-b border-indigo-900/40 flex items-center gap-4 px-4 sm:px-6 py-2 sm:py-3 shrink-0 bg-[#09090b]/95 backdrop-blur-sm sticky top-0 shadow-sm">
+    <div class="flex flex-col gap-0.5 pl-0.5">
+      <div class="text-[13px] font-semibold tracking-wide flex items-center gap-2 text-cyan-500/90">
         Mairu Agent
         {#if $connectionState === "connected"}
-          <span class="w-2.5 h-2.5  bg-pink-400 shadow-[0_0_10px_rgba(245,194,231,0.6)] animate-pulse"></span>
+          <span class="w-2 h-2 rounded-full bg-emerald-500/80"></span>
         {:else}
-          <span class="w-2.5 h-2.5  bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]"></span>
+          <span class="w-2 h-2 rounded-full bg-amber-500/80"></span>
         {/if}
       </div>
-      <p class="text-[11px] tracking-wide text-indigo-400/90">Codebase assistant with live tool traces</p>
+      <p class="text-[9px] tracking-wide text-indigo-400/70">Codebase assistant</p>
     </div>
-    <div class="ml-auto flex items-center gap-3 pr-0.5">
-      <label class="text-[10px] font-bold uppercase tracking-widest text-cyan-400/80 px-1.5" for="session-select">Session</label>
+    <div class="ml-auto flex items-center gap-2 pr-0.5">
+      <label class="text-[9px] font-semibold uppercase tracking-widest text-cyan-500/70 px-1" for="session-select">Session</label>
       <select
         id="session-select"
-        class="bg-[#11111b] border border-indigo-800/60  px-3.5 py-2 text-xs font-medium text-pink-200 min-w-40 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 outline-none transition-colors"
+        class="bg-[#11111b] border border-indigo-900/50 rounded-sm px-2 py-1 text-[10px] font-medium text-pink-200/90 min-w-32 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition-colors"
         value={$currentSession}
         on:change={handleSessionSwitch}
         disabled={$isGenerating}
@@ -275,69 +272,68 @@
         {/each}
       </select>
       <button
-        class="p-2.5  border border-indigo-800/60 hover:border-cyan-400 hover:bg-indigo-800/20 hover:text-pink-200 text-cyan-400 transition-all active:scale-95 disabled:opacity-50"
+        class="p-1.5 rounded-sm border border-indigo-900/50 hover:border-cyan-500 hover:bg-indigo-900/30 hover:text-pink-200 text-cyan-500/80 transition-all active:scale-95 disabled:opacity-50"
         on:click={handleCreateSession}
         disabled={$isGenerating || creatingSession}
         title="Create session"
       >
-        <Plus size={14} />
+        <Plus size={12} />
       </button>
     </div>
   </div>
 
-  <div class="flex-1 overflow-y-auto relative z-10 chat-gutter py-10 sm:py-12 lg:py-14 space-y-10" bind:this={messagesContainer}>
+  <div class="flex-1 overflow-y-auto relative z-10 px-4 sm:px-6 py-6 sm:py-8 space-y-6" bind:this={messagesContainer}>
     {#if $messages.length === 0}
-      <div in:fade={{ duration: 400 }} class="h-full flex flex-col items-center justify-center text-cyan-400 chat-gutter py-14">
-        <Bot size={56} class="mb-6 opacity-20" />
-        <p class="text-lg font-semibold text-pink-300">Mairu is ready.</p>
-        <p class="text-sm opacity-70 mt-2">Ask a codebase question or request a code change.</p>
+      <div in:fade={{ duration: 400 }} class="h-full flex flex-col items-center justify-center text-cyan-500/60 py-10">
+        <Bot size={40} class="mb-4 opacity-30" />
+        <p class="text-sm font-medium text-pink-300/80">Mairu is ready.</p>
+        <p class="text-[11px] opacity-60 mt-1">Ask a codebase question or request a code change.</p>
       </div>
     {/if}
 
     {#each $messages as msg (msg.id)}
-      <div class="flex flex-col gap-4 chat-item-inset" in:fly={{ y: 20, duration: 400 }}>
-        <div class="flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-400 px-7 py-2.5 mx-4 sm:mx-8 sm:px-9 sm:py-3">
+      <div class="flex flex-col gap-2" in:fly={{ y: 10, duration: 300 }}>
+        <div class="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.1em] text-cyan-500/70 px-2 py-1">
           {#if msg.role === 'user'}
-            <User size={14} class="text-cyan-300" /> You
+            <User size={12} class="text-cyan-500/60" /> You
           {:else if msg.role === 'assistant'}
-            <Bot size={14} class="text-cyan-300" /> Mairu
+            <Bot size={12} class="text-cyan-500/60" /> Mairu
           {:else}
-            <span class="text-rose-400">System</span>
+            <span class="text-rose-400/80">System</span>
           {/if}
         </div>
         
         {#if msg.role === 'assistant'}
           {#if msg.toolCalls && msg.toolCalls.length > 0}
-            <div class="flex flex-col gap-3 my-1">
-              <div class="px-8 sm:px-10 mx-4 sm:mx-8 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Tool activity</div>
+            <div class="flex flex-col gap-2 my-0.5">
               {#each msg.toolCalls as tc}
-                <div class="flex flex-col text-xs bg-[#11111b]/30 border border-indigo-800/50 mx-4 sm:mx-8 rounded-sm overflow-hidden font-mono shadow-sm transition-all hover:border-indigo-600/50">
-                  <button class="flex items-center gap-3 px-8 py-4 text-cyan-300 hover:bg-indigo-800/20 transition-colors" on:click={() => toggleTool(tc.id)}>
+                <div class="flex flex-col text-[10px] bg-[#11111b]/40 border border-indigo-900/40 rounded-sm overflow-hidden font-mono transition-all hover:border-indigo-700/50">
+                  <button class="flex items-center gap-2 px-3 py-2 text-cyan-400/90 hover:bg-indigo-900/20 transition-colors" on:click={() => toggleTool(tc.id)}>
                     {#if expandedTools[tc.id]}
-                      <ChevronDown size={14} class="shrink-0" />
+                      <ChevronDown size={12} class="shrink-0 opacity-70" />
                     {:else}
-                      <ChevronRight size={14} class="shrink-0" />
+                      <ChevronRight size={12} class="shrink-0 opacity-70" />
                     {/if}
-                    <Wrench size={14} class={`shrink-0 ${tc.status === 'running' ? 'text-amber-400' : 'text-cyan-400'}`} />
-                    <span class="font-semibold text-sm">{tc.name}</span>
-                    <span class="flex-1 text-left text-cyan-400/70 truncate ml-2">
+                    <Wrench size={12} class={`shrink-0 ${tc.status === 'running' ? 'text-amber-400/80' : 'text-cyan-500/70'}`} />
+                    <span class="font-medium">{tc.name}</span>
+                    <span class="flex-1 text-left text-cyan-500/50 truncate ml-1 text-[9px]">
                       {JSON.stringify(tc.args)}
                     </span>
                     {#if tc.status === 'running'}
-                      <Loader2 size={14} class="animate-spin text-amber-400 shrink-0" />
+                      <Loader2 size={12} class="animate-spin text-amber-400/80 shrink-0" />
                     {:else if tc.status === 'completed' && !tc.result?.error}
-                      <CheckCircle2 size={14} class="text-cyan-300 shrink-0" />
+                      <CheckCircle2 size={12} class="text-cyan-500/70 shrink-0" />
                     {:else}
-                      <XCircle size={14} class="text-rose-400 shrink-0" />
+                      <XCircle size={12} class="text-rose-400/80 shrink-0" />
                     {/if}
                   </button>
                   {#if expandedTools[tc.id]}
-                    <div transition:slide={{ duration: 250 }} class="px-8 py-4 bg-[#11111b] border-t border-indigo-800/50 flex flex-col gap-4 overflow-x-auto">
-                      <div class="text-cyan-400/80 font-semibold uppercase tracking-wider text-[10px] px-1">Args</div>
-                      <pre class="text-cyan-300 text-xs pl-1 pr-2">{formatToolOutput(tc.args)}</pre>
+                    <div transition:slide={{ duration: 200 }} class="px-3 py-2 bg-[#0c0c10] border-t border-indigo-900/40 flex flex-col gap-2 overflow-x-auto">
+                      <div class="text-cyan-500/60 font-semibold uppercase tracking-wider text-[8px]">Args</div>
+                      <pre class="text-cyan-400/80 text-[9px] max-h-32 overflow-y-auto custom-scrollbar">{formatToolOutput(tc.args)}</pre>
                       {#if tc.result}
-                        <div class="text-cyan-400/80 font-semibold uppercase tracking-wider text-[10px] mt-1 px-1">Result</div>
-                        <pre class="text-cyan-300 text-xs max-h-64 overflow-y-auto custom-scrollbar pl-1 pr-2">{formatToolOutput(tc.result)}</pre>
+                        <div class="text-cyan-500/60 font-semibold uppercase tracking-wider text-[8px] mt-1">Result</div>
+                        <pre class="text-cyan-400/80 text-[9px] max-h-48 overflow-y-auto custom-scrollbar">{formatToolOutput(tc.result)}</pre>
                       {/if}
                     </div>
                   {/if}
@@ -346,51 +342,49 @@
             </div>
           {/if}
           {#if msg.statuses && msg.statuses.length > 0}
-            <div class="flex flex-col gap-2.5 my-1">
-              <div class="px-8 sm:px-10 mx-4 sm:mx-8 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Progress</div>
+            <div class="flex flex-col gap-1.5 my-0.5">
               {#each msg.statuses as status}
-                <div in:slide={{ duration: 200 }} class="text-xs text-pink-300/90 bg-[#11111b]/40 mx-4 sm:mx-8 rounded-sm px-8 py-3.5 flex items-start gap-4 border border-indigo-800/40 font-mono shadow-sm">
-                  <Wrench size={14} class="mt-0.5 shrink-0 opacity-70" />
-                  <span class="leading-relaxed">{status}</span>
+                <div in:slide={{ duration: 150 }} class="text-[10px] text-pink-200/70 bg-[#11111b]/30 rounded-sm px-3 py-2 flex items-start gap-2 border border-indigo-900/30 font-mono">
+                  <Wrench size={10} class="mt-0.5 shrink-0 opacity-50" />
+                  <span>{status}</span>
                 </div>
               {/each}
             </div>
           {/if}
           {#if msg.bashOutput}
-            <div class="flex flex-col gap-2.5 my-1" transition:slide={{ duration: 200 }}>
-              <div class="px-8 sm:px-10 mx-4 sm:mx-8 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Running Bash...</div>
-              <div class="text-xs text-pink-300/90 bg-[#11111b]/80 mx-4 sm:mx-8 rounded-sm px-8 py-3.5 border border-indigo-800/80 font-mono shadow-sm overflow-x-auto">
+            <div class="flex flex-col gap-1.5 my-0.5" transition:slide={{ duration: 150 }}>
+              <div class="px-2 text-[9px] font-semibold uppercase tracking-[0.1em] text-indigo-400/60">Bash Output</div>
+              <div class="text-[10px] text-pink-200/80 bg-[#0c0c10] rounded-sm px-3 py-2 border border-indigo-900/50 font-mono overflow-x-auto max-h-64 overflow-y-auto custom-scrollbar">
                 <pre class="whitespace-pre-wrap">{msg.bashOutput}</pre>
               </div>
             </div>
           {/if}
-          <div class="px-8 sm:px-10 mx-4 sm:mx-8 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Response</div>
-          <div class="prose prose-invert prose-sm max-w-none mx-4 sm:mx-8 rounded-sm px-8 sm:px-10 py-6 bg-[#11111b]/50 border border-indigo-800/35 prose-pre:bg-[#11111b] prose-pre:border prose-pre:border-indigo-800/50 prose-pre:px-6 prose-pre:py-3 prose-a:text-cyan-300 prose-p:leading-relaxed prose-headings:text-pink-200 prose-strong:text-pink-200" 
-               class:animate-pulse={$isGenerating && msg.id === $messages[$messages.length-1].id && !msg.content}
-               style="word-wrap: break-word;">
-            {#if msg.content}
-              {@html renderMarkdown(msg.content)}
-            {:else if $isGenerating && msg.id === $messages[$messages.length-1].id}
-              <span class="text-cyan-400 flex items-center gap-2 mt-2">
-                <Loader2 size={14} class="animate-spin" />
-                <span class="font-semibold text-pink-300">{thinkingGlyph}</span>
-                <span class="italic">{thinkingPhrase}</span>
-              </span>
-            {/if}
-          </div>
+          {#if msg.content || ($isGenerating && msg.id === $messages[$messages.length-1].id)}
+            <div class="prose prose-invert prose-sm max-w-none rounded-sm px-4 py-3 bg-[#11111b]/40 border border-indigo-900/30 prose-pre:bg-[#0c0c10] prose-pre:border prose-pre:border-indigo-900/40 prose-pre:px-3 prose-pre:py-2 prose-pre:text-[11px] prose-a:text-cyan-400 prose-p:leading-relaxed prose-p:text-[12px] prose-headings:text-pink-200/90 prose-strong:text-pink-200/90 text-gray-300" 
+                 class:opacity-80={$isGenerating && msg.id === $messages[$messages.length-1].id && !msg.content}
+                 style="word-wrap: break-word;">
+              {#if msg.content}
+                {@html renderMarkdown(msg.content)}
+              {:else if $isGenerating && msg.id === $messages[$messages.length-1].id}
+                <span class="text-cyan-500/80 flex items-center gap-2 mt-1 text-[11px]">
+                  <Loader2 size={12} class="animate-spin" />
+                  <span class="font-medium text-pink-300/80">{thinkingGlyph}</span>
+                  <span class="italic opacity-80">{thinkingPhrase}</span>
+                </span>
+              {/if}
+            </div>
+          {/if}
         {:else if msg.role === 'user'}
-          <div class="px-8 sm:px-10 mx-4 sm:mx-8 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/90">Prompt</div>
-          <div class="bg-indigo-800/10 border border-indigo-800/60 mx-4 sm:mx-8 rounded-sm px-8 sm:px-10 py-5 text-pink-200 shadow-sm leading-relaxed">
+          <div class="bg-indigo-900/10 border border-indigo-900/40 rounded-sm px-4 py-3 text-pink-100/90 text-[12px] leading-relaxed">
             {msg.content}
           </div>
         {:else}
-          <div class="px-8 sm:px-10 mx-4 sm:mx-8 text-[10px] font-bold uppercase tracking-[0.2em] text-rose-400/80">System</div>
-          <div class="bg-rose-500/10 border border-rose-500/20 mx-4 sm:mx-8 rounded-sm px-8 sm:px-10 py-5 text-rose-200 font-mono text-sm shadow-sm leading-relaxed whitespace-pre-wrap">
+          <div class="bg-rose-900/10 border border-rose-900/20 rounded-sm px-4 py-3 text-rose-300/90 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
             {msg.content}
             {#if msg.content.includes('/approve')}
-              <div class="mt-4 flex gap-4">
-                <button on:click={() => sendMessage('/approve')} class="px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/50  hover:bg-green-500/30 transition-colors cursor-pointer">Approve</button>
-                <button on:click={() => sendMessage('/deny')} class="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/50  hover:bg-red-500/30 transition-colors cursor-pointer">Deny</button>
+              <div class="mt-3 flex gap-3">
+                <button on:click={() => sendMessage('/approve')} class="px-3 py-1.5 bg-green-900/30 text-green-400/90 border border-green-800/50 rounded-sm hover:bg-green-800/40 transition-colors cursor-pointer text-[11px]">Approve</button>
+                <button on:click={() => sendMessage('/deny')} class="px-3 py-1.5 bg-red-900/30 text-red-400/90 border border-red-800/50 rounded-sm hover:bg-red-800/40 transition-colors cursor-pointer text-[11px]">Deny</button>
               </div>
             {/if}
           </div>
@@ -399,48 +393,36 @@
     {/each}
   </div>
 
-  <div class="relative z-10 chat-gutter py-5 sm:py-7 bg-[#0d0d12]/90 backdrop-blur-md border-t border-indigo-800/60 shrink-0">
-    <div class="chat-item-inset mx-4 sm:mx-8">
-      <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-400/85 mb-3 px-1.5">Compose</div>
-      <div class="relative bg-[#11111b] rounded-sm border border-indigo-800 focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-400/50 focus-within:shadow-[0_0_15px_rgba(137,220,235,0.2)] transition-all shadow-inner p-1">
-        <textarea
-          bind:value={inputStr}
-          on:keydown={handleKeydown}
-          disabled={$isGenerating || $connectionState !== "connected"}
-          placeholder={$connectionState === "connected" ? "Ask anything about your codebase..." : "Connecting..."}
-          class="w-full bg-transparent resize-none outline-none px-8 sm:px-10 py-5 pr-[4.75rem] min-h-[56px] max-h-64 overflow-y-auto text-pink-200 disabled:opacity-50 placeholder:text-indigo-500"
-          rows="1"
-        ></textarea>
-        
-        <div class="absolute bottom-3 right-3 flex items-center">
-          <button 
-            on:click={handleSend}
-            disabled={!inputStr.trim() || $isGenerating || $connectionState !== "connected"}
-            class="p-2.5 rounded-sm bg-indigo-800/80 text-pink-200 disabled:opacity-50 disabled:bg-[#11111b]/50 disabled:text-indigo-400 transition-all hover:bg-indigo-700 hover:text-pink-100 active:scale-95"
-          >
-            {#if $isGenerating}
-              <Loader2 size={18} class="animate-spin" />
-            {:else}
-              <Send size={18} />
-            {/if}
-          </button>
-        </div>
+  <div class="relative z-10 px-4 sm:px-6 py-4 bg-[#09090b]/95 backdrop-blur-sm border-t border-indigo-900/40 shrink-0">
+    <div class="relative bg-[#11111b] rounded-sm border border-indigo-900/50 focus-within:border-cyan-500/70 focus-within:ring-1 focus-within:ring-cyan-500/30 transition-all p-0.5">
+      <textarea
+        bind:value={inputStr}
+        on:keydown={handleKeydown}
+        disabled={$isGenerating || $connectionState !== "connected"}
+        placeholder={$connectionState === "connected" ? "Ask anything about your codebase..." : "Connecting..."}
+        class="w-full bg-transparent resize-none outline-none px-3 py-2.5 pr-12 min-h-[44px] max-h-48 overflow-y-auto text-pink-100/90 text-[12px] disabled:opacity-50 placeholder:text-indigo-500/60 custom-scrollbar"
+        rows="1"
+      ></textarea>
+      
+      <div class="absolute bottom-2 right-2 flex items-center">
+        <button 
+          on:click={handleSend}
+          disabled={!inputStr.trim() || $isGenerating || $connectionState !== "connected"}
+          class="p-1.5 rounded-sm bg-indigo-900/60 text-pink-200/90 disabled:opacity-50 disabled:bg-[#11111b]/50 disabled:text-indigo-500/60 transition-all hover:bg-indigo-800 hover:text-pink-100 active:scale-95"
+        >
+          {#if $isGenerating}
+            <Loader2 size={14} class="animate-spin" />
+          {:else}
+            <Send size={14} />
+          {/if}
+        </button>
       </div>
-      <div class="text-[10px] text-center text-cyan-400 mt-4 font-medium opacity-70 leading-relaxed">
-        Press <kbd class="px-1.5 py-0.5 bg-[#11111b] rounded-sm border border-indigo-800 mx-0.5">Enter</kbd> to send, <kbd class="px-1.5 py-0.5 bg-[#11111b] rounded-sm border border-indigo-800 mx-0.5">Shift+Enter</kbd> for new line
-      </div>
+    </div>
+    <div class="text-[9px] text-center text-cyan-500/50 mt-2 font-medium">
+      Press <kbd class="px-1 py-0.5 bg-[#11111b] rounded-sm border border-indigo-900/40 mx-0.5">Enter</kbd> to send, <kbd class="px-1 py-0.5 bg-[#11111b] rounded-sm border border-indigo-900/40 mx-0.5">Shift+Enter</kbd> for new line
     </div>
   </div>
 </div>
-
 <style>
-  .chat-gutter {
-    padding-left: clamp(1.75rem, 4vw, 4.5rem);
-    padding-right: clamp(1.75rem, 4vw, 4.5rem);
-  }
-
-  .chat-item-inset {
-    padding-left: clamp(0.5rem, 1.2vw, 1rem);
-    padding-right: clamp(0.5rem, 1.2vw, 1rem);
-  }
+  /* Removed heavy padding classes and simplified */
 </style>

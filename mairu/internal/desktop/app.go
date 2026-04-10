@@ -8,10 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"mairu/internal/agent"
 	"mairu/internal/config"
 	"mairu/internal/contextsrv"
+	"mairu/internal/logger"
 
 	"github.com/gen2brain/beeep"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -55,6 +57,41 @@ func (a *App) ShowNotification(title, body string) {
 	_ = beeep.Notify(title, body, "")
 }
 
+type WailsLogHandler struct {
+	ctx context.Context
+}
+
+func (h *WailsLogHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return true
+}
+
+func (h *WailsLogHandler) Handle(ctx context.Context, r slog.Record) error {
+	if h.ctx != nil {
+		attrs := make(map[string]any)
+		r.Attrs(func(a slog.Attr) bool {
+			attrs[a.Key] = a.Value.Any()
+			return true
+		})
+
+		logEntry := map[string]any{
+			"time":    r.Time.Format(time.RFC3339),
+			"level":   r.Level.String(),
+			"message": r.Message,
+			"attrs":   attrs,
+		}
+		wailsRuntime.EventsEmit(h.ctx, "sys:log", logEntry)
+	}
+	return nil
+}
+
+func (h *WailsLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return h // Not fully implemented for simplicity
+}
+
+func (h *WailsLogHandler) WithGroup(name string) slog.Handler {
+	return h // Not fully implemented for simplicity
+}
+
 // App is the Wails-bound application struct.
 // All exported methods become callable from the frontend via window.go.desktop.App.
 type App struct {
@@ -78,6 +115,11 @@ func NewApp() *App {
 // Startup is called by Wails when the app window is ready.
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// Setup Wails logger
+	wailsHandler := &WailsLogHandler{ctx: ctx}
+	logger.GlobalHandlers = append(logger.GlobalHandlers, wailsHandler)
+	logger.Setup(true) // Enable debug by default for desktop
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil {

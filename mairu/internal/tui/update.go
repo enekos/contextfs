@@ -80,11 +80,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if selectedItem != nil {
 					if m.listType == "session" {
 						sessionName := selectedItem.(listItem).title
-						m.agent.SaveSession("current")
+						if m.sessionName != "" {
+							_ = m.agent.SaveSession(m.sessionName)
+						} else {
+							_ = m.agent.SaveSession("current")
+						}
 						err := m.agent.LoadSession(sessionName)
 						if err != nil {
 							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to load session: " + err.Error()})
 						} else {
+							m.sessionName = sessionName
 							m.messages = []ChatMessage{{Role: "System", Content: "Loaded session: " + sessionName}}
 							for _, text := range m.agent.GetHistoryText() {
 								if strings.HasPrefix(text, "You: ") {
@@ -250,6 +255,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case tea.KeyCtrlC, tea.KeyCtrlD:
+			if m.sessionName != "" {
+				m.agent.SaveSession(m.sessionName)
+			}
 			return m, tea.Quit
 		case tea.KeyPgUp:
 			m.viewport.HalfPageUp()
@@ -387,7 +395,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.thinking {
-				return m, nil
+				v := strings.TrimSpace(m.textarea.Value())
+				if v == "/approve" || v == "/deny" {
+					// Proceed to process the command
+				} else {
+					if v != "" {
+						m.queuedMessages = append(m.queuedMessages, v)
+						m.textarea.Reset()
+						m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Message queued... (will be sent after current task)"})
+						m.renderMessages()
+						m.viewport.GotoBottom()
+					}
+					return m, nil
+				}
 			}
 
 			m.filteredCommands = nil
@@ -538,6 +558,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if err != nil {
 							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to fork session: " + err.Error()})
 						} else {
+							m.sessionName = newName
 							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Forked session to: " + newName})
 						}
 					} else {
@@ -553,6 +574,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if err != nil {
 							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to save session: " + err.Error()})
 						} else {
+							m.sessionName = sessionName
 							m.messages = append(m.messages, ChatMessage{Role: "System", Content: "Session saved as: " + sessionName})
 						}
 					} else {
@@ -563,6 +585,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				case "/reset", "/new":
 					m.agent.ResetSession()
+					m.sessionName = "default"
 					m.messages = []ChatMessage{{Role: "System", Content: "Session reset. Starting fresh context."}}
 					m.renderMessages()
 					m.viewport.GotoBottom()
@@ -921,11 +944,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "/session":
 					if len(cmdParts) > 1 {
 						sessionName := cmdParts[1]
-						m.agent.SaveSession("current")
+						if m.sessionName != "" {
+							m.agent.SaveSession(m.sessionName)
+						} else {
+							m.agent.SaveSession("current")
+						}
 						err := m.agent.LoadSession(sessionName)
 						if err != nil {
 							m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to load session: " + err.Error()})
 						} else {
+							m.sessionName = sessionName
 							m.messages = []ChatMessage{{Role: "System", Content: "Loaded session: " + sessionName}}
 							for _, text := range m.agent.GetHistoryText() {
 								if strings.HasPrefix(text, "You: ") {
@@ -999,6 +1027,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pushInternalLog("done", "Stream completed", "")
 			m.renderMessages()
 			m.autoScroll()
+
+			if m.sessionName != "" {
+				m.agent.SaveSession(m.sessionName)
+			}
+
+			if len(m.queuedMessages) > 0 {
+				nextMsg := m.queuedMessages[0]
+				m.queuedMessages = m.queuedMessages[1:]
+
+				m.messages = append(m.messages, ChatMessage{Role: "You", Content: nextMsg})
+				m.pushInternalLog("user", "Dequeued user prompt", nextMsg)
+				m.renderMessages()
+				m.autoScroll()
+
+				m.thinking = true
+				m.refreshThinkingIndicator(time.Now(), true)
+				m.currentResponse = ""
+				m.toolEvents = nil
+
+				m.activeStream = make(chan agent.AgentEvent, 100)
+				go m.agent.RunStream(nextMsg, m.activeStream)
+
+				cmds = append(cmds, waitForStream(m.activeStream))
+			}
 		} else if msg.Type == "text" {
 			m.currentBashOutput = ""
 			m.currentResponse += msg.Content
