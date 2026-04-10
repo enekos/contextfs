@@ -34,6 +34,12 @@ type App struct {
 	repo      *SQLiteRepository
 	projector *Projector
 	server    *http.Server
+	svc       Service
+}
+
+// Service returns the underlying service for external consumers (e.g., Wails bindings).
+func (a *App) Service() Service {
+	return a.svc
 }
 
 // NewApp initializes and returns a new App instance using the provided Config.
@@ -89,6 +95,7 @@ func NewApp(cfg Config) (*App, error) {
 		repo:      repo,
 		projector: projector,
 		server:    srv,
+		svc:       svc,
 	}, nil
 }
 
