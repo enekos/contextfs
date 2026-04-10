@@ -9,6 +9,7 @@ import (
 )
 
 func resetScanFlags() {
+	outputFormat = "json"
 	scanBudget = 3000
 	scanContext = 0
 	scanBeforeContext = 0
@@ -24,14 +25,15 @@ func resetScanFlags() {
 	scanGroup = false
 	scanInvert = false
 	scanMulti = ""
-	scanWordRegexp = false
 	scanFixedStrings = false
+	scanSmartCase = false
+	scanWordRegexp = false
+	scanOnlyMatching = false
 	scanHidden = false
 }
 
 func runScanCmd(t *testing.T, args ...string) scanResult {
 	t.Helper()
-	outputFormat = "json"
 
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
@@ -96,7 +98,6 @@ func TestScanGroup(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "b.go"), []byte("Hello\nBye\n"), 0644)
 
 	scanGroup = true
-	outputFormat = "json"
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -142,6 +143,75 @@ func TestScanMulti(t *testing.T) {
 	}
 }
 
+func TestScanFixedStrings(t *testing.T) {
+	resetScanFlags()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "regex.txt"), []byte("match .* this\nmatch all this\n"), 0644)
+
+	scanFixedStrings = true
+	res := runScanCmd(t, ".*", dir)
+
+	if res.Total != 1 {
+		t.Errorf("expected 1 fixed match, got %d", res.Total)
+	}
+	if len(res.Matches) > 0 && !bytes.Contains([]byte(res.Matches[0].C), []byte(".*")) {
+		t.Errorf("expected match with literal .*, got %s", res.Matches[0].C)
+	}
+}
+
+func TestScanSmartCase(t *testing.T) {
+	resetScanFlags()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "case.txt"), []byte("HELLO\nhello\n"), 0644)
+
+	// Lowercase query -> ignore case
+	scanSmartCase = true
+	res1 := runScanCmd(t, "hello", dir)
+	if res1.Total != 2 {
+		t.Errorf("smart-case lowercase: expected 2 matches, got %d", res1.Total)
+	}
+
+	// Uppercase query -> case sensitive
+	resetScanFlags()
+	scanSmartCase = true
+	res2 := runScanCmd(t, "HELLO", dir)
+	if res2.Total != 1 {
+		t.Errorf("smart-case uppercase: expected 1 match, got %d", res2.Total)
+	}
+}
+
+func TestScanWordRegexp(t *testing.T) {
+	resetScanFlags()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "words.txt"), []byte("the dog\nthe underdog\n"), 0644)
+
+	scanWordRegexp = true
+	res := runScanCmd(t, "dog", dir)
+
+	if res.Total != 1 {
+		t.Errorf("word-regexp: expected 1 match, got %d", res.Total)
+	}
+	if len(res.Matches) > 0 && res.Matches[0].C != "the dog" {
+		t.Errorf("word-regexp: expected 'the dog', got %s", res.Matches[0].C)
+	}
+}
+
+func TestScanOnlyMatching(t *testing.T) {
+	resetScanFlags()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "only.txt"), []byte("find apples and oranges\n"), 0644)
+
+	scanOnlyMatching = true
+	res := runScanCmd(t, "apples|oranges", dir)
+
+	if res.Total != 1 {
+		t.Errorf("only-matching: expected 1 match line, got %d", res.Total)
+	}
+	if len(res.Matches) > 0 && res.Matches[0].C != "apples\noranges" {
+		t.Errorf("only-matching: expected 'apples\\noranges', got %q", res.Matches[0].C)
+	}
+}
+
 func TestScanHidden(t *testing.T) {
 	resetScanFlags()
 	dir := t.TempDir()
@@ -159,30 +229,6 @@ func TestScanHidden(t *testing.T) {
 	res = runScanCmd(t, "secret_key", dir)
 	if res.Total != 2 {
 		t.Errorf("expected 2 matches (including hidden), got %d", res.Total)
-	}
-}
-
-func TestScanWordRegexp(t *testing.T) {
-	resetScanFlags()
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "words.txt"), []byte("hello\nhelloworld\n"), 0644)
-
-	scanWordRegexp = true
-	res := runScanCmd(t, "hello", dir)
-	if res.Total != 1 {
-		t.Errorf("expected 1 match (word bounded), got %d", res.Total)
-	}
-}
-
-func TestScanFixedStrings(t *testing.T) {
-	resetScanFlags()
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "fixed.txt"), []byte("hello.*\nhello world\n"), 0644)
-
-	scanFixedStrings = true
-	res := runScanCmd(t, "hello.*", dir)
-	if res.Total != 1 {
-		t.Errorf("expected 1 match (literal string), got %d", res.Total)
 	}
 }
 
