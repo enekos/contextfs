@@ -11,7 +11,33 @@ import init, {
   mark_synced,
   export_session,
   import_session,
+  clear_pending_sync,
 } from "./pkg/mairu_ext_wasm.js";
+
+function broadcastDevLog(level, ...args) {
+  try {
+    chrome.runtime.sendMessage({ type: 'dev_log', level, args });
+  } catch (e) {
+    // Ignore errors if dev dashboard is not open
+  }
+}
+
+const originalConsoleLog = console.log;
+const originalConsoleWarn = console.warn;
+const originalConsoleError = console.error;
+
+console.log = (...args) => {
+  originalConsoleLog(...args);
+  broadcastDevLog('info', ...args);
+};
+console.warn = (...args) => {
+  originalConsoleWarn(...args);
+  broadcastDevLog('warn', ...args);
+};
+console.error = (...args) => {
+  originalConsoleError(...args);
+  broadcastDevLog('error', ...args);
+};
 
 let wasmReady = false;
 let currentSessionId = null;
@@ -101,6 +127,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       pendingCount: pending ? pending.length : 0,
       nativeHostConnected: nativePort !== null
     });
+  } else if (message.type === "get_dev_state") {
+    const pending = get_pending_sync();
+    sendResponse({
+      sessionId: currentSessionId,
+      summary: get_session_summary(),
+      pendingCount: pending ? pending.length : 0,
+      nativeHostConnected: nativePort !== null,
+      wasmReady: wasmReady,
+      apiUrl: mairApiUrl,
+      pendingQueue: pending || []
+    });
+  } else if (message.type === "clear_queue") {
+    if (clear_pending_sync) {
+       clear_pending_sync();
+       persistSession();
+    }
+    sendResponse({ ok: true });
+  } else if (message.type === "reset_session") {
+     chrome.storage.session.remove(SESSION_STORAGE_KEY, () => {
+        currentSessionId = `session-${Date.now()}`;
+        init_session(currentSessionId);
+        persistSession();
+        sendResponse({ ok: true });
+     });
+     return true;
   } else if (message.type === "search") {
     const results = search_session(message.query || "", message.limit || 5);
     sendResponse({ results });

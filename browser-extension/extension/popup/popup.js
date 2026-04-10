@@ -33,6 +33,13 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.runtime.sendMessage({ type: 'set_api_url', url });
   });
 
+  const devModeBtn = document.getElementById('dev-mode-btn');
+  if (devModeBtn) {
+    devModeBtn.addEventListener('click', () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('dev/dev.html') });
+    });
+  }
+
   function updateStats() {
     chrome.runtime.sendMessage({ type: 'get_status' }, (response) => {
       if (chrome.runtime.lastError || !response) {

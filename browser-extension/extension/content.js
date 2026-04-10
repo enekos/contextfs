@@ -291,8 +291,36 @@
   document.addEventListener('keydown', trackInteraction, { passive: true, capture: true });
   document.addEventListener('scroll', trackInteraction, { passive: true, capture: true });
 
+  function captureStateForEval() {
+    const html = getSerializedHtml();
+    const selection = window.getSelection().toString();
+
+    let activeEl = document.activeElement;
+    while (activeEl && activeEl.shadowRoot && activeEl.shadowRoot.activeElement) {
+      activeEl = activeEl.shadowRoot.activeElement;
+    }
+    const active_element = getCssSelector(activeEl);
+
+    const visual_rects = {};
+    document.querySelectorAll('header, nav, main, article, aside, footer, h1, h2, form, button, input').forEach(el => {
+      const selector = getCssSelector(el);
+      if (selector && !visual_rects[selector]) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          visual_rects[selector] = `x:${Math.round(rect.x)},y:${Math.round(rect.y)},w:${Math.round(rect.width)},h:${Math.round(rect.height)}`;
+        }
+      }
+    });
+
+    return { html, selection, active_element, visual_rects };
+  }
+
   // 8. Listen for execution commands from background script (from Agent)
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'dev_force_eval') {
+      sendResponse(captureStateForEval());
+      return true;
+    }
     if (message.type !== "execute") return;
     try {
       if (message.command === "click") {
