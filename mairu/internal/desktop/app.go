@@ -12,8 +12,14 @@ import (
 	"mairu/internal/config"
 	"mairu/internal/contextsrv"
 
+	"github.com/gen2brain/beeep"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// ShowNotification sends an OS notification.
+func (a *App) ShowNotification(title, body string) {
+	_ = beeep.Notify(title, body, "")
+}
 
 // App is the Wails-bound application struct.
 // All exported methods become callable from the frontend via window.go.desktop.App.
@@ -92,6 +98,7 @@ func (a *App) Startup(ctx context.Context) {
 
 	close(a.meiliReady)
 
+	a.ShowNotification("Mairu", "Meilisearch is ready")
 	wailsRuntime.EventsEmit(ctx, "app:ready", true)
 	a.SetupTray()
 }
@@ -197,7 +204,11 @@ func (a *App) VibeMutationPlan(prompt, project string, topK int) (contextsrv.Vib
 }
 
 func (a *App) VibeMutationExecute(ops []contextsrv.VibeMutationOp, project string) ([]map[string]any, error) {
-	return a.svc.ExecuteVibeMutation(ops, project)
+	res, err := a.svc.ExecuteVibeMutation(ops, project)
+	if err == nil {
+		a.ShowNotification("Mairu", fmt.Sprintf("Executed %d mutations", len(ops)))
+	}
+	return res, err
 }
 
 // ── Moderation ──────────────────────────────────────────────────
