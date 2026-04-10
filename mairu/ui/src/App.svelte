@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { connectWs, activeView } from "./lib/store";
+  import { connectChat, activeView } from "./lib/store";
   import Sidebar from "./lib/Sidebar.svelte";
   import Chat from "./lib/Chat.svelte";
   import Workspace from "./lib/Workspace.svelte";
@@ -10,7 +10,14 @@
   import "./app.css";
 
   onMount(() => {
-    connectWs();
+    connectChat();
+
+    // Listen for native menu navigation events
+    if ((window as any).runtime) {
+      (window as any).runtime.EventsOn('nav:view', (view: string) => {
+        activeView.set(view as any);
+      });
+    }
   });
 </script>
 
