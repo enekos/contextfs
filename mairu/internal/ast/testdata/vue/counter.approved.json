@@ -1,105 +1,67 @@
 {
-  "file_summary": "Vue component graph extracted.",
-  "symbols": [
-    {
-      "ID": "fn:decrement",
-      "Name": "decrement",
-      "Kind": "fn",
-      "Exported": false,
-      "Doc": "",
-      "Line": 12,
-      "Signature": ""
-    },
-    {
-      "ID": "fn:increment",
-      "Name": "increment",
-      "Kind": "fn",
-      "Exported": false,
-      "Doc": "",
-      "Line": 8,
-      "Signature": ""
-    },
-    {
-      "ID": "fn:reset",
-      "Name": "reset",
-      "Kind": "fn",
-      "Exported": false,
-      "Doc": "",
-      "Line": 18,
-      "Signature": ""
-    },
-    {
-      "ID": "fn:useCounter",
-      "Name": "useCounter",
-      "Kind": "fn",
-      "Exported": false,
-      "Doc": "",
-      "Line": 4,
-      "Signature": ""
-    }
-  ],
   "edges": [
     {
       "From": "fn:decrement",
-      "To": "fn:increment",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:increment"
     },
     {
       "From": "fn:decrement",
-      "To": "fn:reset",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:reset"
     },
     {
       "From": "fn:decrement",
-      "To": "fn:useCounter",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:useCounter"
     },
     {
       "From": "fn:increment",
-      "To": "fn:decrement",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:decrement"
     },
     {
       "From": "fn:increment",
-      "To": "fn:reset",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:reset"
     },
     {
       "From": "fn:increment",
-      "To": "fn:useCounter",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:useCounter"
     },
     {
       "From": "fn:reset",
-      "To": "fn:decrement",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:decrement"
     },
     {
       "From": "fn:reset",
-      "To": "fn:increment",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:increment"
     },
     {
       "From": "fn:reset",
-      "To": "fn:useCounter",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:useCounter"
     },
     {
       "From": "fn:useCounter",
-      "To": "fn:decrement",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:decrement"
     },
     {
       "From": "fn:useCounter",
-      "To": "fn:increment",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:increment"
     },
     {
       "From": "fn:useCounter",
-      "To": "fn:reset",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:reset"
     }
   ],
+  "file_summary": "Vue component graph extracted.",
   "imports": [
     "vue"
   ],
@@ -108,5 +70,47 @@
     "fn:increment": "Describes increment",
     "fn:reset": "Describes reset",
     "fn:useCounter": "Describes useCounter"
-  }
+  },
+  "symbols": [
+    {
+      "ControlFlow": "",
+      "Doc": "",
+      "Exported": false,
+      "ID": "fn:decrement",
+      "Kind": "fn",
+      "Line": 12,
+      "Name": "decrement",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "",
+      "Doc": "",
+      "Exported": false,
+      "ID": "fn:increment",
+      "Kind": "fn",
+      "Line": 8,
+      "Name": "increment",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "",
+      "Doc": "",
+      "Exported": false,
+      "ID": "fn:reset",
+      "Kind": "fn",
+      "Line": 18,
+      "Name": "reset",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "",
+      "Doc": "",
+      "Exported": false,
+      "ID": "fn:useCounter",
+      "Kind": "fn",
+      "Line": 4,
+      "Name": "useCounter",
+      "Signature": ""
+    }
+  ]
 }

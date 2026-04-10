@@ -1,5 +1,14 @@
 import { writable } from 'svelte/store';
 
+const isWails = typeof window !== 'undefined' && !!window.go?.desktop?.App;
+let EventsOn: any = () => {};
+let EventsOff: any = () => {};
+if (isWails) {
+  const runtime = window.runtime;
+  EventsOn = runtime?.EventsOn ?? (() => {});
+  EventsOff = runtime?.EventsOff ?? (() => {});
+}
+
 export type AgentEvent = {
   Type: "text" | "status" | "error" | "done" | "tool_call" | "tool_result" | "log" | "bash_output" | "approval_request";
   Content: string;
@@ -58,12 +67,22 @@ function mapSavedRole(role: "user" | "model"): "user" | "assistant" {
 }
 
 async function loadSessionMessages(sessionName: string) {
-  const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/messages`);
-  if (!response.ok) {
-    throw new Error(`failed to load session: ${response.statusText}`);
-  }
+  let payload: { messages?: SessionMessage[] } = { messages: [] };
 
-  const payload = await response.json() as { messages?: SessionMessage[] };
+  if (isWails) {
+    try {
+      const msgs = await (window as any).go.desktop.App.LoadSessionHistory(sessionName);
+      payload.messages = msgs;
+    } catch(e) {
+      console.error("Failed to load Wails session history", e);
+    }
+  } else {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/messages`);
+    if (!response.ok) {
+      throw new Error(`failed to load session: ${response.statusText}`);
+    }
+    payload = await response.json() as { messages?: SessionMessage[] };
+  }
   
   const loaded: Message[] = [];
   
@@ -134,6 +153,17 @@ async function loadSessionMessages(sessionName: string) {
 }
 
 export async function loadSessions() {
+  if (isWails) {
+    try {
+      const sessList = await (window as any).go.desktop.App.ListSessions();
+      const available = [...new Set([...(sessList ?? []), "default"])].sort();
+      sessions.set(available);
+    } catch (e) {
+      console.error("Failed to load Wails sessions", e);
+      sessions.set(["default"]);
+    }
+    return;
+  }
   const response = await fetch("/api/sessions");
   if (!response.ok) {
     throw new Error(`failed to list sessions: ${response.statusText}`);
@@ -169,12 +199,115 @@ export async function switchSession(sessionName: string) {
   currentSession.set(trimmed);
   currentMessageId = null;
   isGenerating.set(false);
-  await connectWs(trimmed, true);
+  await connectChat(trimmed, true);
 }
 
-export async function connectWs(sessionName?: string, forceReconnect = false) {
+function handleAgentEvent(data: AgentEvent) {
+  if (data.Type === "text") {
+    messages.update(msgs => {
+      const lastMsg = msgs[msgs.length - 1];
+      if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
+        lastMsg.bashOutput = "";
+        lastMsg.content += data.Content;
+        return [...msgs];
+      }
+      return msgs;
+    });
+  } else if (data.Type === "status") {
+    messages.update(msgs => {
+      const lastMsg = msgs[msgs.length - 1];
+      if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
+        lastMsg.statuses = [...lastMsg.statuses, data.Content];
+        return [...msgs];
+      }
+      return msgs;
+    });
+  } else if (data.Type === "tool_call") {
+    messages.update(msgs => {
+      const lastMsg = msgs[msgs.length - 1];
+      if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
+        lastMsg.toolCalls = [...lastMsg.toolCalls, {
+          id: crypto.randomUUID(),
+          name: data.ToolName || 'unknown',
+          args: data.ToolArgs || {},
+          status: "running"
+        }];
+        return [...msgs];
+      }
+      return msgs;
+    });
+  } else if (data.Type === "tool_result") {
+    messages.update(msgs => {
+      const lastMsg = msgs[msgs.length - 1];
+      if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
+        lastMsg.bashOutput = "";
+        // Find the last tool call with matching name that is still running
+        for (let i = lastMsg.toolCalls.length - 1; i >= 0; i--) {
+          const tc = lastMsg.toolCalls[i];
+          if (tc.name === data.ToolName && tc.status === "running") {
+            tc.status = "completed";
+            tc.result = data.ToolResult;
+            break;
+          }
+        }
+        return [...msgs];
+      }
+      return msgs;
+    });
+  } else if (data.Type === "done") {
+    messages.update(msgs => {
+      const lastMsg = msgs[msgs.length - 1];
+      if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
+        lastMsg.bashOutput = "";
+      }
+      return msgs;
+    });
+    isGenerating.set(false);
+    currentMessageId = null;
+  } else if (data.Type === "approval_request") {
+    messages.update(msgs => [
+      ...msgs, 
+      { id: crypto.randomUUID(), role: "system", content: data.Content, bashOutput: "", statuses: [], logs: [], toolCalls: [] }
+    ]);
+  } else if (data.Type === "error") {
+    messages.update(msgs => [
+      ...msgs, 
+      { id: crypto.randomUUID(), role: "system", content: `Error: ${data.Content}`, bashOutput: "", statuses: [], logs: [], toolCalls: [] }
+    ]);
+    isGenerating.set(false);
+    currentMessageId = null;
+  } else if (data.Type === "bash_output") {
+    messages.update(msgs => {
+      const lastMsg = msgs[msgs.length - 1];
+      if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
+        lastMsg.bashOutput += data.Content;
+        if (lastMsg.bashOutput.length > 4000) {
+          lastMsg.bashOutput = lastMsg.bashOutput.slice(lastMsg.bashOutput.length - 4000);
+        }
+        return [...msgs];
+      }
+      return msgs;
+    });
+  } else if (data.Type === "log") {
+    messages.update(msgs => {
+      const lastMsg = msgs[msgs.length - 1];
+      if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
+        lastMsg.logs = [...lastMsg.logs, data.Content];
+        return [...msgs];
+      }
+      return msgs;
+    });
+  }
+}
+
+export async function connectChat(sessionName?: string, forceReconnect = false) {
   const activeSession = sessionName?.trim() || "default";
   currentSession.set(activeSession);
+
+  if (isWails) {
+    connectWailsChat(activeSession);
+    return;
+  }
 
   if (forceReconnect && ws) {
     ws.onclose = null;
@@ -211,125 +344,69 @@ export async function connectWs(sessionName?: string, forceReconnect = false) {
   ws.onclose = () => {
     connectionState.set("disconnected");
     reconnectTimer = window.setTimeout(() => {
-      void connectWs(activeSession);
+      void connectChat(activeSession);
     }, 3000);
   };
 
   ws.onmessage = (event) => {
     const data: AgentEvent = JSON.parse(event.data);
-
-    if (data.Type === "text") {
-      messages.update(msgs => {
-        const lastMsg = msgs[msgs.length - 1];
-        if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
-          lastMsg.bashOutput = "";
-          lastMsg.content += data.Content;
-          return [...msgs];
-        }
-        return msgs;
-      });
-    } else if (data.Type === "status") {
-      messages.update(msgs => {
-        const lastMsg = msgs[msgs.length - 1];
-        if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
-          lastMsg.statuses = [...lastMsg.statuses, data.Content];
-          return [...msgs];
-        }
-        return msgs;
-      });
-    } else if (data.Type === "tool_call") {
-      messages.update(msgs => {
-        const lastMsg = msgs[msgs.length - 1];
-        if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
-          lastMsg.toolCalls = [...lastMsg.toolCalls, {
-            id: crypto.randomUUID(),
-            name: data.ToolName || 'unknown',
-            args: data.ToolArgs || {},
-            status: "running"
-          }];
-          return [...msgs];
-        }
-        return msgs;
-      });
-    } else if (data.Type === "tool_result") {
-      messages.update(msgs => {
-        const lastMsg = msgs[msgs.length - 1];
-        if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
-          lastMsg.bashOutput = "";
-          // Find the last tool call with matching name that is still running
-          for (let i = lastMsg.toolCalls.length - 1; i >= 0; i--) {
-            const tc = lastMsg.toolCalls[i];
-            if (tc.name === data.ToolName && tc.status === "running") {
-              tc.status = "completed";
-              tc.result = data.ToolResult;
-              break;
-            }
-          }
-          return [...msgs];
-        }
-        return msgs;
-      });
-    } else if (data.Type === "done") {
-      messages.update(msgs => {
-        const lastMsg = msgs[msgs.length - 1];
-        if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
-          lastMsg.bashOutput = "";
-        }
-        return msgs;
-      });
-      isGenerating.set(false);
-      currentMessageId = null;
-    } else if (data.Type === "approval_request") {
-      messages.update(msgs => [
-        ...msgs, 
-        { id: crypto.randomUUID(), role: "system", content: data.Content, bashOutput: "", statuses: [], logs: [], toolCalls: [] }
-      ]);
-    } else if (data.Type === "error") {
-      messages.update(msgs => [
-        ...msgs, 
-        { id: crypto.randomUUID(), role: "system", content: `Error: ${data.Content}`, bashOutput: "", statuses: [], logs: [], toolCalls: [] }
-      ]);
-      isGenerating.set(false);
-      currentMessageId = null;
-    } else if (data.Type === "bash_output") {
-      messages.update(msgs => {
-        const lastMsg = msgs[msgs.length - 1];
-        if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
-          lastMsg.bashOutput += data.Content;
-          if (lastMsg.bashOutput.length > 4000) {
-            lastMsg.bashOutput = lastMsg.bashOutput.slice(lastMsg.bashOutput.length - 4000);
-          }
-          return [...msgs];
-        }
-        return msgs;
-      });
-    } else if (data.Type === "log") {
-      messages.update(msgs => {
-        const lastMsg = msgs[msgs.length - 1];
-        if (lastMsg && lastMsg.role === "assistant" && lastMsg.id === currentMessageId) {
-          lastMsg.logs = [...lastMsg.logs, data.Content];
-          return [...msgs];
-        }
-        return msgs;
-      });
-    }
+    handleAgentEvent(data);
   };
 }
 
+function connectWailsChat(session: string) {
+  connectionState.set("connecting");
+  
+  loadSessions().then(() => loadSessionMessages(session)).catch(err => {
+    console.error("Failed to load initial session data", err);
+  });
+
+  connectionState.set("connected");
+
+  EventsOn("chat:message", (ev: any) => {
+    handleAgentEvent(ev);
+  });
+
+  EventsOn("chat:error", (err: string) => {
+    messages.update(m => [...m, {
+      id: crypto.randomUUID(),
+      role: "system" as const,
+      content: `Error: ${err}`,
+      bashOutput: "",
+      statuses: [],
+      logs: [],
+      toolCalls: [],
+    }]);
+    isGenerating.set(false);
+  });
+
+  EventsOn("chat:done", () => {
+    isGenerating.set(false);
+  });
+}
+
 export function sendMessage(content: string) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    messages.update(msgs => [
-      ...msgs, 
-      { id: crypto.randomUUID(), role: "user", content, bashOutput: "", statuses: [], logs: [], toolCalls: [] }
-    ]);
-    
-    currentMessageId = crypto.randomUUID();
-    messages.update(msgs => [
-      ...msgs, 
-      { id: currentMessageId!, role: "assistant", content: "", bashOutput: "", statuses: [], logs: [], toolCalls: [] }
-    ]);
-    
-    isGenerating.set(true);
+  messages.update(msgs => [
+    ...msgs, 
+    { id: crypto.randomUUID(), role: "user", content, bashOutput: "", statuses: [], logs: [], toolCalls: [] }
+  ]);
+  
+  currentMessageId = crypto.randomUUID();
+  messages.update(msgs => [
+    ...msgs, 
+    { id: currentMessageId!, role: "assistant", content: "", bashOutput: "", statuses: [], logs: [], toolCalls: [] }
+  ]);
+  
+  isGenerating.set(true);
+
+  if (isWails) {
+    let session = "default";
+    currentSession.subscribe(v => session = v)();
+    window.go?.desktop?.App?.SendMessage(session, content);
+  } else if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(content);
+  } else {
+    isGenerating.set(false);
+    console.error("WebSocket not connected");
   }
 }

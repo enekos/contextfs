@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"mairu/internal/approved"
 	"mairu/internal/contextsrv"
 )
 
@@ -65,6 +66,10 @@ func TestApprovedRetrieval(t *testing.T) {
 
 	indexer := contextsrv.NewMeiliIndexer(host, apiKey, nil)
 
+	if err := indexer.EnsureIndexes(); err != nil {
+		t.Fatalf("EnsureIndexes failed: %v", err)
+	}
+
 	// Skip gracefully if Meilisearch is not reachable.
 	if stats := indexer.ClusterStats(); stats == nil {
 		t.Skip("Meilisearch not reachable — set MEILI_URL or start Meilisearch to run integration tests")
@@ -100,7 +105,6 @@ func TestApprovedRetrieval(t *testing.T) {
 	waitForIndexed(t, indexer, dataset.Project, 30*time.Second)
 
 	// Run each case and collect results.
-	update := os.Getenv("UPDATE_APPROVED") != ""
 	var lines []string
 	lines = append(lines, "# Retrieval Evaluation", "")
 
@@ -180,22 +184,7 @@ func TestApprovedRetrieval(t *testing.T) {
 	actual := strings.Join(lines, "\n")
 	approvedFile := filepath.Join("testdata", "retrieval.approved.md")
 
-	if update {
-		if err := os.WriteFile(approvedFile, []byte(actual), 0644); err != nil {
-			t.Fatalf("writing approved file: %v", err)
-		}
-		t.Logf("updated %s", approvedFile)
-	} else {
-		expectedBytes, err := os.ReadFile(approvedFile)
-		if err != nil {
-			t.Fatalf("reading approved file (run with UPDATE_APPROVED=1 to generate): %v", err)
-		}
-		// Compare ranking order only — strip score lines that may drift.
-		if string(expectedBytes) != actual {
-			t.Errorf("retrieval output differs from approved.\n\nExpected:\n%s\n\nActual:\n%s",
-				string(expectedBytes), actual)
-		}
-	}
+	approved.AssertString(t, approvedFile, actual)
 
 	// Feedback Loop: assert quality thresholds.
 	if metrics.MRR < minMRR {
@@ -232,6 +221,9 @@ func waitForIndexed(t *testing.T, indexer *contextsrv.MeiliIndexer, project stri
 			})
 			if err == nil && len(extractItems(res, domain)) > 0 {
 				break
+			}
+			if err != nil {
+				t.Logf("wait search error (%s): %v", domain, err)
 			}
 			select {
 			case <-ctx.Done():

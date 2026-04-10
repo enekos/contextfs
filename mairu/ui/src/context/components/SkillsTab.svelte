@@ -1,11 +1,11 @@
 <script lang="ts">
   import { slide } from 'svelte/transition';
   import { fmtDate, scoreColor, copy } from "../lib/utils";
+  import { createSkill as apiCreateSkill, updateSkill, deleteSkill } from "../../lib/api";
 
   export let displaySkills: any[];
   export let hasSearchResults: boolean;
   export let searchQuery: string;
-  export let API_BASE: string;
   export let load: () => Promise<void>;
   export let setLoading: (loading: boolean) => void;
   export let setError: (error: string) => void;
@@ -21,12 +21,7 @@
   async function createSkill() {
     addingSkill = true; setLastWriteResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/skills`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newSkill),
-      });
-      if (!res.ok) throw new Error("Failed to create skill");
+      await apiCreateSkill(newSkill);
       newSkill = { name: "", description: "" };
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
@@ -46,13 +41,7 @@
   async function saveEdit() {
     setLoading(true); setError(""); setLastWriteResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/skills`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
-      });
-      if (!res.ok) throw new Error(`Failed to update skill`);
-      const result = await res.json();
+      const result = await updateSkill(editForm);
       setLastWriteResult(result);
       cancelEdit();
       await load();
@@ -64,8 +53,7 @@
     if (!confirm(`Delete this skill?`)) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/skills?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Delete failed");
+      await deleteSkill(id);
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setLoading(false); }

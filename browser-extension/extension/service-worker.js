@@ -9,42 +9,160 @@ import init, {
   get_session_summary,
   get_pending_sync,
   mark_synced,
+  export_session,
+  import_session,
+  clear_pending_sync,
 } from "./pkg/mairu_ext_wasm.js";
 
+function broadcastDevLog(level, ...args) {
+  try {
+    chrome.runtime.sendMessage({ type: 'dev_log', level, args });
+  } catch (e) {
+    // Ignore errors if dev dashboard is not open
+  }
+}
+
+const originalConsoleLog = console.log;
+const originalConsoleWarn = console.warn;
+const originalConsoleError = console.error;
+
+console.log = (...args) => {
+  originalConsoleLog(...args);
+  broadcastDevLog('info', ...args);
+};
+console.warn = (...args) => {
+  originalConsoleWarn(...args);
+  broadcastDevLog('warn', ...args);
+};
+console.error = (...args) => {
+  originalConsoleError(...args);
+  broadcastDevLog('error', ...args);
+};
+
 let wasmReady = false;
-const MAIRU_API_URL = "http://127.0.0.1:7080"; // default mairu API port
+let currentSessionId = null;
+let mairApiUrl = "http://127.0.0.1:7080"; // overrideable from popup settings
 const SYNC_INTERVAL_MS = 10000;
 const SYNC_BATCH_SIZE = 5;
+const SESSION_STORAGE_KEY = "mairu_session_state";
+const API_URL_KEY = "mairu_api_url";
 
-// Initialize WASM and session
+// Initialize WASM and restore any persisted session
 async function initialize() {
   await init();
-  const sessionId = `session-${Date.now()}`;
-  init_session(sessionId);
+
+  // Try to restore a previous session from chrome.storage.session
+  try {
+    const stored = await chrome.storage.session.get(SESSION_STORAGE_KEY);
+    const json = stored[SESSION_STORAGE_KEY];
+    if (json && import_session(json)) {
+      // Recover session ID from the stored state
+      const summary = get_session_summary();
+      currentSessionId = summary?.id || `session-${Date.now()}`;
+      console.log("[mairu-ext] Restored session:", currentSessionId);
+    } else {
+      throw new Error("no stored session");
+    }
+  } catch {
+    currentSessionId = `session-${Date.now()}`;
+    init_session(currentSessionId);
+    console.log("[mairu-ext] New session:", currentSessionId);
+  }
+
+  // Load user-configured API URL
+  try {
+    const stored = await chrome.storage.local.get(API_URL_KEY);
+    if (stored[API_URL_KEY]) {
+      mairApiUrl = stored[API_URL_KEY].replace(/\/$/, "");
+    }
+  } catch {}
+
   wasmReady = true;
-  console.log("[mairu-ext] WASM initialized, session:", sessionId);
+}
+
+// Persist current session state to chrome.storage.session
+async function persistSession() {
+  if (!wasmReady) return;
+  try {
+    const json = export_session();
+    if (json) {
+      await chrome.storage.session.set({ [SESSION_STORAGE_KEY]: json });
+    }
+  } catch (e) {
+    console.warn("[mairu-ext] Failed to persist session:", e);
+  }
 }
 
 initialize();
 
-// Handle messages from content scripts
+// Handle messages from content scripts and popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!wasmReady) return;
 
   if (message.type === "page_content") {
-    const { url, html, timestamp, selection, active_element, console_errors, network_errors, visual_rects, storage_state } = message.payload;
-    const result = process_page(
-        url, 
-        html, 
-        timestamp, 
-        selection, 
-        active_element, 
-        JSON.stringify(console_errors || []),
-        JSON.stringify(network_errors || []),
-        JSON.stringify(visual_rects || {}),
-        JSON.stringify(storage_state || {})
-    );
-    console.log("[mairu-ext] Processed page:", url, result);
+    const { url, html, timestamp, selection, active_element, console_errors, network_errors, visual_rects, storage_state, dwell_ms, interaction_count, iframes } = message.payload;
+    const result = process_page({
+        url,
+        html,
+        timestamp,
+        selection,
+        active_element,
+        console_errors_json: JSON.stringify(console_errors || []),
+        network_errors_json: JSON.stringify(network_errors || []),
+        visual_rects_json: JSON.stringify(visual_rects || {}),
+        storage_state_json: JSON.stringify(storage_state || {}),
+        dwell_ms: dwell_ms || 0,
+        interaction_count: interaction_count || 0,
+        iframes_json: JSON.stringify(iframes || []),
+    });
+    console.log("[mairu-ext] Processed page:", url, result?.status);
+    if (result?.status === "added" || result?.status === "updated") {
+      persistSession();
+    }
+  } else if (message.type === "get_status") {
+    const pending = get_pending_sync();
+    sendResponse({
+      sessionId: currentSessionId,
+      summary: get_session_summary(),
+      pendingCount: pending ? pending.length : 0,
+      nativeHostConnected: nativePort !== null
+    });
+  } else if (message.type === "get_dev_state") {
+    const pending = get_pending_sync();
+    sendResponse({
+      sessionId: currentSessionId,
+      summary: get_session_summary(),
+      pendingCount: pending ? pending.length : 0,
+      nativeHostConnected: nativePort !== null,
+      wasmReady: wasmReady,
+      apiUrl: mairApiUrl,
+      pendingQueue: pending || []
+    });
+  } else if (message.type === "clear_queue") {
+    if (clear_pending_sync) {
+       clear_pending_sync();
+       persistSession();
+    }
+    sendResponse({ ok: true });
+  } else if (message.type === "reset_session") {
+     chrome.storage.session.remove(SESSION_STORAGE_KEY, () => {
+        currentSessionId = `session-${Date.now()}`;
+        init_session(currentSessionId);
+        persistSession();
+        sendResponse({ ok: true });
+     });
+     return true;
+  } else if (message.type === "search") {
+    const results = search_session(message.query || "", message.limit || 5);
+    sendResponse({ results });
+  } else if (message.type === "set_api_url") {
+    if (message.url) {
+      mairApiUrl = message.url.replace(/\/$/, "");
+    }
+    sendResponse({ ok: true });
+  } else if (message.type === "force_sync") {
+    syncToMairu().then(() => sendResponse({ success: true }));
+    return true; // Keep message channel open for async response
   }
 });
 
@@ -147,7 +265,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     };
 
     try {
-      const resp = await fetch(`${MAIRU_API_URL}/api/context`, {
+      const resp = await fetch(`${mairApiUrl}/api/context`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -202,7 +320,7 @@ async function syncToMairu() {
       }
 
       const body = {
-        uri: `contextfs://browser/${btoa(page.url)}`,
+        uri: `contextfs://browser/${btoa(unescape(encodeURIComponent(page.url)))}`,
         project: "browser",
         name: page.title,
         abstract: page.sections.slice(0, 1).map((s) => s.text).join(" ").slice(0, 200),
@@ -213,7 +331,7 @@ async function syncToMairu() {
         content: page.sections.map((s) => s.text).join("\n\n") + extraContent,
       };
 
-      const resp = await fetch(`${MAIRU_API_URL}/api/context`, {
+      const resp = await fetch(`${mairApiUrl}/api/context`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -222,6 +340,7 @@ async function syncToMairu() {
       if (resp.ok) {
         mark_synced(page.content_hash);
         console.log("[mairu-ext] Synced:", page.url);
+        persistSession();
       }
     } catch (e) {
       console.error("[mairu-ext] Sync failed for", page.url, e);

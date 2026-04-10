@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Mairu Dev Dashboard</title>
+  <link rel="stylesheet" href="dev.css">
+</head>
+<body>
+  <div class="sidebar">
+    <div class="brand">Mairu Dev</div>
+    <nav>
+      <a href="#" class="nav-item active" data-target="sys">System Overview</a>
+      <a href="#" class="nav-item" data-target="queue">Sync Queue</a>
+      <a href="#" class="nav-item" data-target="live">Live Inspector</a>
+      <a href="#" class="nav-item" data-target="logs">Event Logs</a>
+    </nav>
+    <div class="sidebar-footer">
+      <button id="btn-force-sync" class="btn">Force Sync</button>
+      <button id="btn-clear-queue" class="btn btn-danger">Clear Queue</button>
+      <button id="btn-reset-session" class="btn btn-danger">Reset Session</button>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <!-- System Overview -->
+    <section id="sys" class="view active">
+      <h2>System & Diagnostic Overview</h2>
+      
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-label">Native Host Connection</div>
+          <div class="card-value flex-align">
+            <span id="sys-native-dot" class="dot"></span>
+            <span id="sys-native-status">Checking...</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-label">WASM Ready</div>
+          <div class="card-value flex-align">
+             <span id="sys-wasm-dot" class="dot"></span>
+             <span id="sys-wasm-status">Checking...</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-label">Session ID</div>
+          <div class="card-value" id="sys-session-id" style="font-size: 14px; word-break: break-all;">...</div>
+        </div>
+        <div class="card">
+          <div class="card-label">API Target</div>
+          <div class="card-value" id="sys-api-url" style="font-size: 14px; word-break: break-all;">...</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Pages Indexed</div>
+          <div class="card-value" id="sys-pages-count">0</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Pending Sync Queue</div>
+          <div class="card-value" id="sys-queue-count">0</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sync Queue -->
+    <section id="queue" class="view">
+      <h2>Pending Sync Queue Inspector</h2>
+      <p class="subtitle">Payloads waiting to be synced to the Mairu host.</p>
+      
+      <div id="queue-empty" class="empty-state">Queue is empty</div>
+      
+      <div class="queue-layout">
+        <div id="queue-list" class="queue-list">
+          <!-- Rendered via JS -->
+        </div>
+        
+        <div class="payload-inspector hidden" id="payload-inspector">
+          <div class="inspector-header">
+             <h3 id="inspector-title" style="margin: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80%;">Payload</h3>
+             <button class="btn btn-small" id="btn-close-inspector">Close</button>
+          </div>
+          <pre id="inspector-content" class="code-block"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live Inspector -->
+    <section id="live" class="view">
+      <h2>Live Tab Context Inspector</h2>
+      <p class="subtitle">Force an immediate evaluation of the currently active tab.</p>
+      
+      <div class="action-bar" style="margin-bottom: 20px;">
+        <button id="btn-eval-tab" class="btn btn-primary">Evaluate Active Tab Now</button>
+      </div>
+      
+      <div id="live-eval-result" class="hidden">
+         <h3 style="margin-bottom: 10px;">Evaluation Result</h3>
+         <pre id="live-eval-content" class="code-block" style="max-height: calc(100vh - 250px);"></pre>
+      </div>
+    </section>
+
+    <!-- Event Logs -->
+    <section id="logs" class="view" style="display: flex; flex-direction: column; height: 100vh;">
+      <div class="logs-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid #e5e7eb;">
+        <h2 style="margin: 0;">Event Stream</h2>
+        <button id="btn-clear-logs" class="btn btn-small">Clear</button>
+      </div>
+      <div class="log-container" id="log-container">
+        <div class="log-entry log-info">[info] Dev dashboard connected and listening for logs...</div>
+      </div>
+    </section>
+  </div>
+
+  <script src="dev.js"></script>
+</body>
+</html>

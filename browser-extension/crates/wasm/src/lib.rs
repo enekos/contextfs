@@ -14,26 +14,42 @@ pub fn init_session(session_id: &str) {
     });
 }
 
-#[wasm_bindgen]
-pub fn process_page(
-    url: &str,
-    html: &str,
-    timestamp: u64,
-    selection: Option<String>,
-    active_element: Option<String>,
-    console_errors_json: &str,
-    network_errors_json: &str,
-    visual_rects_json: &str,
-    storage_state_json: &str,
-) -> JsValue {
-    let console_errors: Vec<String> = serde_json::from_str(console_errors_json).unwrap_or_default();
-    let network_errors: Vec<String> = serde_json::from_str(network_errors_json).unwrap_or_default();
-    let visual_rects: std::collections::HashMap<String, String> =
-        serde_json::from_str(visual_rects_json).unwrap_or_default();
-    let storage_state: std::collections::HashMap<String, String> =
-        serde_json::from_str(storage_state_json).unwrap_or_default();
+#[derive(serde::Deserialize)]
+pub struct ProcessPageArgs {
+    pub url: String,
+    pub html: String,
+    pub timestamp: u64,
+    pub selection: Option<String>,
+    pub active_element: Option<String>,
+    pub console_errors_json: String,
+    pub network_errors_json: String,
+    pub visual_rects_json: String,
+    pub storage_state_json: String,
+    #[serde(default)]
+    pub dwell_ms: u64,
+    #[serde(default)]
+    pub interaction_count: u32,
+    #[serde(default)]
+    pub iframes_json: String,
+}
 
-    let extracted = extractor::extract(html);
+#[wasm_bindgen]
+pub fn process_page(args_val: JsValue) -> JsValue {
+    let args: ProcessPageArgs = match serde_wasm_bindgen::from_value(args_val) {
+        Ok(a) => a,
+        Err(_) => return JsValue::NULL,
+    };
+
+    let console_errors: Vec<String> =
+        serde_json::from_str(&args.console_errors_json).unwrap_or_default();
+    let network_errors: Vec<String> =
+        serde_json::from_str(&args.network_errors_json).unwrap_or_default();
+    let visual_rects: std::collections::HashMap<String, String> =
+        serde_json::from_str(&args.visual_rects_json).unwrap_or_default();
+    let storage_state: std::collections::HashMap<String, String> =
+        serde_json::from_str(&args.storage_state_json).unwrap_or_default();
+
+    let extracted = extractor::extract(&args.html);
     let content_hash = dedup::simhash(
         &extracted
             .sections
@@ -44,34 +60,88 @@ pub fn process_page(
     );
 
     let snapshot = PageSnapshot {
-        url: url.to_string(),
+        url: args.url,
         title: extracted.title,
-        timestamp,
+        timestamp: args.timestamp,
         content_hash,
         sections: extracted.sections,
         metadata: extracted.metadata,
-        selection,
-        active_element,
+        selection: args.selection,
+        active_element: args.active_element,
         console_errors,
         network_errors,
         visual_rects,
         storage_state,
+        revision: 0,
+        importance_score: 0.0,
+        dwell_ms: args.dwell_ms,
+        interaction_count: args.interaction_count,
+        iframe_content: extract_iframes(&args.iframes_json),
     };
 
-    let is_new = SESSION.with(|s| {
+    let section_count = snapshot.sections.len();
+    let result = SESSION.with(|s| {
         let mut s = s.borrow_mut();
         match s.as_mut() {
-            Some(mgr) => mgr.add_page(snapshot.clone()),
-            None => false,
+            Some(mgr) => mgr.add_page(snapshot),
+            None => AddPageResult::Duplicate,
         }
     });
 
+    let status = match result {
+        AddPageResult::Added => "added",
+        AddPageResult::Updated => "updated",
+        AddPageResult::Duplicate => "duplicate",
+    };
+
     serde_wasm_bindgen::to_value(&serde_json::json!({
-        "is_new": is_new,
+        "status": status,
+        "is_new": result == AddPageResult::Added,
         "content_hash": content_hash,
-        "section_count": snapshot.sections.len(),
+        "section_count": section_count,
     }))
     .unwrap_or(JsValue::NULL)
+}
+
+/// Parse iframes JSON from the content script and run the extractor on same-origin HTML.
+#[derive(serde::Deserialize)]
+struct IframeInput {
+    src: String,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    is_same_origin: bool,
+    #[serde(default)]
+    html: Option<String>,
+}
+
+fn extract_iframes(iframes_json: &str) -> Vec<IframeContent> {
+    if iframes_json.is_empty() {
+        return vec![];
+    }
+    let inputs: Vec<IframeInput> = match serde_json::from_str(iframes_json) {
+        Ok(v) => v,
+        Err(_) => return vec![],
+    };
+    inputs
+        .into_iter()
+        .map(|f| {
+            let sections = if f.is_same_origin {
+                f.html
+                    .as_deref()
+                    .map(|html| extractor::extract(html).sections)
+                    .unwrap_or_default()
+            } else {
+                vec![]
+            };
+            IframeContent {
+                src: f.src,
+                title: f.title,
+                is_same_origin: f.is_same_origin,
+                sections,
+            }
+        })
+        .collect()
 }
 
 #[wasm_bindgen]
@@ -143,4 +213,29 @@ pub fn mark_synced(content_hash: u64) {
             mgr.mark_synced(content_hash);
         }
     });
+}
+
+/// Serialize the current session to a JSON string for persistence.
+/// Returns null if no session is active.
+#[wasm_bindgen]
+pub fn export_session() -> Option<String> {
+    SESSION.with(|s| {
+        let s = s.borrow();
+        s.as_ref()?.export_session().ok()
+    })
+}
+
+/// Restore a previously exported session from a JSON string.
+/// Returns true on success, false on failure.
+#[wasm_bindgen]
+pub fn import_session(json: &str) -> bool {
+    match SessionManager::import_session(json) {
+        Ok(mgr) => {
+            SESSION.with(|s| {
+                *s.borrow_mut() = Some(mgr);
+            });
+            true
+        }
+        Err(_) => false,
+    }
 }

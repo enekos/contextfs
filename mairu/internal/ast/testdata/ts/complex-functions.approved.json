@@ -1,0 +1,59 @@
+{
+  "edges": [
+    {
+      "From": "file",
+      "Kind": "import",
+      "To": "module:./dep"
+    }
+  ],
+  "file_summary": "File containing 3 exported symbols (1 fn, 2 vars): myArrowFunction, myAsyncArrow, outerFunction.",
+  "imports": [
+    "./dep"
+  ],
+  "symbol_descriptions": {
+    "cls:MyClass": "Class `MyClass` with methods: ",
+    "fn:outerFunction": "1. `function innerFunction() {\n        console.log(\"inner\");\n    }`\n2. Assigns a function to constant `anotherInner`\n3. Returns `anotherInner`"
+  },
+  "symbols": [
+    {
+      "ControlFlow": "",
+      "Doc": "",
+      "Exported": false,
+      "ID": "cls:MyClass",
+      "Kind": "cls",
+      "Line": 33,
+      "Name": "MyClass",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "calls console.log -\u003e calls innerFunction -\u003e return",
+      "Doc": "",
+      "Exported": true,
+      "ID": "fn:outerFunction",
+      "Kind": "fn",
+      "Line": 20,
+      "Name": "outerFunction",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "",
+      "Doc": "A constant arrow function.",
+      "Exported": true,
+      "ID": "var:myArrowFunction",
+      "Kind": "var",
+      "Line": 11,
+      "Name": "myArrowFunction",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "",
+      "Doc": "",
+      "Exported": true,
+      "ID": "var:myAsyncArrow",
+      "Kind": "var",
+      "Line": 15,
+      "Name": "myAsyncArrow",
+      "Signature": ""
+    }
+  ]
+}

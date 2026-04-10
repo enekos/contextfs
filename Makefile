@@ -2,7 +2,16 @@ SHELL := /bin/bash
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install-dashboard setup build lint test clean dashboard dashboard-api dashboard-dev mairu-build mairu-web
+desktop-dev:
+	cd mairu/cmd/desktop && wails dev
+
+desktop-build:
+	cd mairu/cmd/desktop && wails build -o mairu-desktop
+
+desktop-clean:
+	rm -rf mairu/cmd/desktop/build/bin
+
+.PHONY: help install install-dashboard setup build lint test clean dashboard dashboard-api dashboard-dev mairu-build mairu-web desktop-dev desktop-build desktop-clean
 .PHONY: fmt-go fmt-go-check lint-go test-go test-go-race test-go-cover check-go check-go-ci install-hooks
 .PHONY: eval-retrieval eval-seed eval-llm
 .PHONY: meili-up meili-down meili-status meili-clean setup-no-docker dev-no-docker mairu-no-docker
@@ -148,9 +157,11 @@ eval-llm-vibe:
 	./llmeval/bin/llmeval --dataset ./llmeval/mairu_vibe_mutation_eval.json --model gemini-2.5-flash
 
 build-browser-extension:
-	cd browser-extension && cargo build --release
+	cd browser-extension && cargo build --release -p browser-extension-host
+	@echo "Building WASM for browser extension... (requires wasm-pack)"
+	cd browser-extension/crates/wasm && wasm-pack build --target web --out-dir ../../extension/pkg
 
-install-browser-extension:
+install-browser-extension: build-browser-extension
 	cd browser-extension && ./install.sh
 
 test-browser-extension:

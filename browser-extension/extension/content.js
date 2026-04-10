@@ -5,15 +5,28 @@
 
 (function () {
   const MUTATION_DEBOUNCE_MS = 2000;
+  const HTML_SIZE_LIMIT = 2 * 1024 * 1024; // 2 MB
+  // Attribute changes that indicate meaningful content updates (not just style/animation)
+  const MEANINGFUL_ATTRS = new Set([
+    'src', 'href', 'value', 'checked', 'selected', 'disabled', 'hidden',
+    'aria-expanded', 'aria-selected', 'aria-checked', 'aria-label',
+    'aria-labelledby', 'aria-describedby', 'data-state', 'data-active',
+  ]);
+
   let debounceTimer = null;
   let consoleErrors = [];
   let networkErrors = [];
+  let dwellStart = Date.now();
+  let interactionCount = 0;
+
+  // Skip internal / non-web pages
+  const scheme = location.protocol;
+  if (!scheme.startsWith('http')) return;
 
   // 1. Inject script to trap console errors & network requests
   const script = document.createElement('script');
   script.textContent = `
     (function() {
-      // Console Errors
       const originalError = console.error;
       console.error = function(...args) {
         window.postMessage({ type: '__MAIRU_ERROR', error: args.map(a => String(a)).join(' ') }, '*');
@@ -26,7 +39,6 @@
         window.postMessage({ type: '__MAIRU_ERROR', error: 'Unhandled Rejection: ' + e.reason }, '*');
       });
 
-      // Fetch interception
       const originalFetch = window.fetch;
       window.fetch = async function(...args) {
         try {
@@ -41,7 +53,6 @@
         }
       };
 
-      // XHR interception
       const originalXHR = window.XMLHttpRequest.prototype.open;
       window.XMLHttpRequest.prototype.open = function(method, url) {
         this.addEventListener('load', function() {
@@ -54,6 +65,18 @@
         });
         return originalXHR.apply(this, arguments);
       };
+
+      // History API interception for SPA navigation
+      const patchHistory = (type) => {
+        const original = history[type];
+        return function(...args) {
+          const result = original.apply(this, args);
+          window.dispatchEvent(new Event('__mairu_spa_nav'));
+          return result;
+        };
+      };
+      history.pushState = patchHistory('pushState');
+      history.replaceState = patchHistory('replaceState');
     })();
   `;
   document.documentElement.appendChild(script);
@@ -62,42 +85,81 @@
   window.addEventListener('message', (event) => {
     if (!event.data) return;
     if (event.data.type === '__MAIRU_ERROR') {
-      consoleErrors.push(event.data.error);
-      if (consoleErrors.length > 50) consoleErrors.shift(); // keep last 50
+      if (!consoleErrors.includes(event.data.error)) {
+        consoleErrors.push(event.data.error);
+        if (consoleErrors.length > 50) consoleErrors.shift();
+      }
     } else if (event.data.type === '__MAIRU_NETWORK_ERROR') {
-      networkErrors.push(event.data.error);
-      if (networkErrors.length > 50) networkErrors.shift(); // keep last 50
+      if (!networkErrors.includes(event.data.error)) {
+        networkErrors.push(event.data.error);
+        if (networkErrors.length > 50) networkErrors.shift();
+      }
     }
   });
 
-  // 2. Helper to get CSS selector for an element
+  // 2. CSS visibility check
+  function isVisible(el) {
+    try {
+      const style = window.getComputedStyle(el);
+      return style.display !== 'none' &&
+             style.visibility !== 'hidden' &&
+             style.opacity !== '0';
+    } catch {
+      return true;
+    }
+  }
+
+  // 3. Helper to get CSS selector for an element
   function getCssSelector(el) {
     if (!el || el.nodeType !== 1) return '';
     let path = [];
     while (el && el.nodeType === 1) {
-      let selector = el.localName;
       if (el.id) {
-        selector += '#' + el.id;
-        path.unshift(selector);
+        path.unshift('#' + el.id);
         break;
       } else {
+        let selector = el.localName;
         let sib = el, nth = 1;
-        while (sib = sib.previousElementSibling) {
+        while ((sib = sib.previousElementSibling)) {
           if (sib.localName === el.localName) nth++;
         }
-        if (nth !== 1) selector += ":nth-of-type(" + nth + ")";
+        if (nth !== 1) selector += ':nth-of-type(' + nth + ')';
+        path.unshift(selector);
       }
-      path.unshift(selector);
       el = el.parentNode;
     }
     return path.join(' > ');
   }
 
-  // 3. Shadow DOM Serializer + Form value sync
+  // 4. Iframe content extraction (same-origin only)
+  function extractIframeContent() {
+    const iframes = [];
+    document.querySelectorAll('iframe').forEach(frame => {
+      const entry = {
+        src: frame.src || '',
+        title: frame.title || frame.getAttribute('aria-label') || null,
+        is_same_origin: false,
+        sections: [],
+      };
+      try {
+        const doc = frame.contentDocument;
+        if (doc && doc.body) {
+          entry.is_same_origin = true;
+          // Serialize the iframe body for extraction
+          entry._html = doc.documentElement.outerHTML.slice(0, 50000);
+        }
+      } catch {
+        // Cross-origin — skip content
+      }
+      iframes.push(entry);
+    });
+    return iframes;
+  }
+
+  // 5. Shadow DOM Serializer + Form value sync
   function getSerializedHtml() {
     function serializeNode(node) {
       if (node.nodeType === Node.TEXT_NODE) {
-        // Escape HTML for text nodes by using a dummy div
         const div = document.createElement('div');
         div.textContent = node.textContent;
         return div.innerHTML;
@@ -105,17 +167,22 @@
       if (node.nodeType !== Node.ELEMENT_NODE) return '';
 
       const tag = node.localName;
-      
-      // Inline sync for inputs, textareas, selects (handles shadow DOM automatically)
+      if (tag === 'script' || tag === 'style' || tag === 'svg' || tag === 'noscript') {
+        return `<${tag}></${tag}>`;
+      }
+
+      // Skip invisible elements to reduce noise
+      if (!isVisible(node)) {
+        return `<${tag} data-mairu-hidden="true"></${tag}>`;
+      }
+
       if (tag === 'input' || tag === 'textarea' || tag === 'select') {
         if (node.type === 'checkbox' || node.type === 'radio') {
           if (node.checked) node.setAttribute('checked', '');
           else node.removeAttribute('checked');
         } else if (node.value !== undefined) {
           node.setAttribute('value', node.value);
-          if (tag === 'textarea') {
-              node.textContent = node.value;
-          }
+          if (tag === 'textarea') node.textContent = node.value;
         }
       }
 
@@ -125,7 +192,6 @@
       }
       html += '>';
 
-      // Inject declarative shadow DOM if exists
       if (node.shadowRoot) {
         html += '<template shadowrootmode="open">';
         html += Array.from(node.shadowRoot.childNodes).map(serializeNode).join('');
@@ -137,63 +203,69 @@
       return html;
     }
 
-    return serializeNode(document.documentElement);
+    const full = serializeNode(document.documentElement);
+    return full.length > HTML_SIZE_LIMIT ? full.slice(0, HTML_SIZE_LIMIT) : full;
   }
 
   function captureAndSend() {
     const html = getSerializedHtml();
     const selection = window.getSelection().toString();
-    
-    // Find real active element (piercing shadow dom)
+
     let activeEl = document.activeElement;
     while (activeEl && activeEl.shadowRoot && activeEl.shadowRoot.activeElement) {
-        activeEl = activeEl.shadowRoot.activeElement;
+      activeEl = activeEl.shadowRoot.activeElement;
     }
     const active_element = getCssSelector(activeEl);
 
-    // Capture visual layout of primary structural elements
     const visual_rects = {};
-    const primaryElements = document.querySelectorAll('header, nav, main, article, aside, footer, h1, h2, form, button, input');
-    primaryElements.forEach(el => {
-       const selector = getCssSelector(el);
-       if (selector && !visual_rects[selector]) {
-         const rect = el.getBoundingClientRect();
-         // Only capture visible elements
-         if (rect.width > 0 && rect.height > 0) {
-            visual_rects[selector] = \`x:\${Math.round(rect.x)},y:\${Math.round(rect.y)},w:\${Math.round(rect.width)},h:\${Math.round(rect.height)}\`;
-         }
-       }
+    document.querySelectorAll('header, nav, main, article, aside, footer, h1, h2, form, button, input').forEach(el => {
+      const selector = getCssSelector(el);
+      if (selector && !visual_rects[selector]) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          visual_rects[selector] = `x:${Math.round(rect.x)},y:${Math.round(rect.y)},w:${Math.round(rect.width)},h:${Math.round(rect.height)}`;
+        }
+      }
     });
 
-    // Capture storage state securely
     const storage_state = {};
     try {
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            const val = localStorage.getItem(key);
-            storage_state[\`localStorage[\${key}]\`] = val.length > 200 ? val.substring(0, 200) + '...' : val;
-        }
-    } catch(e) {}
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        const val = localStorage.getItem(key);
+        storage_state[`localStorage[${key}]`] = val.length > 200 ? val.substring(0, 200) + '...' : val;
+      }
+    } catch (e) {}
     try {
-        for (let i = 0; i < sessionStorage.length; i++) {
-            const key = sessionStorage.key(i);
-            const val = sessionStorage.getItem(key);
-            storage_state[\`sessionStorage[\${key}]\`] = val.length > 200 ? val.substring(0, 200) + '...' : val;
-        }
-    } catch(e) {}
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        const val = sessionStorage.getItem(key);
+        storage_state[`sessionStorage[${key}]`] = val.length > 200 ? val.substring(0, 200) + '...' : val;
+      }
+    } catch (e) {}
+
+    const iframes = extractIframeContent();
 
     chrome.runtime.sendMessage({
       type: "page_content",
       payload: {
         url: location.href,
-        html: html,
+        html,
         timestamp: Date.now(),
         selection: selection || null,
         active_element: active_element || null,
         console_errors: consoleErrors,
         network_errors: networkErrors,
-        visual_rects: visual_rects,
-        storage_state: storage_state,
+        visual_rects,
+        storage_state,
+        dwell_ms: Date.now() - dwellStart,
+        interaction_count: interactionCount,
+        iframes: iframes.map(f => ({
+          src: f.src,
+          title: f.title,
+          is_same_origin: f.is_same_origin,
+          html: f.is_same_origin ? f._html : undefined,
+        })),
       },
     });
   }
@@ -201,85 +273,174 @@
   // Initial capture
   captureAndSend();
 
-  // Watch for significant DOM mutations (SPA navigation, dynamic content)
-  const observer = new MutationObserver(() => {
+  // 6. Mutation observer — filtered to avoid noise from style/animation changes
+  const observer = new MutationObserver((mutations) => {
+    const meaningful = mutations.some(m => {
+      if (m.type === 'childList') return m.addedNodes.length > 0 || m.removedNodes.length > 0;
+      if (m.type === 'attributes') return MEANINGFUL_ATTRS.has(m.attributeName);
+      return false;
+    });
+    if (!meaningful) return;
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(captureAndSend, MUTATION_DEBOUNCE_MS);
   });
 
-  // Listen for execution commands from background script (from Agent)
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === "execute") {
-      try {
-        if (message.command === "click") {
-          const el = document.querySelector(message.selector);
-          if (el) {
-            el.click();
-            sendResponse({ success: true, message: `Clicked ${message.selector}` });
-          } else {
-            sendResponse({ error: `Element not found: ${message.selector}` });
-          }
-        } else if (message.command === "fill") {
-          const el = document.querySelector(message.selector);
-          if (el) {
-            el.value = message.value;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            sendResponse({ success: true, message: `Filled ${message.selector}` });
-          } else {
-             sendResponse({ error: `Element not found: ${message.selector}` });
-          }
-        } else if (message.command === "highlight") {
-          const el = document.querySelector(message.selector);
-          if (el) {
-             const origBorder = el.style.border;
-             el.style.border = "3px solid red";
-             setTimeout(() => { el.style.border = origBorder; }, 3000);
-             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-             sendResponse({ success: true, message: `Highlighted ${message.selector}` });
-          } else {
-             sendResponse({ error: `Element not found: ${message.selector}` });
-          }
-        } else {
-          sendResponse({ error: `Unknown execute command: ${message.command}` });
-        }
-      } catch (e) {
-         sendResponse({ error: `Execution failed: ${e.message}` });
-      }
-      return true; // Indicates async response
+  // 7. Interaction tracking
+  const trackInteraction = () => { interactionCount++; };
+  document.addEventListener('click', trackInteraction, { passive: true, capture: true });
+  document.addEventListener('keydown', trackInteraction, { passive: true, capture: true });
+  document.addEventListener('scroll', trackInteraction, { passive: true, capture: true });
+
+  function captureStateForEval() {
+    const html = getSerializedHtml();
+    const selection = window.getSelection().toString();
+
+    let activeEl = document.activeElement;
+    while (activeEl && activeEl.shadowRoot && activeEl.shadowRoot.activeElement) {
+      activeEl = activeEl.shadowRoot.activeElement;
     }
+    const active_element = getCssSelector(activeEl);
+
+    const visual_rects = {};
+    document.querySelectorAll('header, nav, main, article, aside, footer, h1, h2, form, button, input').forEach(el => {
+      const selector = getCssSelector(el);
+      if (selector && !visual_rects[selector]) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          visual_rects[selector] = `x:${Math.round(rect.x)},y:${Math.round(rect.y)},w:${Math.round(rect.width)},h:${Math.round(rect.height)}`;
+        }
+      }
+    });
+
+    return { html, selection, active_element, visual_rects };
+  }
+
+  // 8. Listen for execution commands from background script (from Agent)
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'dev_force_eval') {
+      sendResponse(captureStateForEval());
+      return true;
+    }
+    if (message.type !== "execute") return;
+    try {
+      if (message.command === "click") {
+        const el = document.querySelector(message.selector);
+        if (el) {
+          el.click();
+          sendResponse({ success: true, message: `Clicked ${message.selector}` });
+        } else {
+          sendResponse({ error: `Element not found: ${message.selector}` });
+        }
+      } else if (message.command === "fill") {
+        const el = document.querySelector(message.selector);
+        if (el) {
+          el.value = message.value;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          sendResponse({ success: true, message: `Filled ${message.selector}` });
+        } else {
+          sendResponse({ error: `Element not found: ${message.selector}` });
+        }
+      } else if (message.command === "highlight") {
+        const el = document.querySelector(message.selector);
+        if (el) {
+          const origBorder = el.style.border;
+          el.style.border = "3px solid red";
+          setTimeout(() => { el.style.border = origBorder; }, 3000);
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          sendResponse({ success: true, message: `Highlighted ${message.selector}` });
+        } else {
+          sendResponse({ error: `Element not found: ${message.selector}` });
+        }
+      } else if (message.command === "scroll") {
+        const el = message.selector ? document.querySelector(message.selector) : null;
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          sendResponse({ success: true, message: `Scrolled to ${message.selector}` });
+        } else if (message.direction) {
+          const amount = message.amount || window.innerHeight * 0.8;
+          if (message.direction === "down") window.scrollBy({ top: amount, behavior: 'smooth' });
+          else if (message.direction === "up") window.scrollBy({ top: -amount, behavior: 'smooth' });
+          else if (message.direction === "top") window.scrollTo({ top: 0, behavior: 'smooth' });
+          else if (message.direction === "bottom") window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+          sendResponse({ success: true, message: `Scrolled ${message.direction}` });
+        } else {
+          sendResponse({ error: "No element or direction specified" });
+        }
+      } else if (message.command === "navigate") {
+        if (message.url) {
+          window.location.href = message.url;
+          sendResponse({ success: true, message: `Navigating to ${message.url}` });
+        } else if (message.back) {
+          window.history.back();
+          sendResponse({ success: true, message: "Navigating back" });
+        } else {
+          sendResponse({ error: "No URL specified for navigation" });
+        }
+      } else if (message.command === "get_text") {
+        const el = message.selector ? document.querySelector(message.selector) : document.body;
+        sendResponse({ success: true, text: el ? el.innerText : '' });
+      } else if (message.command === "select_text") {
+        const el = document.querySelector(message.selector);
+        if (el) {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          sendResponse({ success: true, message: `Selected text in ${message.selector}` });
+        } else {
+          sendResponse({ error: `Element not found: ${message.selector}` });
+        }
+      } else if (message.command === "query") {
+        const els = document.querySelectorAll(message.selector || '*');
+        const results = Array.from(els).slice(0, 20).map(el => ({
+          selector: getCssSelector(el),
+          text: el.textContent.trim().slice(0, 100),
+          tag: el.tagName.toLowerCase(),
+        }));
+        sendResponse({ success: true, results });
+      } else {
+        sendResponse({ error: `Unknown execute command: ${message.command}` });
+      }
+    } catch (e) {
+      sendResponse({ error: `Execution failed: ${e.message}` });
+    }
+    return true; // async response
   });
 
   observer.observe(document.body, {
     childList: true,
     subtree: true,
+    attributes: true,
+    attributeFilter: Array.from(MEANINGFUL_ATTRS),
   });
 
-  // Also listen for selection changes and focus changes
   document.addEventListener('selectionchange', () => {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(captureAndSend, 1000);
   });
-  
+
   document.addEventListener('focusin', () => {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(captureAndSend, 1000);
   });
 
-  // Detect SPA route changes
-  let lastUrl = location.href;
-  const urlCheck = setInterval(() => {
-    if (location.href !== lastUrl) {
-      lastUrl = location.href;
-      // Small delay for new content to render
-      setTimeout(captureAndSend, 500);
-    }
-  }, 1000);
+  // SPA navigation via history API (injected above) and popstate
+  const handleSpaNav = () => {
+    dwellStart = Date.now();
+    interactionCount = 0;
+    setTimeout(captureAndSend, 500);
+  };
+  window.addEventListener('__mairu_spa_nav', handleSpaNav);
+  window.addEventListener('popstate', handleSpaNav);
 
   // Cleanup on unload
   window.addEventListener("unload", () => {
     observer.disconnect();
-    clearInterval(urlCheck);
     clearTimeout(debounceTimer);
+    document.removeEventListener('click', trackInteraction, { capture: true });
+    document.removeEventListener('keydown', trackInteraction, { capture: true });
+    document.removeEventListener('scroll', trackInteraction, { capture: true });
   });
 })();

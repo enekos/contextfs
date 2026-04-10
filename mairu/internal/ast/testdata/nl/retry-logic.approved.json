@@ -1,35 +1,37 @@
 {
-  "file_summary": "File containing 1 exported symbols (1 fn): withRetry.",
-  "symbols": [
-    {
-      "ID": "fn:sleep",
-      "Name": "sleep",
-      "Kind": "fn",
-      "Exported": false,
-      "Doc": "",
-      "Line": 21,
-      "Signature": ""
-    },
-    {
-      "ID": "fn:withRetry",
-      "Name": "withRetry",
-      "Kind": "fn",
-      "Exported": true,
-      "Doc": "",
-      "Line": 1,
-      "Signature": ""
-    }
-  ],
   "edges": [
     {
       "From": "fn:withRetry",
-      "To": "fn:sleep",
-      "Kind": "call"
+      "Kind": "call",
+      "To": "fn:sleep"
     }
   ],
+  "file_summary": "File containing 1 exported symbols (1 fn): withRetry.",
   "imports": [],
   "symbol_descriptions": {
     "fn:sleep": "1. Returns a new `Promise` with `resolve =\u003e setTimeout(resolve, ms)`",
-    "fn:withRetry": "1. Assigns `null` to `lastError`\n2. Loops with let attempt = 0; while attempt \u003c maxAttempts; attempt++: Attempts to Assigns awaits calling `fn` to `result`; Returns `result`. If an error occurs (e), assigning `e as Error` to `lastError`; If `attempt` is less than `maxAttempts - 1`, awaits calling `sleep` with `delayMs * Math.pow(2, attempt)`\n3. Throws `lastError`"
-  }
+    "fn:withRetry": "1. Assigns `null` to let variable `lastError` of type `Error | null`\n2. Loops with let attempt = 0; while attempt \u003c maxAttempts; attempt++: Attempts to Assigns awaits calling `fn` to constant `result`; Returns `result`. If an error occurs (e), assigning `e as Error` to `lastError`; If `attempt` is less than `maxAttempts - 1`, awaits calling `sleep` with `delayMs * Math.pow(2, attempt)`\n3. Throws `lastError`"
+  },
+  "symbols": [
+    {
+      "ControlFlow": "return -\u003e calls setTimeout",
+      "Doc": "",
+      "Exported": false,
+      "ID": "fn:sleep",
+      "Kind": "fn",
+      "Line": 21,
+      "Name": "sleep",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "loop -\u003e try/catch -\u003e calls fn -\u003e return -\u003e if -\u003e calls sleep -\u003e calls Math.pow -\u003e throw",
+      "Doc": "",
+      "Exported": true,
+      "ID": "fn:withRetry",
+      "Kind": "fn",
+      "Line": 1,
+      "Name": "withRetry",
+      "Signature": ""
+    }
+  ]
 }

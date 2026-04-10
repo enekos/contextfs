@@ -29,6 +29,18 @@ pub struct PageMetadata {
     pub canonical_url: Option<String>,
 }
 
+/// Content extracted from an iframe.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct IframeContent {
+    pub src: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub is_same_origin: bool,
+    #[serde(default)]
+    pub sections: Vec<ContentSection>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PageSnapshot {
     pub url: String,
@@ -44,6 +56,25 @@ pub struct PageSnapshot {
     pub network_errors: Vec<String>,
     pub visual_rects: std::collections::HashMap<String, String>,
     pub storage_state: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub revision: u32,
+    #[serde(default)]
+    pub importance_score: f64,
+    #[serde(default)]
+    pub dwell_ms: u64,
+    #[serde(default)]
+    pub interaction_count: u32,
+    #[serde(default)]
+    pub iframe_content: Vec<IframeContent>,
+}
+
+/// Result of adding a page to the session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddPageResult {
+    Added,
+    Updated,
+    Duplicate,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -90,7 +121,7 @@ mod hex_serde {
 #[serde(tag = "type", content = "data")]
 #[serde(rename_all = "snake_case")]
 pub enum BrowserResponse {
-    Current(PageSnapshot),
+    Current(Box<PageSnapshot>),
     History(Vec<NavEvent>),
     Search(Vec<SearchResult>),
     Session(SessionSummary),
@@ -144,6 +175,11 @@ mod tests {
             network_errors: vec![],
             visual_rects: std::collections::HashMap::new(),
             storage_state: std::collections::HashMap::new(),
+            revision: 0,
+            importance_score: 0.0,
+            dwell_ms: 0,
+            interaction_count: 0,
+            iframe_content: vec![],
         };
         let json = serde_json::to_string(&snap).unwrap();
         // content_hash should be a hex string, not a number

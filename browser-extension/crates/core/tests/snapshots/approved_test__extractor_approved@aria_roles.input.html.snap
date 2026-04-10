@@ -7,6 +7,18 @@ input_file: crates/core/tests/testdata/html/aria_roles.input.html
   "title": "",
   "sections": [
     {
+      "kind": "link",
+      "text": "Home (/)",
+      "depth": null,
+      "selector": "a"
+    },
+    {
+      "kind": "link",
+      "text": "About (/about)",
+      "depth": null,
+      "selector": "a"
+    },
+    {
       "kind": "heading",
       "text": "Main Content",
       "depth": 1,
@@ -19,10 +31,10 @@ input_file: crates/core/tests/testdata/html/aria_roles.input.html
       "selector": "p"
     },
     {
-      "kind": "table",
-      "text": "| Name | Value |\n|---|---|\n| Foo | 42 |\n| Bar | 99 |",
+      "kind": "paragraph",
+      "text": "Related links",
       "depth": null,
-      "selector": "div"
+      "selector": "p"
     }
   ],
   "metadata": {

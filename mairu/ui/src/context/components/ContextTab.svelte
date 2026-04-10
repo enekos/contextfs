@@ -1,11 +1,11 @@
 <script lang="ts">
   import { slide } from 'svelte/transition';
   import { fmtDate, scoreColor, copy } from "../lib/utils";
+  import { createContextNode as apiCreateContextNode, updateContextNode, deleteContextNode } from "../../lib/api";
 
   export let displayContext: any[];
   export let hasSearchResults: boolean;
   export let searchQuery: string;
-  export let API_BASE: string;
   export let load: () => Promise<void>;
   export let setLoading: (loading: boolean) => void;
   export let setError: (error: string) => void;
@@ -24,13 +24,7 @@
   async function createContext() {
     addingContext = true; setLastWriteResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/context`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newContext),
-      });
-      if (!res.ok) throw new Error("Failed to create context node");
-      const result = await res.json();
+      const result = await apiCreateContextNode(newContext);
       setLastWriteResult(result);
       newContext = { uri: "", parent_uri: "", name: "", abstract: "", overview: "", useRouter: true };
       await load();
@@ -51,13 +45,7 @@
   async function saveEdit() {
     setLoading(true); setError(""); setLastWriteResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/context`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
-      });
-      if (!res.ok) throw new Error(`Failed to update context node`);
-      const result = await res.json();
+      const result = await updateContextNode(editForm);
       setLastWriteResult(result);
       cancelEdit();
       await load();
@@ -69,8 +57,7 @@
     if (!confirm(`Delete this context node?`)) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/context?uri=${encodeURIComponent(uri)}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Delete failed");
+      await deleteContextNode(uri);
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setLoading(false); }

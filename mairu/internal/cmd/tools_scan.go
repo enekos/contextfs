@@ -32,23 +32,34 @@ var scanInvert bool
 var scanMulti string
 var scanFixedStrings bool
 var scanSmartCase bool
+var scanHidden bool
 var scanWordRegexp bool
 var scanOnlyMatching bool
+var scanBeforeContext int
+var scanAfterContext int
+var scanMaxCount int
+var scanFilesWithoutMatch bool
+
 
 func init() {
 	scanCmd.Flags().IntVar(&scanBudget, "budget", 3000, "Token budget circuit breaker")
 	scanCmd.Flags().IntVarP(&scanContext, "context", "C", 0, "Number of context lines around match")
+	scanCmd.Flags().IntVarP(&scanBeforeContext, "before-context", "B", 0, "Number of context lines before match")
+	scanCmd.Flags().IntVarP(&scanAfterContext, "after-context", "A", 0, "Number of context lines after match")
 	scanCmd.Flags().StringVarP(&scanExtensions, "ext", "e", "", "Comma-separated extensions to filter (e.g. .go,.ts)")
 	scanCmd.Flags().IntVarP(&scanLimit, "limit", "n", 0, "Max number of matches to return (0 = unlimited)")
+	scanCmd.Flags().IntVarP(&scanMaxCount, "max-count", "m", 0, "Max number of matches per file (0 = unlimited)")
 	scanCmd.Flags().BoolVarP(&scanIgnoreCase, "ignore-case", "i", false, "Case-insensitive search")
 	scanCmd.Flags().BoolVarP(&scanFilesOnly, "files-with-matches", "l", false, "Only print matching filenames")
+	scanCmd.Flags().BoolVarP(&scanFilesWithoutMatch, "files-without-match", "L", false, "Only print filenames that contain no matches")
 	scanCmd.Flags().BoolVarP(&scanHeading, "heading", "H", false, "Attempt to find nearest function/class heading above match")
 	scanCmd.Flags().StringVarP(&scanExclude, "exclude", "x", "", "Comma-separated glob patterns to exclude (e.g. vendor/*,*_test.go)")
 	scanCmd.Flags().BoolVarP(&scanGroup, "group", "g", false, "Group matches by file")
 	scanCmd.Flags().BoolVarP(&scanInvert, "invert", "v", false, "Invert match (select non-matching lines)")
-	scanCmd.Flags().StringVarP(&scanMulti, "multi", "m", "", "Additional patterns that must ALL match in the file (comma-separated, AND logic)")
+	scanCmd.Flags().StringVar(&scanMulti, "multi", "", "Additional patterns that must ALL match in the file (comma-separated, AND logic)")
 	scanCmd.Flags().BoolVarP(&scanFixedStrings, "fixed-strings", "F", false, "Treat the pattern as a literal string instead of a regular expression")
 	scanCmd.Flags().BoolVarP(&scanSmartCase, "smart-case", "S", false, "Search case insensitively if the pattern is all lowercase, case sensitively otherwise")
+	scanCmd.Flags().BoolVar(&scanHidden, "hidden", false, "Search hidden files and directories")
 	scanCmd.Flags().BoolVarP(&scanWordRegexp, "word-regexp", "w", false, "Only show matches surrounded by word boundaries")
 	scanCmd.Flags().BoolVarP(&scanOnlyMatching, "only-matching", "O", false, "Print only the matched (non-empty) parts of a matching line")
 }
@@ -194,6 +205,15 @@ var scanCmd = &cobra.Command{
 		var currentBytes int32
 		maxBytes := int32(scanBudget * 4)
 
+		var beforeContext, afterContext int
+		if scanContext > 0 {
+			beforeContext = scanContext
+			afterContext = scanContext
+		} else {
+			beforeContext = scanBeforeContext
+			afterContext = scanAfterContext
+		}
+		
 		type fileJob struct {
 			path string
 			rel  string
@@ -241,8 +261,8 @@ var scanCmd = &cobra.Command{
 
 					var currentHeading string
 					var ringBuffer []string
-					if scanContext > 0 {
-						ringBuffer = make([]string, 0, scanContext)
+					if beforeContext > 0 {
+						ringBuffer = make([]string, 0, beforeContext)
 					}
 
 					lineNum := 0
@@ -256,7 +276,10 @@ var scanCmd = &cobra.Command{
 					}
 					var hunk *activeHunk
 
+					
+
 					fileHasMatch := false
+					fileMatchCount := 0
 
 					for scanner.Scan() {
 						if ctx.Err() != nil {
@@ -282,6 +305,14 @@ var scanCmd = &cobra.Command{
 						}
 
 						if matched {
+							fileHasMatch = true
+							fileMatchCount++
+							if scanMaxCount > 0 && fileMatchCount > scanMaxCount {
+								break
+							}
+							if scanFilesWithoutMatch {
+								break
+							}
 							if scanOnlyMatching {
 								if scanInvert {
 									// -o with -v does not make sense conceptually (ripgrep handles this by taking -v precedence or skipping)
@@ -294,7 +325,7 @@ var scanCmd = &cobra.Command{
 								}
 							}
 
-							if scanFilesOnly {
+							if scanFilesOnly || scanFilesWithoutMatch {
 								if !fileHasMatch {
 									results <- job.rel
 									fileHasMatch = true
@@ -306,7 +337,7 @@ var scanCmd = &cobra.Command{
 								// start new hunk
 								hunk = &activeHunk{
 									startL:  lineNum - len(ringBuffer),
-									endL:    lineNum + scanContext,
+									endL:    lineNum + afterContext,
 									lines:   append([]string(nil), ringBuffer...),
 									heading: currentHeading,
 								}
@@ -315,7 +346,7 @@ var scanCmd = &cobra.Command{
 								}
 							} else {
 								// extend hunk
-								hunk.endL = lineNum + scanContext
+								hunk.endL = lineNum + afterContext
 							}
 							hunk.matched = true
 						}
@@ -354,9 +385,9 @@ var scanCmd = &cobra.Command{
 							}
 						}
 
-						if scanContext > 0 {
+						if beforeContext > 0 {
 							ringBuffer = append(ringBuffer, cleanLine)
-							if len(ringBuffer) > scanContext {
+							if len(ringBuffer) > beforeContext {
 								ringBuffer = ringBuffer[1:]
 							}
 						}
@@ -387,6 +418,10 @@ var scanCmd = &cobra.Command{
 					}
 
 					file.Close()
+
+					if scanFilesWithoutMatch && !fileHasMatch && ctx.Err() == nil {
+						results <- job.rel
+					}
 				}
 			}()
 		}
@@ -438,6 +473,14 @@ var scanCmd = &cobra.Command{
 			}
 
 			rel, _ := filepath.Rel(dir, path)
+
+			if !scanHidden && strings.HasPrefix(d.Name(), ".") && d.Name() != "." && d.Name() != ".." {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+
 			if rel == ".git" || rel == "node_modules" {
 				return filepath.SkipDir
 			}
@@ -510,7 +553,7 @@ var scanCmd = &cobra.Command{
 				fmt.Printf("Warning: Match limit hit (%d matches).\n", scanLimit)
 			}
 
-			if scanFilesOnly {
+			if scanFilesOnly || scanFilesWithoutMatch {
 				var files []string
 				seen := make(map[string]bool)
 				for _, f := range res.Files {

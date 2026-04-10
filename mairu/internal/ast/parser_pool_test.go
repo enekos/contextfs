@@ -11,4 +11,10 @@ func TestParserPoolLifecycle(t *testing.T) {
 	if !ParserPoolInitialized() {
 		t.Fatal("expected initialized")
 	}
+
+	p := GetParser()
+	if p == nil {
+		t.Fatal("expected parser")
+	}
+	PutParser(p)
 }

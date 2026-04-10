@@ -12,10 +12,14 @@ func resetScanFlags() {
 	outputFormat = "json"
 	scanBudget = 3000
 	scanContext = 0
+	scanBeforeContext = 0
+	scanAfterContext = 0
 	scanExtensions = ""
 	scanLimit = 0
+	scanMaxCount = 0
 	scanIgnoreCase = false
 	scanFilesOnly = false
+	scanFilesWithoutMatch = false
 	scanHeading = false
 	scanExclude = ""
 	scanGroup = false
@@ -25,6 +29,7 @@ func resetScanFlags() {
 	scanSmartCase = false
 	scanWordRegexp = false
 	scanOnlyMatching = false
+	scanHidden = false
 }
 
 func runScanCmd(t *testing.T, args ...string) scanResult {
@@ -204,5 +209,53 @@ func TestScanOnlyMatching(t *testing.T) {
 	}
 	if len(res.Matches) > 0 && res.Matches[0].C != "apples\noranges" {
 		t.Errorf("only-matching: expected 'apples\\noranges', got %q", res.Matches[0].C)
+	}
+}
+
+func TestScanHidden(t *testing.T) {
+	resetScanFlags()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "visible.go"), []byte("secret_key = 123\n"), 0644)
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("secret_key = 456\n"), 0644)
+
+	// Default is false, should not see .env
+	res := runScanCmd(t, "secret_key", dir)
+	if res.Total != 1 {
+		t.Errorf("expected 1 match (visible only), got %d", res.Total)
+	}
+
+	resetScanFlags()
+	scanHidden = true
+	res = runScanCmd(t, "secret_key", dir)
+	if res.Total != 2 {
+		t.Errorf("expected 2 matches (including hidden), got %d", res.Total)
+	}
+}
+
+func TestScanMaxCount(t *testing.T) {
+	resetScanFlags()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "many.txt"), []byte("foo\nfoo\nfoo\nfoo\n"), 0644)
+
+	scanMaxCount = 2
+	res := runScanCmd(t, "foo", dir)
+	if res.Total != 2 {
+		t.Errorf("expected 2 matches (max-count limited), got %d", res.Total)
+	}
+}
+
+func TestScanFilesWithoutMatch(t *testing.T) {
+	resetScanFlags()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "has_foo.txt"), []byte("foo\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "no_foo.txt"), []byte("bar\n"), 0644)
+
+	scanFilesWithoutMatch = true
+	res := runScanCmd(t, "foo", dir)
+	if res.Total != 1 {
+		t.Errorf("expected 1 match (files without match), got %d", res.Total)
+	}
+	if len(res.Files) != 1 || res.Files[0] != "no_foo.txt" {
+		t.Errorf("expected no_foo.txt, got %v", res.Files)
 	}
 }

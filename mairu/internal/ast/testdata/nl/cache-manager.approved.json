@@ -1,39 +1,42 @@
 {
-  "file_summary": "File containing 3 exported symbols (3 fns): getOrSet, evictStale, warmUp.",
-  "symbols": [
-    {
-      "ID": "fn:evictStale",
-      "Name": "evictStale",
-      "Kind": "fn",
-      "Exported": true,
-      "Doc": "",
-      "Line": 10,
-      "Signature": ""
-    },
-    {
-      "ID": "fn:getOrSet",
-      "Name": "getOrSet",
-      "Kind": "fn",
-      "Exported": true,
-      "Doc": "",
-      "Line": 1,
-      "Signature": ""
-    },
-    {
-      "ID": "fn:warmUp",
-      "Name": "warmUp",
-      "Kind": "fn",
-      "Exported": true,
-      "Doc": "",
-      "Line": 22,
-      "Signature": ""
-    }
-  ],
   "edges": [],
+  "file_summary": "File containing 3 exported symbols (3 fns): getOrSet, evictStale, warmUp.",
   "imports": [],
   "symbol_descriptions": {
-    "fn:evictStale": "1. Assigns `0` to `evicted`\n2. Assigns calling `Date.now` to `now`\n3. Iterates over each `[key, entry]` in `cache`, If `now - entry.createdAt` is greater than `maxAge`, calling `cache.delete` with `key`; `evicted++`\n4. Returns `evicted`",
-    "fn:getOrSet": "1. If `cache.has(key)`, Returns calling `cache.get` with `key`\n2. Assigns calling `compute` to `value`\n3. calling `cache.set` with `key`, `value`\n4. Returns `value`",
-    "fn:warmUp": "1. Iterates over each `key` in `keys`, If `cache.has(key)` is falsy, Assigns calling `loader` with `key` to `value`; calling `cache.set` with `key`, `value`"
-  }
+    "fn:evictStale": "1. Assigns `0` to let variable `evicted`\n2. Assigns calling `Date.now` to constant `now`\n3. Iterates over each `[key, entry]` in `cache`, If `now - entry.createdAt` is greater than `maxAge`, calling `cache.delete` with `key`; increments `evicted`\n4. Returns `evicted`",
+    "fn:getOrSet": "1. If `cache.has(key)`, Returns calling `cache.get` with `key`\n2. Assigns calling `compute` to constant `value`\n3. calling `cache.set` with `key`, `value`\n4. Returns `value`",
+    "fn:warmUp": "1. Iterates over each `key` in `keys`, If `cache.has(key)` is falsy, Assigns calling `loader` with `key` to constant `value`; calling `cache.set` with `key`, `value`"
+  },
+  "symbols": [
+    {
+      "ControlFlow": "calls Date.now -\u003e loop -\u003e if -\u003e calls cache.delete -\u003e return",
+      "Doc": "",
+      "Exported": true,
+      "ID": "fn:evictStale",
+      "Kind": "fn",
+      "Line": 10,
+      "Name": "evictStale",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "if -\u003e calls cache.has -\u003e return -\u003e calls cache.get -\u003e calls compute -\u003e calls cache.set -\u003e return",
+      "Doc": "",
+      "Exported": true,
+      "ID": "fn:getOrSet",
+      "Kind": "fn",
+      "Line": 1,
+      "Name": "getOrSet",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "loop -\u003e if -\u003e calls cache.has -\u003e calls loader -\u003e calls cache.set",
+      "Doc": "",
+      "Exported": true,
+      "ID": "fn:warmUp",
+      "Kind": "fn",
+      "Line": 22,
+      "Name": "warmUp",
+      "Signature": ""
+    }
+  ]
 }

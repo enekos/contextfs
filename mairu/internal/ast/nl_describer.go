@@ -63,6 +63,19 @@ func describeStatement(node *sitter.Node, source []byte) string {
 
 func describeVariableStatement(node *sitter.Node, source []byte) string {
 	var parts []string
+
+	kind := "variable"
+	if node.ChildCount() > 0 {
+		first := node.Child(0)
+		if first.Type() == "const" {
+			kind = "constant"
+		} else if first.Type() == "let" {
+			kind = "let variable"
+		} else if first.Type() == "var" {
+			kind = "var variable"
+		}
+	}
+
 	count := node.NamedChildCount()
 	for i := 0; i < int(count); i++ {
 		decl := node.NamedChild(i)
@@ -71,18 +84,39 @@ func describeVariableStatement(node *sitter.Node, source []byte) string {
 		}
 		nameNode := decl.ChildByFieldName("name")
 		valueNode := decl.ChildByFieldName("value")
+		typeNode := decl.ChildByFieldName("type")
+
 		name := "unknown"
+		isPattern := false
 		if nameNode != nil {
 			name = nameNode.Content(source)
+			if nameNode.Type() == "object_pattern" || nameNode.Type() == "array_pattern" {
+				isPattern = true
+				name = strings.ReplaceAll(name, "\n", " ")
+				name = strings.Join(strings.Fields(name), " ")
+			}
 		}
+
+		typeInfo := ""
+		if typeNode != nil {
+			typeText := strings.TrimPrefix(strings.TrimSpace(typeNode.Content(source)), ":")
+			typeText = strings.TrimSpace(typeText)
+			typeInfo = fmt.Sprintf(" of type `%s`", typeText)
+		}
+
 		if valueNode != nil {
-			parts = append(parts, fmt.Sprintf("Assigns %s to `%s`", describeExpression(valueNode, source), name))
+			valDesc := describeExpression(valueNode, source)
+			if isPattern {
+				parts = append(parts, fmt.Sprintf("Destructures `%s` from %s as %s", name, valDesc, kind))
+			} else {
+				parts = append(parts, fmt.Sprintf("Assigns %s to %s `%s`%s", valDesc, kind, name, typeInfo))
+			}
 		} else {
-			parts = append(parts, fmt.Sprintf("Declares `%s`", name))
+			parts = append(parts, fmt.Sprintf("Declares %s `%s`%s", kind, name, typeInfo))
 		}
 	}
 	if len(parts) == 0 {
-		return "Declares variable"
+		return fmt.Sprintf("Declares %s", kind)
 	}
 	return strings.Join(parts, ". ")
 }
@@ -292,6 +326,8 @@ func describeExpressionStatement(node *sitter.Node, source []byte) string {
 	return strings.TrimSpace(node.Content(source))
 }
 
+var reNumberPrefix = regexp.MustCompile(`^\d+\.\s*`)
+
 func describeBlockInline(node *sitter.Node, source []byte) string {
 	if node == nil {
 		return "does nothing"
@@ -303,8 +339,7 @@ func describeBlockInline(node *sitter.Node, source []byte) string {
 		}
 		if count == 1 {
 			stmt := describeStatement(node.NamedChild(0), source)
-			re := regexp.MustCompile(`^\d+\.\s*`)
-			return re.ReplaceAllString(stmt, "")
+			return reNumberPrefix.ReplaceAllString(stmt, "")
 		}
 		var stmts []string
 		for i := 0; i < int(count); i++ {
@@ -460,6 +495,13 @@ func describeExpression(node *sitter.Node, source []byte) string {
 		return ""
 	}
 
+	if node.Type() == "yield_expression" {
+		if node.NamedChildCount() > 0 {
+			return fmt.Sprintf("yields %s", describeExpression(node.NamedChild(0), source))
+		}
+		return "yields"
+	}
+
 	if node.Type() == "await_expression" {
 		if node.NamedChildCount() > 0 {
 			return fmt.Sprintf("awaits %s", describeExpression(node.NamedChild(0), source))
@@ -543,6 +585,36 @@ func describeExpression(node *sitter.Node, source []byte) string {
 		return fmt.Sprintf("%s %s %s", describeExpression(left, source), opWord, describeExpression(right, source))
 	}
 
+	if node.Type() == "update_expression" {
+		arg := node.ChildByFieldName("argument")
+		argText := ""
+		if arg != nil {
+			argText = arg.Content(source)
+		} else {
+			argText = "value"
+		}
+
+		content := node.Content(source)
+		if strings.Contains(content, "++") {
+			return fmt.Sprintf("increments `%s`", argText)
+		}
+		if strings.Contains(content, "--") {
+			return fmt.Sprintf("decrements `%s`", argText)
+		}
+	}
+
+	if node.Type() == "array" {
+		return fmt.Sprintf("an array with %d elements", node.NamedChildCount())
+	}
+
+	if node.Type() == "object" {
+		return fmt.Sprintf("an object with %d properties", node.NamedChildCount())
+	}
+
+	if node.Type() == "arrow_function" || node.Type() == "function_expression" {
+		return "a function"
+	}
+
 	if node.Type() == "template_string" {
 		return fmt.Sprintf("a template string `%s`", node.Content(source))
 	}
@@ -599,4 +671,68 @@ func DescribeSymbols(symbols []LogicSymbol, edges []LogicEdge, descriptions map[
 		sections = append(sections, strings.Join(lines, "\n"))
 	}
 	return strings.Join(sections, "\n\n")
+}
+
+func SummarizeControlFlow(node *sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	// Depending on the language and node type, the body might be "body" or "block"
+	body := node.ChildByFieldName("body")
+	if body == nil {
+		// Try to find a block directly if no body field (e.g. for some Go nodes)
+		for i := 0; i < int(node.NamedChildCount()); i++ {
+			if node.NamedChild(i).Type() == "block" || node.NamedChild(i).Type() == "statement_block" {
+				body = node.NamedChild(i)
+				break
+			}
+		}
+	}
+	if body == nil {
+		return ""
+	}
+
+	var actions []string
+
+	var walk func(*sitter.Node)
+	walk = func(n *sitter.Node) {
+		t := n.Type()
+		if t == "if_statement" {
+			actions = append(actions, "if")
+		} else if t == "for_statement" || t == "for_in_statement" || t == "while_statement" || t == "do_statement" || t == "for_clause" || t == "range_clause" {
+			actions = append(actions, "loop")
+		} else if t == "try_statement" {
+			actions = append(actions, "try/catch")
+		} else if t == "throw_statement" || t == "panic_statement" {
+			actions = append(actions, "throw")
+		} else if t == "return_statement" {
+			actions = append(actions, "return")
+		} else if t == "switch_statement" || t == "type_switch_statement" || t == "expression_switch_statement" {
+			actions = append(actions, "switch")
+		} else if t == "call_expression" {
+			fn := n.ChildByFieldName("function")
+			if fn != nil {
+				actions = append(actions, "calls "+fn.Content(source))
+			}
+		}
+
+		for i := 0; i < int(n.NamedChildCount()); i++ {
+			walk(n.NamedChild(i))
+		}
+	}
+
+	walk(body)
+
+	if len(actions) == 0 {
+		return "linear"
+	}
+
+	var clean []string
+	for i, a := range actions {
+		if i == 0 || actions[i-1] != a {
+			clean = append(clean, a)
+		}
+	}
+
+	return strings.Join(clean, " -> ")
 }

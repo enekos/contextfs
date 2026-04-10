@@ -1,7 +1,6 @@
 <script lang="ts">
   import { fmtDate, categoryColors, scoreColor, impColor } from "../lib/utils";
-
-  export let API_BASE: string;
+  import { vibeQuery, vibeMutationPlan, vibeMutationExecute } from "../../lib/api";
 
   type Mode = "query" | "mutation";
   let mode: Mode = "query";
@@ -27,13 +26,8 @@
     if (!prompt.trim()) return;
     loading = true; error = ""; queryResult = null; mutationPlan = null; executionResults = null;
     try {
-      const res = await fetch(`${API_BASE}/api/vibe/query`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, project: project || undefined, topK }),
-      });
-      if (!res.ok) throw new Error(`API ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      queryResult = await res.json();
+      const data = await vibeQuery(prompt, project || "", topK);
+      queryResult = data;
       history = [{ mode: "query", prompt, timestamp: new Date(), reasoning: queryResult?.reasoning || "" }, ...history.slice(0, 19)];
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -46,13 +40,8 @@
     if (!prompt.trim()) return;
     loading = true; error = ""; queryResult = null; mutationPlan = null; executionResults = null;
     try {
-      const res = await fetch(`${API_BASE}/api/vibe/mutation/plan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, project: project || undefined, topK }),
-      });
-      if (!res.ok) throw new Error(`API ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      mutationPlan = await res.json();
+      const data = await vibeMutationPlan(prompt, project || "", topK);
+      mutationPlan = data;
       selectedOps = (mutationPlan?.operations || []).map(() => true);
       history = [{ mode: "mutation", prompt, timestamp: new Date(), reasoning: mutationPlan?.reasoning || "" }, ...history.slice(0, 19)];
     } catch (e) {
@@ -68,13 +57,7 @@
     if (approved.length === 0) return;
     executing = true; error = "";
     try {
-      const res = await fetch(`${API_BASE}/api/vibe/mutation/execute`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ operations: approved, project: project || undefined }),
-      });
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      const data = await res.json();
+      const data = await vibeMutationExecute(approved, project || "");
       executionResults = data.results;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
