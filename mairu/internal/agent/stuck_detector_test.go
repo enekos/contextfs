@@ -58,7 +58,7 @@ func TestStuckDetector_Alternating_Nudge(t *testing.T) {
 	d.Record(b)
 	d.Record(a)
 	d.Record(b)
-	
+
 	if v := d.Check(); v != VerdictNudge {
 		t.Fatalf("expected Nudge after 5 alternating calls, got %v", v)
 	}

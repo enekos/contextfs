@@ -48,6 +48,7 @@ func getDescriber(filePath string) ast.LanguageDescriber {
 		ast.VueDescriber{},
 		ast.GoDescriber{},
 		ast.PythonDescriber{},
+		ast.PHPDescriber{},
 		ast.MarkdownDescriber{},
 	}
 	for _, desc := range describers {

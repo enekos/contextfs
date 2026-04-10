@@ -34,6 +34,7 @@ var describers = map[string]LanguageDescriber{
 	".js":  TypeScriptDescriber{},
 	".go":  GoDescriber{},
 	".py":  PythonDescriber{},
+	".php": PHPDescriber{},
 	".vue": VueDescriber{},
 	".tsx": TSXDescriber{},
 	".jsx": TSXDescriber{},

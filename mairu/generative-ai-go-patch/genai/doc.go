@@ -17,7 +17,7 @@
 // With Gemini 2.0, we took the chance to create a single unified SDK for all developers who want
 // to use Google's GenAI models (Gemini, Veo, Imagen, etc). As part of that process, we took all of
 // the feedback from this SDK and what developers like about other SDKs in the ecosystem to create
-// the [Google Gen AI SDK]. 
+// the [Google Gen AI SDK].
 //
 // The Gemini API docs are fully updated to show examples of the new Google Gen AI SDK:
 // [Get started].
@@ -34,13 +34,12 @@
 //
 // Support Plan for this Repository:
 //
-//  - Limited Maintenance: Development is now restricted to critical bug fixes only. No new features will be added.
-//  - Purpose: This limited support aims to provide stability for users while they transition to the new SDK.
-//  - End-of-Life Date: All support for this repository (including bug fixes) will permanently end on August 31st, 2025.
+//   - Limited Maintenance: Development is now restricted to critical bug fixes only. No new features will be added.
+//   - Purpose: This limited support aims to provide stability for users while they transition to the new SDK.
+//   - End-of-Life Date: All support for this repository (including bug fixes) will permanently end on August 31st, 2025.
 //
 // We encourage all users to begin planning their migration to the [Google Generative AI SDK] to ensure
 // continued access to the latest capabilities and support.
-//
 //
 // # Getting started
 //

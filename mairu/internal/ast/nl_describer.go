@@ -15,7 +15,7 @@ func DescribeStatements(node *sitter.Node, source []byte) string {
 	}
 
 	// Block body
-	if body.Type() == "statement_block" || body.Type() == "block" {
+	if body.Type() == "statement_block" || body.Type() == "block" || body.Type() == "compound_statement" {
 		count := body.NamedChildCount()
 		if count == 0 {
 			return "Empty function body."
@@ -332,7 +332,7 @@ func describeBlockInline(node *sitter.Node, source []byte) string {
 	if node == nil {
 		return "does nothing"
 	}
-	if node.Type() == "statement_block" || node.Type() == "block" {
+	if node.Type() == "statement_block" || node.Type() == "block" || node.Type() == "compound_statement" {
 		count := node.NamedChildCount()
 		if count == 0 {
 			return "does nothing"
@@ -509,8 +509,11 @@ func describeExpression(node *sitter.Node, source []byte) string {
 		return fmt.Sprintf("awaits `%s`", node.Content(source))
 	}
 
-	if node.Type() == "call_expression" || node.Type() == "call" {
+	if node.Type() == "call_expression" || node.Type() == "call" || node.Type() == "member_call_expression" || node.Type() == "scoped_call_expression" || node.Type() == "function_call_expression" {
 		fn := node.ChildByFieldName("function")
+		if fn == nil {
+			fn = node.ChildByFieldName("name") // for member_call_expression, etc.
+		}
 		args := node.ChildByFieldName("arguments")
 		calleeText := ""
 		if fn != nil {

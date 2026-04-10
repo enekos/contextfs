@@ -31,7 +31,7 @@ Ideal for executing from background jobs or automation pipelines.`,
 		if len(args) > 0 {
 			prompt = strings.Join(args, " ")
 		}
-		
+
 		if minionGithubIssue != "" {
 			issueData, err := fetchGitHubContext("issue", minionGithubIssue)
 			if err != nil {
@@ -71,7 +71,7 @@ func fetchGitHubContext(entityType, number string) (string, error) {
 	var cmd *exec.Cmd
 	var out []byte
 	var err error
-	
+
 	if entityType == "issue" {
 		cmd = exec.Command("gh", "issue", "view", number, "--comments")
 		out, err = cmd.CombinedOutput()
@@ -85,7 +85,7 @@ func fetchGitHubContext(entityType, number string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("gh pr view failed: %s, output: %s", err, string(viewOut))
 		}
-		
+
 		diffCmd := exec.Command("gh", "pr", "diff", number)
 		diffOut, diffErr := diffCmd.CombinedOutput()
 		if diffErr != nil {
@@ -93,7 +93,7 @@ func fetchGitHubContext(entityType, number string) (string, error) {
 			slog.Warn("Failed to fetch PR diff", "error", diffErr)
 			return string(viewOut), nil
 		}
-		
+
 		return fmt.Sprintf("%s\n\n=== PR DIFF ===\n%s", string(viewOut), string(diffOut)), nil
 	}
 }

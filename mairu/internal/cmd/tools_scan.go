@@ -40,7 +40,6 @@ var scanAfterContext int
 var scanMaxCount int
 var scanFilesWithoutMatch bool
 
-
 func init() {
 	scanCmd.Flags().IntVar(&scanBudget, "budget", 3000, "Token budget circuit breaker")
 	scanCmd.Flags().IntVarP(&scanContext, "context", "C", 0, "Number of context lines around match")
@@ -213,7 +212,7 @@ var scanCmd = &cobra.Command{
 			beforeContext = scanBeforeContext
 			afterContext = scanAfterContext
 		}
-		
+
 		type fileJob struct {
 			path string
 			rel  string
@@ -275,8 +274,6 @@ var scanCmd = &cobra.Command{
 						matched bool
 					}
 					var hunk *activeHunk
-
-					
 
 					fileHasMatch := false
 					fileMatchCount := 0

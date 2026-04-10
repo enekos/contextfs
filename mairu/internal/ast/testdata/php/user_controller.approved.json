@@ -1,0 +1,56 @@
+{
+  "edges": [],
+  "file_summary": "PHP file with 4 symbols.",
+  "imports": [
+    "Illuminate\\Http\\Request",
+    "App\\Models\\User"
+  ],
+  "symbol_descriptions": {
+    "cls:App\\Http\\Controllers\\UserController": "Describes UserController",
+    "fn:App\\Http\\Controllers\\global_helper": "Describes global_helper",
+    "mtd:App\\Http\\Controllers\\UserController::__construct": "Describes UserController::__construct",
+    "mtd:App\\Http\\Controllers\\UserController::show": "Describes UserController::show"
+  },
+  "symbols": [
+    {
+      "ControlFlow": "",
+      "Doc": "",
+      "Exported": true,
+      "ID": "cls:App\\Http\\Controllers\\UserController",
+      "Kind": "cls",
+      "Line": 7,
+      "Name": "UserController",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "return",
+      "Doc": "",
+      "Exported": true,
+      "ID": "fn:App\\Http\\Controllers\\global_helper",
+      "Kind": "fn",
+      "Line": 31,
+      "Name": "global_helper",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "linear",
+      "Doc": "",
+      "Exported": true,
+      "ID": "mtd:App\\Http\\Controllers\\UserController::__construct",
+      "Kind": "mtd",
+      "Line": 11,
+      "Name": "__construct",
+      "Signature": ""
+    },
+    {
+      "ControlFlow": "if -\u003e return",
+      "Doc": "",
+      "Exported": true,
+      "ID": "mtd:App\\Http\\Controllers\\UserController::show",
+      "Kind": "mtd",
+      "Line": 19,
+      "Name": "show",
+      "Signature": ""
+    }
+  ]
+}
