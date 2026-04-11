@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	minionMaxRetries int
-	minionCouncil    bool
+	minionMaxRetries   int
+	minionCouncil      bool
+	minionPRReviewOnly bool
 )
 
 func NewMinionCmd() *cobra.Command {
@@ -28,6 +29,15 @@ run verification checks, attempt to fix issues (up to --max-retries), and open a
 Ideal for executing from background jobs or automation pipelines.`,
 		Args: cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
+			if minionPRReviewOnly {
+				if minionGithubIssue != "" {
+					slog.Error("--pr-review-only cannot be combined with --github-issue")
+					os.Exit(1)
+				}
+				runMinionPRReviewOnly()
+				return
+			}
+
 			var prompt string
 			if len(args) > 0 {
 				prompt = strings.Join(args, " ")
@@ -60,6 +70,7 @@ Ideal for executing from background jobs or automation pipelines.`,
 	cmd.Flags().StringVar(&minionGithubIssue, "github-issue", "", "GitHub Issue number to resolve")
 	cmd.Flags().StringVar(&minionGithubPR, "github-pr", "", "GitHub PR number to review and fix")
 	cmd.Flags().BoolVar(&minionCouncil, "council", false, "Enable council mode with expert reviewers before execution")
+	cmd.Flags().BoolVar(&minionPRReviewOnly, "pr-review-only", false, "Run only the PR reviewer council (no coding/execution loop)")
 	return cmd
 }
 
@@ -177,6 +188,31 @@ func runMinion(userPrompt string) {
 		fmt.Printf("⚠️ PR reviewer council failed: %v\n", err)
 		return
 	}
+	fmt.Println("\n📌 PR reviewer council suggestions:")
+	fmt.Println(reviewOutput)
+}
+
+func runMinionPRReviewOnly() {
+	apiKey := GetAPIKey()
+	if apiKey == "" {
+		slog.Error("Gemini API key not found. Please run 'mairu setup' or set GEMINI_API_KEY environment variable.")
+		os.Exit(1)
+	}
+
+	cwd, _ := os.Getwd()
+	reviewPR := resolvePRReviewTarget(minionGithubPR, discoverCurrentPRNumber())
+	if reviewPR == "" {
+		slog.Error("No PR number found. Use --github-pr or run this from a checked out PR branch.")
+		os.Exit(1)
+	}
+
+	fmt.Printf("\n🔎 Launching PR reviewer council for PR #%s\n", reviewPR)
+	reviewOutput, err := runPRReviewerCouncil(cwd, apiKey, reviewPR)
+	if err != nil {
+		slog.Error("PR reviewer council failed", "error", err)
+		os.Exit(1)
+	}
+
 	fmt.Println("\n📌 PR reviewer council suggestions:")
 	fmt.Println(reviewOutput)
 }

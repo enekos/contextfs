@@ -5,6 +5,11 @@ on:
     types: [opened, labeled]
   issue_comment:
     types: [created]
+  push:
+    branches-ignore: [main, master]
+    paths:
+      - 'mairu/**'
+      - '.github/workflows/mairu-agent.yml'
 
 permissions:
   contents: write
@@ -70,6 +75,75 @@ jobs:
         if: github.event.issue != null && github.event.issue.pull_request == null
         run: |
           mairu minion --github-issue ${{ github.event.issue.number }} "Address the issue described."
+        working-directory: mairu
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  pr-reviewer-on-push:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    services:
+      meilisearch:
+        image: getmeili/meilisearch:v1.12
+        env:
+          MEILI_NO_ANALYTICS: true
+          MEILI_MASTER_KEY: "test_key_for_ci"
+        ports:
+          - 7700:7700
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'mairu/go.mod'
+
+      - name: Build Mairu
+        run: |
+          cd mairu
+          go build -o ../mairu_bin ./cmd/mairu
+          sudo mv ../mairu_bin /usr/local/bin/mairu
+
+      - name: Setup environment
+        run: |
+          echo "GH_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+          echo "MEILI_URL=http://localhost:7700" >> $GITHUB_ENV
+          echo "MEILI_API_KEY=test_key_for_ci" >> $GITHUB_ENV
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
+
+      - name: Initialize Mairu Database
+        run: mairu setup
+        working-directory: mairu
+
+      - name: Ingest Codebase
+        run: mairu daemon .. -P default
+        working-directory: mairu
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Resolve PR for pushed branch
+        id: pr
+        run: |
+          PR_NUMBER="$(gh pr list --repo "${{ github.repository }}" --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number')"
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No open PR found for branch '${{ github.ref_name }}'; skipping reviewer."
+            exit 0
+          fi
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "Found PR #$PR_NUMBER for branch '${{ github.ref_name }}'."
+
+      - name: Run Minion PR Reviewer Council
+        if: steps.pr.outputs.found == 'true'
+        run: |
+          mairu minion --pr-review-only --github-pr "${{ steps.pr.outputs.number }}"
         working-directory: mairu
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
