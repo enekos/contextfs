@@ -40,19 +40,27 @@ func (s *AppService) CreateContextNode(input ContextCreateInput) (ContextNode, e
 					candidates = append(candidates, llm.RouterCandidate{ID: uri, Content: abstract, Score: score})
 				}
 			}
-			action, err := llm.DecideContextAction(context.Background(), s.llmClient, input.URI, input.Name, input.Abstract, candidates)
-			if err == nil {
+			routerCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			action, err := llm.DecideContextAction(routerCtx, s.llmClient, input.URI, input.Name, input.Abstract, candidates)
+			cancel()
+			if err != nil {
+				slog.Warn("context router fallback to create", "error", err, "project", input.Project, "candidate_count", len(candidates))
+			} else {
 				if action.Action == "skip" {
 					return ContextNode{URI: "skipped"}, fmt.Errorf("skipped: %s", action.Reason)
 				}
 				if action.Action == "update" && action.TargetID != "" {
-					updated, err := s.UpdateContextNode(ContextUpdateInput{
+					updated, updateErr := s.UpdateContextNode(ContextUpdateInput{
 						URI:      action.TargetID,
 						Abstract: action.MergedContent,
 					})
-					if err == nil {
+					if updateErr == nil {
 						return updated, nil
 					}
+					slog.Warn("context router update failed; fallback to create", "target_id", action.TargetID, "error", updateErr)
+				}
+				if action.Action == "create" && strings.TrimSpace(action.Reason) != "" {
+					slog.Warn("context router selected create fallback", "reason", action.Reason)
 				}
 			}
 		}

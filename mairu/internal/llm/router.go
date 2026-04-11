@@ -93,10 +93,19 @@ func DecideMemoryAction(ctx context.Context, client LLMClient, newContent string
 		if decision.TargetID != "" && decision.MergedContent != "" {
 			return decision, nil
 		}
+		return RouterAction{
+			Action: "create",
+			Reason: "router requested update but targetId/mergedContent was missing",
+		}, nil
 	} else if decision.Action == "skip" {
 		return decision, nil
+	} else if decision.Action == "create" {
+		return decision, nil
 	}
-	return RouterAction{Action: "create"}, nil
+	return RouterAction{
+		Action: "create",
+		Reason: fmt.Sprintf("router returned unknown action %q", decision.Action),
+	}, nil
 }
 
 func DecideContextAction(ctx context.Context, client LLMClient, uri, name, abstract string, candidates []RouterCandidate) (RouterAction, error) {
@@ -168,8 +177,17 @@ func DecideContextAction(ctx context.Context, client LLMClient, uri, name, abstr
 		if decision.TargetID != "" && decision.MergedContent != "" {
 			return decision, nil
 		}
+		return RouterAction{
+			Action: "create",
+			Reason: "router requested update but targetId/mergedContent was missing",
+		}, nil
 	} else if decision.Action == "skip" {
 		return decision, nil
+	} else if decision.Action == "create" {
+		return decision, nil
 	}
-	return RouterAction{Action: "create"}, nil
+	return RouterAction{
+		Action: "create",
+		Reason: fmt.Sprintf("router returned unknown action %q", decision.Action),
+	}, nil
 }

@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"mairu/internal/prompts"
 )
@@ -50,9 +49,10 @@ type councilFeedback struct {
 	role     string
 	feedback string
 	err      error
+	status   string
 }
 
-func (a *Agent) runCouncil(outChan chan<- AgentEvent, task string) (string, error) {
+func (a *Agent) runCouncil(ctx context.Context, outChan chan<- AgentEvent, task string) (string, error) {
 	cfg := a.council.withDefaults()
 	outChan <- AgentEvent{Type: "status", Content: "Council mode enabled: convening expert review"}
 
@@ -63,7 +63,7 @@ func (a *Agent) runCouncil(outChan chan<- AgentEvent, task string) (string, erro
 		go func(r CouncilRole) {
 			defer wg.Done()
 			outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("[Council][%s] reviewing task", r.Name)}
-			feedback, err := a.generateCouncilFeedback(task, r)
+			feedback, err := a.generateCouncilFeedback(ctx, task, r)
 			if err == nil {
 				outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("[Council][%s] delivered review", r.Name)}
 			}
@@ -71,6 +71,7 @@ func (a *Agent) runCouncil(outChan chan<- AgentEvent, task string) (string, erro
 				role:     r.Name,
 				feedback: strings.TrimSpace(feedback),
 				err:      err,
+				status:   "ok",
 			}
 		}(role)
 	}
@@ -83,10 +84,12 @@ func (a *Agent) runCouncil(outChan chan<- AgentEvent, task string) (string, erro
 	var failures []string
 	for result := range resultsCh {
 		if result.err != nil {
+			result.status = "failed"
 			failures = append(failures, fmt.Sprintf("%s: %v", result.role, result.err))
 			continue
 		}
 		if result.feedback == "" {
+			result.status = "empty"
 			failures = append(failures, fmt.Sprintf("%s: empty feedback", result.role))
 			continue
 		}
@@ -101,7 +104,7 @@ func (a *Agent) runCouncil(outChan chan<- AgentEvent, task string) (string, erro
 	}
 
 	outChan <- AgentEvent{Type: "status", Content: "Council Product Lead: synthesizing expert reviews"}
-	synthesized, err := a.generateProductLeadPlan(task, feedbackByRole)
+	synthesized, err := a.generateProductLeadPlan(ctx, task, feedbackByRole)
 	if err != nil {
 		return "", fmt.Errorf("product lead synthesis failed: %w", err)
 	}
@@ -109,8 +112,8 @@ func (a *Agent) runCouncil(outChan chan<- AgentEvent, task string) (string, erro
 	return buildCouncilExecutionPrompt(task, synthesized, feedbackByRole), nil
 }
 
-func (a *Agent) generateCouncilFeedback(task string, role CouncilRole) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+func (a *Agent) generateCouncilFeedback(parent context.Context, task string, role CouncilRole) (string, error) {
+	ctx, cancel := context.WithTimeout(parent, a.reliability.withDefaults().CouncilTimeout)
 	defer cancel()
 	prompt, err := prompts.GetForProject("council_expert", struct {
 		Role string
@@ -127,8 +130,8 @@ func (a *Agent) generateCouncilFeedback(task string, role CouncilRole) (string, 
 	return a.llm.GenerateContent(ctx, a.llm.GetModelName(), prompt)
 }
 
-func (a *Agent) generateProductLeadPlan(task string, feedback map[string]string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+func (a *Agent) generateProductLeadPlan(parent context.Context, task string, feedback map[string]string) (string, error) {
+	ctx, cancel := context.WithTimeout(parent, a.reliability.withDefaults().CouncilTimeout)
 	defer cancel()
 	prompt, err := prompts.GetForProject("council_product_lead", struct {
 		Task     string

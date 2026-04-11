@@ -220,7 +220,7 @@ func NewTelegramCmd() *cobra.Command {
 					return c.Send("Failed to load session.")
 				}
 
-				if err := ag.CompactContext(); err != nil {
+				if err := ag.CompactContext(context.Background()); err != nil {
 					return c.Send("Failed to compact context: " + err.Error())
 				}
 

@@ -37,8 +37,9 @@ type Agent struct {
 	utcp          *UTCPManager
 	utcpProviders []string
 
-	Unattended bool
-	council    CouncilConfig
+	Unattended  bool
+	council     CouncilConfig
+	reliability ReliabilityConfig
 
 	historyLogger   HistoryLogger
 	interceptors    []ToolInterceptor
@@ -57,6 +58,7 @@ type Config struct {
 	Interceptors    []ToolInterceptor
 	UTCPProviders   []string
 	AgentSystemData map[string]any
+	Reliability     ReliabilityConfig
 }
 
 func normalizeConfig(cfg ...Config) Config {
@@ -67,6 +69,7 @@ func normalizeConfig(cfg ...Config) Config {
 	resolved.Council.Roles = append([]CouncilRole(nil), resolved.Council.Roles...)
 	resolved.Interceptors = append([]ToolInterceptor(nil), resolved.Interceptors...)
 	resolved.UTCPProviders = append([]string(nil), resolved.UTCPProviders...)
+	resolved.Reliability = resolved.Reliability.withDefaults()
 	if resolved.AgentSystemData != nil {
 		cloned := make(map[string]any, len(resolved.AgentSystemData))
 		for k, v := range resolved.AgentSystemData {
@@ -107,6 +110,7 @@ func New(projectRoot string, apiKey string, cfg ...Config) (*Agent, error) {
 		utcpProviders:   resolved.UTCPProviders,
 		Unattended:      resolved.Unattended,
 		council:         resolved.Council.withDefaults(),
+		reliability:     resolved.Reliability.withDefaults(),
 		historyLogger:   resolved.HistoryLogger,
 		interceptors:    resolved.Interceptors,
 		AgentSystemData: resolved.AgentSystemData,
@@ -123,6 +127,7 @@ func (a *Agent) childConfig() Config {
 		Interceptors:    a.interceptors,
 		UTCPProviders:   a.utcpProviders,
 		AgentSystemData: a.AgentSystemData,
+		Reliability:     a.reliability,
 	})
 }
 
@@ -219,8 +224,19 @@ func (a *Agent) loadContextFiles() string {
 func (a *Agent) RunStream(prompt string, outChan chan<- AgentEvent) {
 	defer close(outChan)
 
+	runCtx, runCancel := context.WithCancel(context.Background())
+	a.mu.Lock()
+	a.cancel = runCancel
+	a.mu.Unlock()
+	defer func() {
+		runCancel()
+		a.mu.Lock()
+		a.cancel = nil
+		a.mu.Unlock()
+	}()
+
 	a.emitLog(outChan, "Agent RunStream started")
-	if err := a.CompactContext(); err != nil {
+	if err := a.CompactContext(runCtx); err != nil {
 		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("⚠️ Warning: Failed to compact context: %v", err)}
 		a.emitLog(outChan, "Failed to compact context: %v", err)
 	}
@@ -228,7 +244,7 @@ func (a *Agent) RunStream(prompt string, outChan chan<- AgentEvent) {
 
 	fullPrompt := prompt
 	if a.IsCouncilEnabled() {
-		synthesized, err := a.runCouncil(outChan, prompt)
+		synthesized, err := a.runCouncil(runCtx, outChan, prompt)
 		if err != nil {
 			outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("⚠️ Council fallback: %v", err)}
 		} else {
@@ -254,25 +270,17 @@ func (a *Agent) RunStream(prompt string, outChan chan<- AgentEvent) {
 	}
 
 	a.emitLog(outChan, "Sending prompt to LLM (length: %d)", len(fullPrompt))
-	a.processLoopStream(fullPrompt, outChan)
+	a.processLoopStream(runCtx, fullPrompt, outChan)
 }
 
-func (a *Agent) processLoopStream(input string, outChan chan<- AgentEvent) {
-	const maxStreamAttempts = 2
-	for attempt := 1; attempt <= maxStreamAttempts; attempt++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
-
-		a.mu.Lock()
-		a.cancel = cancel
-		a.mu.Unlock()
+func (a *Agent) processLoopStream(runCtx context.Context, input string, outChan chan<- AgentEvent) {
+	policy := a.reliability.withDefaults().StreamRetry
+	for attempt := 1; attempt <= policy.MaxAttempts; attempt++ {
+		ctx, cancel := context.WithTimeout(runCtx, policy.AttemptTimeout)
 
 		iter := a.llm.ChatStream(ctx, input)
-		a.emitLog(outChan, "LLM ChatStream established (attempt %d/%d)", attempt, maxStreamAttempts)
+		a.emitLog(outChan, "LLM ChatStream established (attempt %d/%d)", attempt, policy.MaxAttempts)
 		err := a.handleIterator(ctx, iter, outChan)
-
-		a.mu.Lock()
-		a.cancel = nil
-		a.mu.Unlock()
 		cancel()
 
 		if err == nil || errors.Is(err, context.Canceled) {
@@ -283,9 +291,14 @@ func (a *Agent) processLoopStream(input string, outChan chan<- AgentEvent) {
 			return
 		}
 
-		if isRetryableStreamErr(err) && attempt < maxStreamAttempts {
-			outChan <- AgentEvent{Type: "status", Content: "⚠️ Stream interrupted, retrying once..."}
+		if isRetryableStreamErr(err) && attempt < policy.MaxAttempts {
+			delay := streamRetryDelay(attempt, policy)
+			outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("⚠️ Stream interrupted, retrying in %s...", delay.Round(100*time.Millisecond))}
 			a.emitLog(outChan, "Retrying stream after transient error: %v", err)
+			if sleepErr := sleepWithContext(runCtx, delay); sleepErr != nil {
+				outChan <- AgentEvent{Type: "error", Content: sleepErr.Error()}
+				return
+			}
 			continue
 		}
 
@@ -680,18 +693,28 @@ func (a *Agent) executeToolCall(ctx context.Context, funcCall genai.FunctionCall
 				}
 
 				subOut := make(chan AgentEvent, 100)
+				go func() {
+					<-ctx.Done()
+					subAgent.Interrupt()
+				}()
 				go subAgent.RunStream(fullTask, subOut)
 
 				var subResult string
+				var subErrs []string
 				for ev := range subOut {
 					if ev.Type == "text" {
 						subResult += ev.Content
+					} else if ev.Type == "error" {
+						subErrs = append(subErrs, ev.Content)
 					} else if ev.Type == "status" || ev.Type == "tool_call" || ev.Type == "tool_result" {
 						outChan <- AgentEvent{Type: "status", Content: "  ↳ " + ev.Content}
 					}
 				}
 
 				result = map[string]any{"result": subResult}
+				if len(subErrs) > 0 {
+					result["errors"] = subErrs
+				}
 				subAgent.Close()
 			}
 
@@ -823,23 +846,4 @@ func (a *Agent) runAutoVerification(ctx context.Context, editedFilePath string, 
 	}
 
 	return "", nil
-}
-
-func isRetryableStreamErr(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	if errors.Is(err, context.Canceled) {
-		return false // Never retry explicit cancellations
-	}
-	lower := strings.ToLower(err.Error())
-	return strings.Contains(lower, "hangup") ||
-		strings.Contains(lower, "sighup") ||
-		strings.Contains(lower, "connection reset") ||
-		strings.Contains(lower, "broken pipe") ||
-		strings.Contains(lower, "stream removed") ||
-		strings.Contains(lower, "eof")
 }

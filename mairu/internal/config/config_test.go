@@ -75,6 +75,12 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Output.Format != "table" {
 		t.Errorf("Output.Format = %q, want table", cfg.Output.Format)
 	}
+	if cfg.Agent.StreamMaxAttempts != 2 {
+		t.Errorf("Agent.StreamMaxAttempts = %d, want 2", cfg.Agent.StreamMaxAttempts)
+	}
+	if cfg.Agent.StreamAttemptTTL != "8m" {
+		t.Errorf("Agent.StreamAttemptTTL = %q, want 8m", cfg.Agent.StreamAttemptTTL)
+	}
 }
 
 func TestLoad_UserConfigOverridesDefaults(t *testing.T) {

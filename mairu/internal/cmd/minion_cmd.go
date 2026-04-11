@@ -126,34 +126,15 @@ func runMinion(userPrompt string) {
 		MaxRetries: minionMaxRetries,
 	})
 
-	outChan := make(chan agent.AgentEvent)
-	go a.RunStream(minionPrompt, outChan)
-
 	var hasError bool
-
-	for ev := range outChan {
-		switch ev.Type {
-		case "status":
-			fmt.Printf("ℹ️  %s\n", ev.Content)
-		case "tool_call":
-			fmt.Printf("🔧 Executing: %s\n", ev.ToolName)
-		case "tool_result":
-			// Output tool results if in verbose mode, or keep it clean
-			if verbose {
-				fmt.Printf("✅ Tool %s finished\n", ev.ToolName)
-			}
-		case "text":
-			// We can stream text, or just accumulate it. In unattended mode,
-			// printing it out directly can provide visibility into the agent's thought process.
-			fmt.Print(ev.Content)
-		case "diff":
-			// Show diffs for context
-			fmt.Printf("\n%s\n\n", ev.Content)
-		case "error":
-			fmt.Printf("\n❌ Error: %s\n", ev.Content)
-			hasError = true
-		case "done":
-			fmt.Println("\n🏁 Minion finished.")
+	maxAttempts := minionMaxRetries + 1
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		hasError = runMinionAttempt(a, minionPrompt, attempt, maxAttempts)
+		if !hasError {
+			break
+		}
+		if attempt < maxAttempts {
+			fmt.Printf("\n⚠️ Attempt %d/%d failed. Retrying...\n", attempt, maxAttempts)
 		}
 	}
 
@@ -181,6 +162,39 @@ func runMinion(userPrompt string) {
 	fmt.Println(reviewOutput)
 }
 
+func runMinionAttempt(a *agent.Agent, prompt string, attempt, maxAttempts int) bool {
+	if maxAttempts > 1 {
+		fmt.Printf("\n🚀 Minion attempt %d/%d\n\n", attempt, maxAttempts)
+	}
+
+	outChan := make(chan agent.AgentEvent)
+	go a.RunStream(prompt, outChan)
+
+	var hasError bool
+	for ev := range outChan {
+		switch ev.Type {
+		case "status":
+			fmt.Printf("ℹ️  %s\n", ev.Content)
+		case "tool_call":
+			fmt.Printf("🔧 Executing: %s\n", ev.ToolName)
+		case "tool_result":
+			if verbose {
+				fmt.Printf("✅ Tool %s finished\n", ev.ToolName)
+			}
+		case "text":
+			fmt.Print(ev.Content)
+		case "diff":
+			fmt.Printf("\n%s\n\n", ev.Content)
+		case "error":
+			fmt.Printf("\n❌ Error: %s\n", ev.Content)
+			hasError = true
+		case "done":
+			fmt.Println("\n🏁 Minion finished.")
+		}
+	}
+	return hasError
+}
+
 type prReviewerRole struct {
 	Name  string
 	Focus string
@@ -190,6 +204,21 @@ type prReviewerResult struct {
 	role    string
 	content string
 	err     error
+}
+
+type reviewerStatus string
+
+const (
+	reviewerStatusOK     reviewerStatus = "ok"
+	reviewerStatusFailed reviewerStatus = "failed"
+	reviewerStatusEmpty  reviewerStatus = "empty"
+)
+
+type prReviewerOutcome struct {
+	role    string
+	status  reviewerStatus
+	content string
+	err     string
 }
 
 func runPRReviewerCouncil(cwd, apiKey, prNumber string) (string, error) {
@@ -232,16 +261,37 @@ func runPRReviewerCouncil(cwd, apiKey, prNumber string) (string, error) {
 		close(resultsCh)
 	}()
 
-	findings := map[string]string{}
+	outcomes := map[string]prReviewerOutcome{}
+	successCount := 0
 	for res := range resultsCh {
 		if res.err != nil {
-			findings[res.role] = fmt.Sprintf("Reviewer failed: %v", res.err)
+			outcomes[res.role] = prReviewerOutcome{
+				role:   res.role,
+				status: reviewerStatusFailed,
+				err:    res.err.Error(),
+			}
 			continue
 		}
-		findings[res.role] = strings.TrimSpace(res.content)
+		content := strings.TrimSpace(res.content)
+		if content == "" {
+			outcomes[res.role] = prReviewerOutcome{
+				role:   res.role,
+				status: reviewerStatusEmpty,
+			}
+			continue
+		}
+		successCount++
+		outcomes[res.role] = prReviewerOutcome{
+			role:    res.role,
+			status:  reviewerStatusOK,
+			content: content,
+		}
 	}
 
-	return runProductLeadSynthesis(cwd, apiKey, prNumber, findings)
+	if successCount == 0 {
+		return "", fmt.Errorf("all PR council reviewers failed or returned empty output")
+	}
+	return runProductLeadSynthesis(cwd, apiKey, prNumber, outcomes)
 }
 
 func runSinglePRReviewer(cwd, apiKey, prNumber, prContext string, role prReviewerRole) (string, error) {
@@ -286,7 +336,7 @@ func runSinglePRReviewer(cwd, apiKey, prNumber, prContext string, role prReviewe
 	return strings.TrimSpace(b.String()), nil
 }
 
-func runProductLeadSynthesis(cwd, apiKey, prNumber string, findings map[string]string) (string, error) {
+func runProductLeadSynthesis(cwd, apiKey, prNumber string, findings map[string]prReviewerOutcome) (string, error) {
 	cfg := GetAgentConfig()
 	cfg.Unattended = true
 	cfg.Council.Enabled = false
@@ -340,7 +390,7 @@ func resolvePRReviewTarget(explicitPR, discoveredPR string) string {
 	return strings.TrimSpace(discoveredPR)
 }
 
-func formatReviewerFindings(findings map[string]string) string {
+func formatReviewerFindings(findings map[string]prReviewerOutcome) string {
 	roles := make([]string, 0, len(findings))
 	for role := range findings {
 		roles = append(roles, role)
@@ -349,10 +399,22 @@ func formatReviewerFindings(findings map[string]string) string {
 
 	var b strings.Builder
 	for _, role := range roles {
+		outcome := findings[role]
 		b.WriteString("## ")
 		b.WriteString(role)
 		b.WriteString("\n")
-		b.WriteString(strings.TrimSpace(findings[role]))
+		b.WriteString("status: ")
+		b.WriteString(string(outcome.status))
+		b.WriteString("\n")
+		switch outcome.status {
+		case reviewerStatusOK:
+			b.WriteString(strings.TrimSpace(outcome.content))
+		case reviewerStatusFailed:
+			b.WriteString("failure_reason: ")
+			b.WriteString(strings.TrimSpace(outcome.err))
+		case reviewerStatusEmpty:
+			b.WriteString("reviewer returned no findings")
+		}
 		b.WriteString("\n\n")
 	}
 	return strings.TrimSpace(b.String())

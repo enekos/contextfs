@@ -697,7 +697,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.viewport.GotoBottom()
 
 					// Simple spinner update while it happens synchronously
-					err := m.agent.CompactContext()
+					err := m.agent.CompactContext(context.Background())
 					if err != nil {
 						m.messages = append(m.messages, ChatMessage{Role: "Error", Content: "Failed to compact: " + err.Error()})
 					} else {

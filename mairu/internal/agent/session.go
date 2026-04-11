@@ -366,7 +366,7 @@ func (a *Agent) GetHistoryText() []string {
 	return lines
 }
 
-func (a *Agent) CompactContext() error {
+func (a *Agent) CompactContext(parent context.Context) error {
 	history := a.llm.GetHistory()
 
 	// If history is small, don't bother
@@ -416,21 +416,26 @@ func (a *Agent) CompactContext() error {
 		}
 	}
 
-	prompt := prompts.Render("session_summarize", struct {
+	prompt, err := prompts.GetForProject("session_summarize", struct {
 		Conversation string
 	}{
 		Conversation: conversation,
-	})
+	}, a.root)
+	if err != nil {
+		return err
+	}
 
-	// We use a fresh LLM instance to summarize it to avoid messing up current history
-	// Need to import context and llm if they aren't already imported
-	tempLLM, err := llm.NewGeminiProvider(context.Background(), a.apiKey)
+	compactionCtx, cancel := context.WithTimeout(parent, a.reliability.withDefaults().CompactionTimeout)
+	defer cancel()
+
+	// Use a fresh LLM instance to summarize without mutating the active session.
+	tempLLM, err := llm.NewGeminiProvider(compactionCtx, a.apiKey)
 	if err != nil {
 		return err
 	}
 	defer tempLLM.Close()
 
-	resp, err := tempLLM.ChatStream(context.Background(), prompt).Next()
+	resp, err := tempLLM.ChatStream(compactionCtx, prompt).Next()
 	if err != nil || len(resp.Candidates) == 0 {
 		return err
 	}

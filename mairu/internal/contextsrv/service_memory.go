@@ -45,20 +45,28 @@ func (s *AppService) CreateMemory(input MemoryCreateInput) (Memory, error) {
 					candidates = append(candidates, llm.RouterCandidate{ID: id, Content: content, Score: score})
 				}
 			}
-			action, err := llm.DecideMemoryAction(context.Background(), s.llmClient, input.Content, candidates)
-			if err == nil {
+			routerCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			action, err := llm.DecideMemoryAction(routerCtx, s.llmClient, input.Content, candidates)
+			cancel()
+			if err != nil {
+				slog.Warn("memory router fallback to create", "error", err, "project", input.Project, "candidate_count", len(candidates))
+			} else {
 				if action.Action == "skip" {
 					return Memory{ID: "skipped"}, fmt.Errorf("skipped: %s", action.Reason)
 				}
 				if action.Action == "update" && action.TargetID != "" {
-					updated, err := s.UpdateMemory(MemoryUpdateInput{
+					updated, updateErr := s.UpdateMemory(MemoryUpdateInput{
 						ID:         action.TargetID,
 						Content:    action.MergedContent,
 						Importance: input.Importance,
 					})
-					if err == nil {
+					if updateErr == nil {
 						return updated, nil
 					}
+					slog.Warn("memory router update failed; fallback to create", "target_id", action.TargetID, "error", updateErr)
+				}
+				if action.Action == "create" && strings.TrimSpace(action.Reason) != "" {
+					slog.Warn("memory router selected create fallback", "reason", action.Reason)
 				}
 			}
 		}

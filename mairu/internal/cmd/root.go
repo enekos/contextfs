@@ -10,6 +10,7 @@ import (
 	"mairu/internal/logger"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -90,17 +91,40 @@ func GetAgentConfig() agent.Config {
 
 	app := GetLocalApp()
 	var repo agent.HistoryLogger
+	var locator agent.SymbolLocator
+	var utcpProviders []string
 	if app != nil {
 		repo = app.Repo()
+		locator = app.SymbolLocator()
+	}
+
+	reliability := agent.DefaultReliabilityConfig()
+	if cfg != nil {
+		utcpProviders = cfg.Tools.UTCPProviders
+		reliability.StreamRetry.MaxAttempts = cfg.Agent.StreamMaxAttempts
+		reliability.StreamRetry.BaseDelay = parseDurationOrDefault(cfg.Agent.StreamBaseDelay, reliability.StreamRetry.BaseDelay)
+		reliability.StreamRetry.MaxDelay = parseDurationOrDefault(cfg.Agent.StreamMaxDelay, reliability.StreamRetry.MaxDelay)
+		reliability.StreamRetry.AttemptTimeout = parseDurationOrDefault(cfg.Agent.StreamAttemptTTL, reliability.StreamRetry.AttemptTimeout)
+		reliability.CouncilTimeout = parseDurationOrDefault(cfg.Agent.CouncilTimeout, reliability.CouncilTimeout)
+		reliability.CompactionTimeout = parseDurationOrDefault(cfg.Agent.CompactionTimeout, reliability.CompactionTimeout)
 	}
 
 	return agent.Config{
-		SymbolLocator:   GetLocalApp().SymbolLocator(),
+		SymbolLocator:   locator,
 		HistoryLogger:   repo,
 		Interceptors:    interceptors,
-		UTCPProviders:   cfg.Tools.UTCPProviders,
+		UTCPProviders:   utcpProviders,
 		AgentSystemData: agentSystemData,
+		Reliability:     reliability,
 	}
+}
+
+func parseDurationOrDefault(raw string, fallback time.Duration) time.Duration {
+	d, err := time.ParseDuration(strings.TrimSpace(raw))
+	if err != nil || d <= 0 {
+		return fallback
+	}
+	return d
 }
 
 func runHeadless(prompt string) {

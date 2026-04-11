@@ -43,6 +43,12 @@ func TestNormalizeConfig_ClonesSlicesAndMaps(t *testing.T) {
 		Interceptors:    []ToolInterceptor{noopInterceptor{}},
 		UTCPProviders:   []string{"provider-a"},
 		AgentSystemData: map[string]any{"cli_help": "x"},
+		Reliability: ReliabilityConfig{
+			CouncilTimeout: 10,
+			StreamRetry: RetryPolicy{
+				MaxAttempts: 3,
+			},
+		},
 	}
 	got := normalizeConfig(source)
 
@@ -66,6 +72,9 @@ func TestNormalizeConfig_ClonesSlicesAndMaps(t *testing.T) {
 	if got.Council.Roles[0].Name != "Role A" {
 		t.Fatalf("expected copied Council roles to stay unchanged, got %q", got.Council.Roles[0].Name)
 	}
+	if got.Reliability.StreamRetry.MaxAttempts != 3 {
+		t.Fatalf("expected reliability max attempts to remain configured")
+	}
 }
 
 func TestChildConfig_ClonesParentConfig(t *testing.T) {
@@ -80,6 +89,12 @@ func TestChildConfig_ClonesParentConfig(t *testing.T) {
 		},
 		utcpProviders:   []string{"provider-a"},
 		AgentSystemData: map[string]any{"k": "v"},
+		reliability: ReliabilityConfig{
+			CouncilTimeout: 10,
+			StreamRetry: RetryPolicy{
+				MaxAttempts: 3,
+			},
+		},
 	}
 
 	child := parent.childConfig()
@@ -105,6 +120,9 @@ func TestChildConfig_ClonesParentConfig(t *testing.T) {
 	}
 	if child.Council.Roles[0].Name != "Role A" {
 		t.Fatalf("expected copied Council roles, got %q", child.Council.Roles[0].Name)
+	}
+	if child.Reliability.StreamRetry.MaxAttempts != 3 {
+		t.Fatalf("expected child reliability config to propagate")
 	}
 
 	_, _ = noopInterceptor{}.PreExecute(ToolContext{Context: context.Background()}, "tool", map[string]any{})

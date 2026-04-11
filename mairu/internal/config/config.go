@@ -20,6 +20,16 @@ type Config struct {
 	Enricher  EnricherConfig  `mapstructure:"enricher"`
 	Security  SecurityConfig  `mapstructure:"security"`
 	Tools     ToolsConfig     `mapstructure:"tools"`
+	Agent     AgentConfig     `mapstructure:"agent"`
+}
+
+type AgentConfig struct {
+	StreamMaxAttempts int    `mapstructure:"stream_max_attempts"`
+	StreamBaseDelay   string `mapstructure:"stream_base_delay"`
+	StreamMaxDelay    string `mapstructure:"stream_max_delay"`
+	StreamAttemptTTL  string `mapstructure:"stream_attempt_timeout"`
+	CouncilTimeout    string `mapstructure:"council_timeout"`
+	CompactionTimeout string `mapstructure:"compaction_timeout"`
 }
 
 type ToolsConfig struct {
@@ -227,6 +237,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("security.blocked_paths", []string{
 		".git/", ".mairu/", ".env",
 	})
+
+	// Agent reliability
+	v.SetDefault("agent.stream_max_attempts", 2)
+	v.SetDefault("agent.stream_base_delay", "750ms")
+	v.SetDefault("agent.stream_max_delay", "5s")
+	v.SetDefault("agent.stream_attempt_timeout", "8m")
+	v.SetDefault("agent.council_timeout", "90s")
+	v.SetDefault("agent.compaction_timeout", "45s")
 }
 
 func bindLegacyEnv(v *viper.Viper) {
