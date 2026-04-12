@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	kimiDefaultBaseURL = "https://api.moonshot.cn/v1"
+	kimiDefaultBaseURL = "https://api.moonshot.ai/v1"
 	kimiDefaultModel   = "kimi-k2.5"
 )
 

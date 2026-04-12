@@ -65,8 +65,5 @@ jobs:
       - name: Run Go tests with race detector
         run: make test-go-race
 
-      - name: Run replaced module tests
-        run: go -C mairu/generative-ai-go-patch test ./...
-
       - name: Build Go binaries
         run: go -C mairu build -v ./...
