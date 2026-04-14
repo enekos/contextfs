@@ -20,6 +20,7 @@ type Config struct {
 	KimiAPIKey        string
 	LLMProvider       string // "gemini" or "kimi"
 	LLMModel          string
+	LLMBaseURL        string
 	AuthToken         string
 	EnableProjector   bool
 	ProjectorEvery    time.Duration
@@ -65,9 +66,10 @@ func NewApp(cfg Config) (*App, error) {
 	// Initialize LLM provider
 	var llmProvider llm.Provider
 	providerCfg := llm.ProviderConfig{
-		Type:   llm.ProviderType(cfg.LLMProvider),
-		APIKey: cfg.GeminiAPIKey,
-		Model:  cfg.LLMModel,
+		Type:    llm.ProviderType(cfg.LLMProvider),
+		APIKey:  cfg.GeminiAPIKey,
+		Model:   cfg.LLMModel,
+		BaseURL: cfg.LLMBaseURL,
 	}
 	if providerCfg.Type == "" {
 		providerCfg.Type = llm.ProviderGemini

@@ -34,7 +34,11 @@ func (f *localServiceFactory) init() {
 		SQLiteDSN:         appCfg.Server.SQLiteDSN,
 		MeiliURL:          appCfg.API.MeiliURL,
 		MeiliAPIKey:       appCfg.API.MeiliAPIKey,
-		GeminiAPIKey:      GetAPIKey(), // use shared api key resolution
+		GeminiAPIKey:      appCfg.API.GeminiAPIKey,
+		KimiAPIKey:        appCfg.API.KimiAPIKey,
+		LLMProvider:       appCfg.LLM.Provider,
+		LLMModel:          appCfg.LLM.Model,
+		LLMBaseURL:        appCfg.LLM.BaseURL,
 		AuthToken:         appCfg.Server.AuthToken,
 		EnableProjector:   false, // CLI tools generally shouldn't run background loop
 		ProjectorBatch:    appCfg.Server.ProjectorBatch,

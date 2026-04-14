@@ -165,3 +165,16 @@ func toolsToGenaiFunctionDeclarations(tools []Tool) []*genai.FunctionDeclaration
 	}
 	return funcDecls
 }
+
+// genaiFunctionDeclarationsToTools converts genai FunctionDeclarations to our Tool format
+func genaiFunctionDeclarationsToTools(funcDecls []*genai.FunctionDeclaration) []Tool {
+	tools := make([]Tool, 0, len(funcDecls))
+	for _, fd := range funcDecls {
+		tools = append(tools, Tool{
+			Name:        fd.Name,
+			Description: fd.Description,
+			Parameters:  ToJSONSchema(fd.Parameters),
+		})
+	}
+	return tools
+}

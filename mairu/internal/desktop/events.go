@@ -60,9 +60,10 @@ func (a *App) getOrCreateAgent(session string) (*agent.Agent, error) {
 	}
 
 	providerCfg := llm.ProviderConfig{
-		Type:   llm.ProviderType(a.cfg.LLM.Provider),
-		APIKey: a.cfg.API.GeminiAPIKey,
-		Model:  a.cfg.LLM.Model,
+		Type:    llm.ProviderType(a.cfg.LLM.Provider),
+		APIKey:  a.cfg.API.GeminiAPIKey,
+		Model:   a.cfg.LLM.Model,
+		BaseURL: a.cfg.LLM.BaseURL,
 	}
 	if providerCfg.Type == "" {
 		providerCfg.Type = llm.ProviderGemini

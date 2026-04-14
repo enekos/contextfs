@@ -22,6 +22,7 @@ type GeminiProvider struct {
 	isNew        bool
 	modelName    string
 	dynamicTools []*genai.FunctionDeclaration
+	baseTools    []*genai.FunctionDeclaration
 }
 
 func applySafetySettings(model *genai.GenerativeModel) {
@@ -248,6 +249,19 @@ func (g *GeminiProvider) SendFunctionResponsesStream(ctx context.Context, respon
 	}
 	iter := g.session.SendMessageStream(ctx, parts...)
 	return newGeminiStreamIterator(iter)
+}
+
+func (g *GeminiProvider) GetTools() []Tool {
+	return genaiFunctionDeclarationsToTools(g.baseTools)
+}
+
+func (g *GeminiProvider) SetTools(tools []Tool) {
+	funcDecls := toolsToGenaiFunctionDeclarations(tools)
+	g.baseTools = funcDecls
+	g.model.Tools = []*genai.Tool{{FunctionDeclarations: funcDecls}}
+	if len(g.dynamicTools) > 0 {
+		g.model.Tools[0].FunctionDeclarations = append(g.model.Tools[0].FunctionDeclarations, g.dynamicTools...)
+	}
 }
 
 func (g *GeminiProvider) Close() error {

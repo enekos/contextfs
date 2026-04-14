@@ -44,8 +44,9 @@ func GetLLMProviderConfig() llm.ProviderConfig {
 	}
 
 	cfg := llm.ProviderConfig{
-		Type:  providerType,
-		Model: appConfig.LLM.Model,
+		Type:    providerType,
+		Model:   appConfig.LLM.Model,
+		BaseURL: appConfig.LLM.BaseURL,
 	}
 
 	// Set API key based on provider

@@ -15,6 +15,7 @@ import (
 
 const (
 	kimiDefaultBaseURL = "https://api.moonshot.ai/v1"
+	kimiCodeBaseURL    = "https://api.kimi.com/coding/v1"
 	kimiDefaultModel   = "kimi-k2.5"
 )
 
@@ -28,7 +29,11 @@ type KimiClient struct {
 // NewKimiClient creates a new Kimi API client
 func NewKimiClient(apiKey string, baseURL string) *KimiClient {
 	if baseURL == "" {
-		baseURL = kimiDefaultBaseURL
+		if strings.HasPrefix(apiKey, "sk-kimi-") {
+			baseURL = kimiCodeBaseURL
+		} else {
+			baseURL = kimiDefaultBaseURL
+		}
 	}
 	return &KimiClient{
 		apiKey:  apiKey,
@@ -60,6 +65,9 @@ func (c *KimiClient) ChatCompletion(ctx context.Context, req KimiChatRequest) (*
 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	if strings.Contains(strings.ToLower(c.baseURL), "api.kimi.com") {
+		httpReq.Header.Set("User-Agent", "KimiCLI/1.30.0")
+	}
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -111,6 +119,9 @@ func (c *KimiClient) ChatCompletionStream(ctx context.Context, req KimiChatReque
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
 	httpReq.Header.Set("Accept", "text/event-stream")
+	if strings.Contains(strings.ToLower(c.baseURL), "api.kimi.com") {
+		httpReq.Header.Set("User-Agent", "KimiCLI/1.30.0")
+	}
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {

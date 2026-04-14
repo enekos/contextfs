@@ -66,6 +66,16 @@ func (k *KimiProvider) SetModel(modelName string) {
 	k.model = modelName
 }
 
+// GetTools returns the currently configured base tools
+func (k *KimiProvider) GetTools() []Tool {
+	return append([]Tool(nil), k.tools...)
+}
+
+// SetTools replaces the currently configured base tools
+func (k *KimiProvider) SetTools(tools []Tool) {
+	k.tools = tools
+}
+
 // IsNewSession returns true if no messages have been exchanged yet
 func (k *KimiProvider) IsNewSession() bool {
 	return k.isNewSession
@@ -142,7 +152,16 @@ func (k *KimiProvider) ChatStream(ctx context.Context, prompt string) (ChatStrea
 		req.Tools = k.buildKimiTools()
 	}
 
-	return k.client.ChatCompletionStream(ctx, req)
+	inner, err := k.client.ChatCompletionStream(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &kimiHistoryTrackingIterator{
+		inner:    inner,
+		provider: k,
+		prompt:   prompt,
+	}, nil
 }
 
 // SendFunctionResponseStream sends a single tool response back to the model
@@ -616,4 +635,57 @@ func (k *KimiProvider) convertToolCallsToKimi(calls []ToolCall) []KimiToolCall {
 		})
 	}
 	return kimiCalls
+}
+
+// kimiHistoryTrackingIterator wraps a Kimi stream iterator and updates the
+// provider's history with the user prompt and assistant response once the
+// stream finishes. This is required because Kimi's history is managed manually
+// in the provider, unlike Gemini which manages it inside the chat session.
+type kimiHistoryTrackingIterator struct {
+	inner     ChatStreamIterator
+	provider  *KimiProvider
+	prompt    string
+	content   string
+	toolCalls []ToolCall
+	committed bool
+}
+
+func (k *kimiHistoryTrackingIterator) Next() (ChatStreamChunk, error) {
+	chunk, err := k.inner.Next()
+	if err != nil {
+		k.commit()
+		return chunk, err
+	}
+
+	k.content += chunk.Content
+	if len(chunk.ToolCalls) > 0 {
+		k.toolCalls = append(k.toolCalls, chunk.ToolCalls...)
+	}
+
+	if chunk.FinishReason == "stop" || chunk.FinishReason == "length" {
+		k.commit()
+	}
+
+	return chunk, nil
+}
+
+func (k *kimiHistoryTrackingIterator) Done() bool {
+	return k.inner.Done()
+}
+
+func (k *kimiHistoryTrackingIterator) commit() {
+	if k.committed {
+		return
+	}
+	k.committed = true
+
+	// Record the user turn
+	k.provider.history = append(k.provider.history, Message{Role: "user", Content: k.prompt})
+
+	// Record the assistant turn
+	k.provider.history = append(k.provider.history, Message{
+		Role:      "assistant",
+		Content:   k.content,
+		ToolCalls: k.toolCalls,
+	})
 }

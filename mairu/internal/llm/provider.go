@@ -43,6 +43,12 @@ type Provider interface {
 	// SetupTools configures the available tools for the model
 	SetupTools()
 
+	// GetTools returns the currently configured base tools
+	GetTools() []Tool
+
+	// SetTools replaces the currently configured base tools
+	SetTools(tools []Tool)
+
 	// RegisterDynamicTools registers additional tools at runtime
 	RegisterDynamicTools(tools []Tool)
 
