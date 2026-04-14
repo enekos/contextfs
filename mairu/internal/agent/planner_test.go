@@ -20,6 +20,8 @@ func TestIsComplexPrompt(t *testing.T) {
 		{"implementation keyword", "implement a new auth middleware", true},
 		{"search keyword", "search for all usages of this function", true},
 		{"and then keyword", "do this and then do that", true},
+		{"weak indicator alone", "create a file", false},
+		{"weak + strong combined", "create a file and then test it", true},
 	}
 
 	for _, tt := range tests {

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"mairu/internal/llm"
+	"mairu/internal/prompts"
 )
 
 // PlanResult contains the output of the planner.
@@ -25,25 +27,39 @@ func NewPlanner(provider llm.Provider) *Planner {
 	return &Planner{provider: provider}
 }
 
+var (
+	strongComplexityIndicators = []*regexp.Regexp{
+		regexp.MustCompile(`\b(and then|after that|first|second|third|finally|next|subsequently|before|then)\b`),
+		regexp.MustCompile(`\b(refactor|implement|build)\b`),
+		regexp.MustCompile(`\b(search for|find all|update every)\b`),
+	}
+	weakComplexityIndicators = []*regexp.Regexp{
+		regexp.MustCompile(`\b(create a|write a)\b`),
+	}
+)
+
 // isComplexPrompt uses a lightweight heuristic to decide whether planning is worthwhile.
+// It scores the prompt on length and presence of complexity indicators.
 func isComplexPrompt(prompt string) bool {
-	words := strings.Fields(prompt)
-	if len(words) > 50 {
-		return true
-	}
 	lower := strings.ToLower(prompt)
-	keywords := []string{
-		"and then", "after that", "first ", "second ", "third ",
-		"finally", "next ", "subsequently", "before ", "then ",
-		"search for", "find all", "update every", "refactor",
-		"implement", "create a", "build a", "write a",
+	score := 0
+
+	if len(strings.Fields(prompt)) > 50 {
+		score += 2
 	}
-	for _, kw := range keywords {
-		if strings.Contains(lower, kw) {
-			return true
+
+	for _, re := range strongComplexityIndicators {
+		if re.MatchString(lower) {
+			score += 2
 		}
 	}
-	return false
+	for _, re := range weakComplexityIndicators {
+		if re.MatchString(lower) {
+			score += 1
+		}
+	}
+
+	return score >= 2
 }
 
 // Plan analyzes the prompt and returns a subset of relevant tools.
@@ -63,17 +79,16 @@ func (p *Planner) Plan(ctx context.Context, prompt string) (*PlanResult, error) 
 		fmt.Fprintf(&toolDescriptions, "- %s: %s\n", t.Name, t.Description)
 	}
 
-	plannerPrompt := fmt.Sprintf(`You are a tool-routing planner. Given the user request below, select the MINIMAL set of tools needed to complete the task.
-
-Available tools:
-%s
-User request: %s
-
-Respond with ONLY a JSON object in this exact format:
-{"tools": ["tool_name_1", "tool_name_2"]}
-
-If the task is conversational and requires no tools, respond with: {"tools": []}
-`, toolDescriptions.String(), prompt)
+	plannerPrompt, err := prompts.Get("tool_planner", struct {
+		ToolDescriptions string
+		Prompt           string
+	}{
+		ToolDescriptions: toolDescriptions.String(),
+		Prompt:           prompt,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to render planner prompt: %w", err)
+	}
 
 	planCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
