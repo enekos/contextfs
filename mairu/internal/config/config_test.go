@@ -72,6 +72,12 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Embedding.Model != "nomic-embed-text" {
 		t.Errorf("Embedding.Model = %q, want nomic-embed-text", cfg.Embedding.Model)
 	}
+	if cfg.Embedding.Provider != "openai" {
+		t.Errorf("Embedding.Provider = %q, want openai", cfg.Embedding.Provider)
+	}
+	if cfg.Embedding.BaseURL != "http://localhost:11434/v1" {
+		t.Errorf("Embedding.BaseURL = %q, want http://localhost:11434/v1", cfg.Embedding.BaseURL)
+	}
 	if cfg.Output.Format != "table" {
 		t.Errorf("Output.Format = %q, want table", cfg.Output.Format)
 	}
@@ -165,5 +171,20 @@ func TestLoad_LegacyEnvAliases(t *testing.T) {
 	}
 	if cfg.API.MeiliURL != "http://custom:7700" {
 		t.Errorf("MeiliURL = %q, want http://custom:7700", cfg.API.MeiliURL)
+	}
+}
+
+func TestLoad_LegacyOllamaURLAlias(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("MAIRU_OLLAMA_URL", "http://ollama:11434")
+
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Embedding.BaseURL != "http://ollama:11434" {
+		t.Errorf("Embedding.BaseURL = %q, want http://ollama:11434", cfg.Embedding.BaseURL)
 	}
 }

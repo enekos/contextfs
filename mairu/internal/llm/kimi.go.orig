@@ -212,11 +212,7 @@ func (k *KimiProvider) SendFunctionResponseStream(ctx context.Context, name stri
 		return &errorStreamIterator{err: err}
 	}
 
-	return &kimiHistoryTrackingIterator{
-		inner:          iter,
-		provider:       k,
-		skipUserCommit: true,
-	}
+	return iter
 }
 
 // SendFunctionResponsesStream sends multiple tool responses back to the model
@@ -255,11 +251,7 @@ func (k *KimiProvider) SendFunctionResponsesStream(ctx context.Context, response
 		return &errorStreamIterator{err: err}
 	}
 
-	return &kimiHistoryTrackingIterator{
-		inner:          iter,
-		provider:       k,
-		skipUserCommit: true,
-	}
+	return iter
 }
 
 // errorStreamIterator is a stream iterator that returns an error

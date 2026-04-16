@@ -21,12 +21,14 @@ type Config struct {
 	Security  SecurityConfig  `mapstructure:"security"`
 	Tools     ToolsConfig     `mapstructure:"tools"`
 	LLM       LLMConfig       `mapstructure:"llm"`
+	GitIngest GitIngestConfig `mapstructure:"git_ingest"`
 }
 
 type LLMConfig struct {
-	Provider string `mapstructure:"provider"`
-	Model    string `mapstructure:"model"`
-	BaseURL  string `mapstructure:"base_url"`
+	Provider   string `mapstructure:"provider"`
+	Model      string `mapstructure:"model"`
+	BaseURL    string `mapstructure:"base_url"`
+	KimiAPIKey string `mapstructure:"kimi_api_key"`
 }
 
 type ToolsConfig struct {
@@ -51,6 +53,12 @@ type GitIntentConfig struct {
 type ChangeVelocityConfig struct {
 	Enabled      bool `mapstructure:"enabled"`
 	LookbackDays int  `mapstructure:"lookback_days"`
+}
+
+type GitIngestConfig struct {
+	Enabled           bool `mapstructure:"enabled"`
+	LookbackDays      int  `mapstructure:"lookback_days"`
+	MaxFilesPerCommit int  `mapstructure:"max_files_per_commit"`
 }
 
 type APIConfig struct {
@@ -104,10 +112,12 @@ type ServerConfig struct {
 }
 
 type EmbeddingConfig struct {
+	Provider   string `mapstructure:"provider"`
 	Model      string `mapstructure:"model"`
 	Dimensions int    `mapstructure:"dimensions"`
 	CacheSize  int    `mapstructure:"cache_size"`
-	OllamaURL  string `mapstructure:"ollama_url"`
+	BaseURL    string `mapstructure:"base_url"`
+	APIKey     string `mapstructure:"api_key"`
 }
 
 type OutputConfig struct {
@@ -219,10 +229,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.moderation_enabled", false)
 
 	// Embedding
+	v.SetDefault("embedding.provider", "openai")
 	v.SetDefault("embedding.model", "nomic-embed-text")
 	v.SetDefault("embedding.dimensions", 768)
 	v.SetDefault("embedding.cache_size", 256)
-	v.SetDefault("embedding.ollama_url", "http://localhost:11434")
+	v.SetDefault("embedding.base_url", "http://localhost:11434/v1")
 
 	// Output
 	v.SetDefault("output.format", "table")
@@ -234,6 +245,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("enricher.git_intent.max_commits", 20)
 	v.SetDefault("enricher.change_velocity.enabled", true)
 	v.SetDefault("enricher.change_velocity.lookback_days", 180)
+
+	// Git ingest
+	v.SetDefault("git_ingest.enabled", false)
+	v.SetDefault("git_ingest.lookback_days", 30)
+	v.SetDefault("git_ingest.max_files_per_commit", 50)
 
 	// Security
 	v.SetDefault("security.blocked_commands", []string{
@@ -254,7 +270,7 @@ func bindLegacyEnv(v *viper.Viper) {
 		"MEILI_API_KEY":             "api.meili_api_key",
 		"EMBEDDING_MODEL":           "embedding.model",
 		"EMBEDDING_DIM":             "embedding.dimensions",
-		"MAIRU_OLLAMA_URL":          "embedding.ollama_url",
+		"MAIRU_OLLAMA_URL":          "embedding.base_url",
 		"CONTEXT_SERVER_SQLITE_DSN": "server.sqlite_dsn",
 		"CONTEXT_AUTH_TOKEN":        "server.auth_token",
 		"CONTEXT_ENABLE_MODERATION": "server.moderation_enabled",

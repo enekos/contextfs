@@ -109,13 +109,13 @@ func (r *SQLiteRepository) UpdateMemory(ctx context.Context, input MemoryUpdateI
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE memories
-		SET content = COALESCE(NULLIF($2, ''), content),
-		    category = COALESCE(NULLIF($3, ''), category),
-		    owner = COALESCE(NULLIF($4, ''), owner),
-		    importance = CASE WHEN $5 > 0 THEN $5 ELSE importance END,
-		    updated_at = $6
-		WHERE id = $1
-	`, input.ID, input.Content, input.Category, input.Owner, input.Importance, now)
+		SET content = COALESCE(NULLIF(?, ''), content),
+		    category = COALESCE(NULLIF(?, ''), category),
+		    owner = COALESCE(NULLIF(?, ''), owner),
+		    importance = CASE WHEN ? > 0 THEN ? ELSE importance END,
+		    updated_at = ?
+		WHERE id = ?
+	`, input.Content, input.Category, input.Owner, input.Importance, input.Importance, now, input.ID)
 	if err != nil {
 		return Memory{}, err
 	}

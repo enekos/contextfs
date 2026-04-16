@@ -31,6 +31,10 @@ func (r *repoSearchStub) UpdateSkill(ctx context.Context, input SkillUpdateInput
 	return Skill{}, nil
 }
 func (r *repoSearchStub) DeleteSkill(ctx context.Context, id string) error { return nil }
+func (r *repoSearchStub) GetContextNode(ctx context.Context, uri string) (ContextNode, error) {
+	return ContextNode{}, nil
+}
+
 func (r *repoSearchStub) CreateContextNode(ctx context.Context, input ContextCreateInput) (ContextNode, error) {
 	return ContextNode{}, nil
 }

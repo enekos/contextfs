@@ -24,8 +24,14 @@ func runMairu(args ...string) (string, error) {
 
 	cmd := exec.Command("go", append([]string{"run", "./cmd/mairu"}, args...)...)
 	cmd.Dir = pwd
-	out, err := cmd.CombinedOutput()
-	return string(out), err
+	out, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return string(out) + "\n" + string(exitErr.Stderr), err
+		}
+		return string(out), err
+	}
+	return string(out), nil
 }
 
 func TestDockerPsE2E(t *testing.T) {

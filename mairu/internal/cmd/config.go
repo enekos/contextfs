@@ -23,6 +23,9 @@ func GetAPIKey() string {
 		if appConfig.API.KimiAPIKey != "" {
 			return cleanAPIKey(appConfig.API.KimiAPIKey)
 		}
+		if appConfig.LLM.KimiAPIKey != "" {
+			return cleanAPIKey(appConfig.LLM.KimiAPIKey)
+		}
 	default: // gemini
 		if appConfig.API.GeminiAPIKey != "" {
 			return cleanAPIKey(appConfig.API.GeminiAPIKey)
@@ -53,6 +56,9 @@ func GetLLMProviderConfig() llm.ProviderConfig {
 	switch providerType {
 	case llm.ProviderKimi:
 		cfg.APIKey = cleanAPIKey(appConfig.API.KimiAPIKey)
+		if cfg.APIKey == "" {
+			cfg.APIKey = cleanAPIKey(appConfig.LLM.KimiAPIKey)
+		}
 	default:
 		cfg.APIKey = cleanAPIKey(appConfig.API.GeminiAPIKey)
 	}

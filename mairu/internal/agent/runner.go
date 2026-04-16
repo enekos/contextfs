@@ -117,8 +117,9 @@ func (r *Runner) handleIterator(ctx context.Context, iter llm.ChatStreamIterator
 				r.agent.emitLog(outChan, "Executing tool call: %s", call.Name)
 				res := r.agent.executeToolCall(ctx, call, outChan)
 				results[idx] = llm.FunctionResponsePayload{
-					Name:     call.Name,
-					Response: res,
+					Name:       call.Name,
+					ToolCallID: call.ID,
+					Response:   res,
 				}
 				r.agent.emitLog(outChan, "Tool call %s completed", call.Name)
 			}(i, tc)

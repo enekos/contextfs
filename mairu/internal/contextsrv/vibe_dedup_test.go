@@ -34,6 +34,10 @@ func (m *mockRepo) UpdateSkill(ctx context.Context, input SkillUpdateInput) (Ski
 }
 func (m *mockRepo) DeleteSkill(ctx context.Context, id string) error { return nil }
 
+func (m *mockRepo) GetContextNode(ctx context.Context, uri string) (ContextNode, error) {
+	return ContextNode{}, nil
+}
+
 func (m *mockRepo) CreateContextNode(ctx context.Context, input ContextCreateInput) (ContextNode, error) {
 	return ContextNode{URI: input.URI}, nil
 }

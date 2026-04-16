@@ -9,6 +9,9 @@ import (
 
 func (r *SQLiteRepository) CreateContextNode(ctx context.Context, input ContextCreateInput) (ContextNode, error) {
 	now := time.Now().UTC()
+	if input.CreatedAt != nil {
+		now = *input.CreatedAt
+	}
 	reasonsJSON, err := json.Marshal(input.ModerationReasons)
 	if err != nil {
 		return ContextNode{}, fmt.Errorf("marshal moderation reasons: %w", err)
@@ -64,6 +67,26 @@ func (r *SQLiteRepository) CreateContextNode(ctx context.Context, input ContextC
 	}, nil
 }
 
+func (r *SQLiteRepository) GetContextNode(ctx context.Context, uri string) (ContextNode, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT uri, project, parent_uri, name, abstract, overview, content, metadata, moderation_status, moderation_reasons, review_required, created_at, updated_at
+		FROM context_nodes WHERE uri = $1
+	`, uri)
+	var n ContextNode
+	var reasonsRaw []byte
+	var metadataRaw []byte
+	if err := row.Scan(&n.URI, &n.Project, &n.ParentURI, &n.Name, &n.Abstract, &n.Overview, &n.Content, &metadataRaw, &n.ModerationStatus, &reasonsRaw, &n.ReviewRequired, &n.CreatedAt, &n.UpdatedAt); err != nil {
+		return ContextNode{}, err
+	}
+	if err := unmarshalJSONField(reasonsRaw, &n.ModerationReasons); err != nil {
+		return ContextNode{}, fmt.Errorf("unmarshal moderation_reasons for node %s: %w", n.URI, err)
+	}
+	if err := unmarshalJSONField(metadataRaw, &n.Metadata); err != nil {
+		return ContextNode{}, fmt.Errorf("unmarshal metadata for node %s: %w", n.URI, err)
+	}
+	return n, nil
+}
+
 func (r *SQLiteRepository) ListContextNodes(ctx context.Context, project string, parentURI *string, limit int) ([]ContextNode, error) {
 	if limit <= 0 {
 		limit = 200
@@ -115,14 +138,14 @@ func (r *SQLiteRepository) UpdateContextNode(ctx context.Context, input ContextU
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE context_nodes
-		SET name = COALESCE(NULLIF($2, ''), name),
-		    abstract = COALESCE(NULLIF($3, ''), abstract),
-		    overview = COALESCE($4, overview),
-		    content = COALESCE($5, content),
-		    updated_at = $6,
+		SET name = COALESCE(NULLIF(?, ''), name),
+		    abstract = COALESCE(NULLIF(?, ''), abstract),
+		    overview = COALESCE(?, overview),
+		    content = COALESCE(?, content),
+		    updated_at = ?,
 		    version = version + 1
-		WHERE uri = $1
-	`, input.URI, input.Name, input.Abstract, input.Overview, input.Content, now)
+		WHERE uri = ?
+	`, input.Name, input.Abstract, input.Overview, input.Content, now, input.URI)
 	if err != nil {
 		return ContextNode{}, err
 	}

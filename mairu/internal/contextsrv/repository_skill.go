@@ -89,11 +89,11 @@ func (r *SQLiteRepository) UpdateSkill(ctx context.Context, input SkillUpdateInp
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE skills
-		SET name = COALESCE(NULLIF($2, ''), name),
-		    description = COALESCE(NULLIF($3, ''), description),
-		    updated_at = $4
-		WHERE id = $1
-	`, input.ID, input.Name, input.Description, now)
+		SET name = COALESCE(NULLIF(?, ''), name),
+		    description = COALESCE(NULLIF(?, ''), description),
+		    updated_at = ?
+		WHERE id = ?
+	`, input.Name, input.Description, now, input.ID)
 	if err != nil {
 		return Skill{}, err
 	}

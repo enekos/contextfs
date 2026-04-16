@@ -25,6 +25,7 @@ func NewGitCmd() *cobra.Command {
 		Short: "AI-Optimized Git helpers",
 	}
 	cmd.AddCommand(NewGitSummaryCmd())
+	cmd.AddCommand(NewGitIngestCmd())
 	return cmd
 }
 

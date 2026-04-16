@@ -25,6 +25,9 @@ type ProviderConfig struct {
 type Message struct {
 	Role    string // "system", "user", "assistant", "tool"
 	Content string
+	// ReasoningContent is populated when Role is "assistant" and the model
+	// emitted reasoning tokens (e.g. Kimi kimi-for-coding).
+	ReasoningContent string
 	// ToolCalls is populated when Role is "assistant" and the model wants to call tools
 	ToolCalls []ToolCall
 	// ToolCallID is populated when Role is "tool" - matches the ID from ToolCalls
@@ -69,9 +72,10 @@ const (
 
 // ChatResponse represents a non-streaming chat response
 type ChatResponse struct {
-	Content      string
-	ToolCalls    []ToolCall
-	FinishReason string // "stop", "tool_calls", "length", etc.
+	Content          string
+	ReasoningContent string
+	ToolCalls        []ToolCall
+	FinishReason     string // "stop", "tool_calls", "length", etc.
 }
 
 // ChatStreamIterator represents a streaming chat response iterator
@@ -84,15 +88,17 @@ type ChatStreamIterator interface {
 
 // ChatStreamChunk represents a single chunk from a streaming response
 type ChatStreamChunk struct {
-	Content      string
-	ToolCalls    []ToolCall // Partial tool calls may accumulate
-	FinishReason string
+	Content          string
+	ReasoningContent string
+	ToolCalls        []ToolCall // Partial tool calls may accumulate
+	FinishReason     string
 }
 
 // FunctionResponsePayload represents a tool/function response to send back to the model
 type FunctionResponsePayload struct {
-	Name     string
-	Response map[string]any
+	Name       string
+	ToolCallID string
+	Response   map[string]any
 }
 
 // CachingProvider is an optional interface for providers that support prompt caching

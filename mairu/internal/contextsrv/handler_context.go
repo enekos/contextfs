@@ -8,13 +8,14 @@ import (
 
 func (h *Handler) createContext(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		URI       string  `json:"uri"`
-		Project   string  `json:"project"`
-		ParentURI *string `json:"parent_uri"`
-		Name      string  `json:"name"`
-		Abstract  string  `json:"abstract"`
-		Overview  string  `json:"overview"`
-		Content   string  `json:"content"`
+		URI       string         `json:"uri"`
+		Project   string         `json:"project"`
+		ParentURI *string        `json:"parent_uri"`
+		Name      string         `json:"name"`
+		Abstract  string         `json:"abstract"`
+		Overview  string         `json:"overview"`
+		Content   string         `json:"content"`
+		Metadata  map[string]any `json:"metadata"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSONErrorString(w, http.StatusBadRequest, "invalid request body")
@@ -28,6 +29,7 @@ func (h *Handler) createContext(w http.ResponseWriter, r *http.Request) {
 		Abstract:  req.Abstract,
 		Overview:  req.Overview,
 		Content:   req.Content,
+		Metadata:  marshalMetadata(req.Metadata),
 	})
 	if err != nil {
 		if errors.Is(err, ErrModerationRejected) {

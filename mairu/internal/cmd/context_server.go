@@ -41,7 +41,9 @@ func NewContextServerCmd() *cobra.Command {
 				EnableProjector:   enableProjector,
 				ProjectorBatch:    appCfg.Server.ProjectorBatch,
 				ModerationEnabled: appCfg.Server.ModerationEnabled,
-				OllamaURL:         appCfg.Embedding.OllamaURL,
+				EmbeddingProvider: appCfg.Embedding.Provider,
+				EmbeddingBaseURL:  appCfg.Embedding.BaseURL,
+				EmbeddingAPIKey:   appCfg.Embedding.APIKey,
 				EmbeddingModel:    appCfg.Embedding.Model,
 			}
 

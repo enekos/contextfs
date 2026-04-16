@@ -17,11 +17,12 @@ type KimiChatRequest struct {
 
 // KimiMessage represents a message in the chat
 type KimiMessage struct {
-	Role       string         `json:"role"`
-	Content    string         `json:"content"`
-	ToolCalls  []KimiToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string         `json:"tool_call_id,omitempty"`
-	Name       string         `json:"name,omitempty"`
+	Role             string         `json:"role"`
+	Content          string         `json:"content"`
+	ReasoningContent string         `json:"reasoning_content,omitempty"`
+	ToolCalls        []KimiToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string         `json:"tool_call_id,omitempty"`
+	Name             string         `json:"name,omitempty"`
 }
 
 // KimiTool represents a tool definition
@@ -39,6 +40,7 @@ type KimiFunctionDef struct {
 
 // KimiToolCall represents a tool invocation
 type KimiToolCall struct {
+	Index    int              `json:"index"`
 	ID       string           `json:"id"`
 	Type     string           `json:"type"`
 	Function KimiFunctionCall `json:"function"`

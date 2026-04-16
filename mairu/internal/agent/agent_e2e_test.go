@@ -113,7 +113,11 @@ func (m *mockProvider) SendFunctionResponseStream(ctx context.Context, name stri
 
 func (m *mockProvider) SendFunctionResponsesStream(ctx context.Context, responses []llm.FunctionResponsePayload) llm.ChatStreamIterator {
 	for _, r := range responses {
-		m.history = append(m.history, llm.Message{Role: "tool", ToolCallID: r.Name, Content: fmt.Sprintf("%v", r.Response)})
+		toolCallID := r.ToolCallID
+		if toolCallID == "" {
+			toolCallID = r.Name
+		}
+		m.history = append(m.history, llm.Message{Role: "tool", ToolCallID: toolCallID, Content: fmt.Sprintf("%v", r.Response)})
 	}
 	var content string
 	var toolCalls []llm.ToolCall

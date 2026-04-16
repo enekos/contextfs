@@ -11,6 +11,13 @@ import (
 	"mairu/internal/llm"
 )
 
+func (s *AppService) GetContextNode(uri string) (ContextNode, error) {
+	if s.repo == nil {
+		return ContextNode{}, fmt.Errorf("repository not available")
+	}
+	return s.repo.GetContextNode(context.Background(), uri)
+}
+
 func (s *AppService) CreateContextNode(input ContextCreateInput) (ContextNode, error) {
 	if strings.TrimSpace(input.URI) == "" || strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Abstract) == "" {
 		return ContextNode{}, fmt.Errorf("uri, name, and abstract are required")
@@ -66,6 +73,10 @@ func (s *AppService) CreateContextNode(input ContextCreateInput) (ContextNode, e
 	}
 
 	if s.repo == nil {
+		now := time.Now()
+		if input.CreatedAt != nil {
+			now = *input.CreatedAt
+		}
 		out := ContextNode{
 			URI:               input.URI,
 			Project:           input.Project,
@@ -77,8 +88,8 @@ func (s *AppService) CreateContextNode(input ContextCreateInput) (ContextNode, e
 			ModerationStatus:  input.ModerationStatus,
 			ModerationReasons: input.ModerationReasons,
 			ReviewRequired:    input.ReviewRequired,
-			CreatedAt:         time.Now(),
-			UpdatedAt:         time.Now(),
+			CreatedAt:         now,
+			UpdatedAt:         now,
 		}
 		if s.searchBackend != nil {
 			if mIdx, ok := s.searchBackend.(*MeiliIndexer); ok {

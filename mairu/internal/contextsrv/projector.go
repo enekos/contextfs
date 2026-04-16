@@ -49,9 +49,9 @@ func (r *SQLiteRepository) MarkOutboxDone(ctx context.Context, id int64) error {
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE search_outbox
-		SET status = 'done', updated_at = $2
-		WHERE id = $1
-	`, id, now)
+		SET status = 'done', updated_at = ?
+		WHERE id = ?
+	`, now, id)
 	return err
 }
 
@@ -64,13 +64,13 @@ func (r *SQLiteRepository) MarkOutboxFailed(ctx context.Context, id int64, retry
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE search_outbox
-		SET status = $2,
-			retry_count = $3,
-			last_error = $4,
-			next_attempt_at = $5,
-			updated_at = $6
-		WHERE id = $1
-	`, id, status, retryCount, truncate(lastErr, 800), nextAttempt, now)
+		SET status = ?,
+			retry_count = ?,
+			last_error = ?,
+			next_attempt_at = ?,
+			updated_at = ?
+		WHERE id = ?
+	`, status, retryCount, truncate(lastErr, 800), nextAttempt, now, id)
 	return err
 }
 

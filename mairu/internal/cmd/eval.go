@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"mairu/internal/config"
 	"mairu/internal/contextsrv"
 	"mairu/internal/eval"
 	"mairu/internal/llm"
@@ -56,7 +57,14 @@ func NewEvalCmd() *cobra.Command {
 				return fmt.Errorf("failed to connect to db: %w", err)
 			}
 
-			embedder := llm.NewOllamaEmbedder(os.Getenv("EMBEDDING_MODEL"))
+			embedder, err := llm.NewEmbedder(config.EmbeddingConfig{
+				Provider: os.Getenv("EMBEDDING_PROVIDER"),
+				Model:    os.Getenv("EMBEDDING_MODEL"),
+				BaseURL:  os.Getenv("MAIRU_OLLAMA_URL"),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create embedder: %w", err)
+			}
 			meili := contextsrv.NewMeiliIndexer(meiliURL, meiliKey, embedder)
 			svc := contextsrv.NewServiceWithSearch(repo, meili, nil, embedder, false)
 

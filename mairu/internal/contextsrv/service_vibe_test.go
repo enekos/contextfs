@@ -46,6 +46,10 @@ func (r *vibeRepo) DeleteSkill(ctx context.Context, id string) error {
 	r.deletedSkillID = id
 	return nil
 }
+func (r *vibeRepo) GetContextNode(ctx context.Context, uri string) (ContextNode, error) {
+	return ContextNode{}, nil
+}
+
 func (r *vibeRepo) CreateContextNode(ctx context.Context, input ContextCreateInput) (ContextNode, error) {
 	r.createdNodeURI = input.URI
 	return ContextNode{URI: input.URI, Name: input.Name, Abstract: input.Abstract}, nil

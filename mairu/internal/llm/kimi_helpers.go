@@ -24,8 +24,9 @@ func (k *KimiProvider) buildMessages(userPrompt string) []KimiMessage {
 		}
 
 		kMsg := KimiMessage{
-			Role:    role,
-			Content: msg.Content,
+			Role:             role,
+			Content:          msg.Content,
+			ReasoningContent: msg.ReasoningContent,
 		}
 
 		// Handle tool calls
@@ -69,8 +70,9 @@ func (k *KimiProvider) buildMessagesFromHistory() []KimiMessage {
 		}
 
 		kMsg := KimiMessage{
-			Role:    role,
-			Content: msg.Content,
+			Role:             role,
+			Content:          msg.Content,
+			ReasoningContent: msg.ReasoningContent,
 		}
 
 		if len(msg.ToolCalls) > 0 {

@@ -140,6 +140,7 @@ type ContextCreateInput struct {
 	ModerationStatus  string
 	ModerationReasons []string
 	ReviewRequired    bool
+	CreatedAt         *time.Time // optional; defaults to now
 }
 
 // ContextUpdateInput holds the data required to update an existing ContextNode.

@@ -4,9 +4,11 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"time"
 
 	"mairu/internal/daemon"
 	"mairu/internal/enricher"
+	"mairu/internal/git"
 	"mairu/internal/llm"
 
 	"github.com/spf13/cobra"
@@ -99,6 +101,27 @@ func NewDaemonCmd() *cobra.Command {
 				return err
 			}
 			slog.Info("Daemon scan complete", "dir", dir)
+
+			if appCfg.GitIngest.Enabled {
+				slog.Info("Starting git history ingest", "dir", dir)
+				app := GetLocalApp()
+				if app != nil && app.Service() != nil {
+					since := time.Now().AddDate(0, 0, -appCfg.GitIngest.LookbackDays)
+					mgr := git.NewLocalManager(app.Service())
+					ing := git.NewIngester(mgr)
+					opts := git.IngestOptions{
+						Project:           project,
+						RepoDir:           dir,
+						Since:             since,
+						MaxFilesPerCommit: appCfg.GitIngest.MaxFilesPerCommit,
+					}
+					if err := ing.Ingest(context.Background(), opts); err != nil {
+						slog.Error("Git ingest failed", "err", err)
+					} else {
+						slog.Info("Git ingest complete", "dir", dir)
+					}
+				}
+			}
 			return nil
 		},
 	}

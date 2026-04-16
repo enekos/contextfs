@@ -35,6 +35,7 @@ type SkillService interface {
 // NodeService covers the full context-node lifecycle.
 type NodeService interface {
 	CreateContextNode(input ContextCreateInput) (ContextNode, error)
+	GetContextNode(uri string) (ContextNode, error)
 	ListContextNodes(project string, parentURI *string, limit int) ([]ContextNode, error)
 	UpdateContextNode(input ContextUpdateInput) (ContextNode, error)
 	DeleteContextNode(uri string) error
@@ -100,6 +101,7 @@ type SkillRepository interface {
 // NodeRepository covers context-node persistence.
 type NodeRepository interface {
 	CreateContextNode(ctx context.Context, input ContextCreateInput) (ContextNode, error)
+	GetContextNode(ctx context.Context, uri string) (ContextNode, error)
 	ListContextNodes(ctx context.Context, project string, parentURI *string, limit int) ([]ContextNode, error)
 	UpdateContextNode(ctx context.Context, input ContextUpdateInput) (ContextNode, error)
 	DeleteContextNode(ctx context.Context, uri string) error

@@ -3,9 +3,11 @@ package contextsrv
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
+	"mairu/internal/config"
 	"mairu/internal/llm"
 )
 
@@ -27,7 +29,9 @@ type Config struct {
 	ProjectorBatch    int
 	ReadTimeout       time.Duration
 	ModerationEnabled bool
-	OllamaURL         string
+	EmbeddingProvider string
+	EmbeddingBaseURL  string
+	EmbeddingAPIKey   string
 	EmbeddingModel    string
 }
 
@@ -80,18 +84,38 @@ func NewApp(cfg Config) (*App, error) {
 
 	if providerCfg.APIKey != "" {
 		client, err := llm.NewProvider(providerCfg)
-		if err == nil {
+		if err != nil {
+			slog.Warn("failed to initialize LLM provider", "provider", providerCfg.Type, "error", err)
+		} else {
 			llmProvider = client
 		}
 	}
 
-	embedder := llm.NewOllamaEmbedder(cfg.EmbeddingModel)
-	if cfg.OllamaURL != "" {
-		embedder.BaseURL = cfg.OllamaURL
+	embedder, err := llm.NewEmbedder(config.EmbeddingConfig{
+		Provider: cfg.EmbeddingProvider,
+		Model:    cfg.EmbeddingModel,
+		BaseURL:  cfg.EmbeddingBaseURL,
+		APIKey:   cfg.EmbeddingAPIKey,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create embedder: %w", err)
 	}
 
 	indexer := NewMeiliIndexer(cfg.MeiliURL, cfg.MeiliAPIKey, embedder)
-	_ = indexer.EnsureIndexes()
+	ensureCtx, ensureCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer ensureCancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- indexer.EnsureIndexes()
+	}()
+	select {
+	case <-ensureCtx.Done():
+		slog.Warn("Meilisearch ensure indexes timed out, continuing without search index")
+	case err := <-done:
+		if err != nil {
+			slog.Warn("failed to ensure meilisearch indexes", "error", err)
+		}
+	}
 
 	var llmClient LLMClient
 	if llmProvider != nil {

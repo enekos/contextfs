@@ -70,6 +70,10 @@ func (s *stubService) UpdateSkill(input SkillUpdateInput) (Skill, error) {
 
 func (s *stubService) DeleteSkill(id string) error { return nil }
 
+func (s *stubService) GetContextNode(uri string) (ContextNode, error) {
+	return ContextNode{}, nil
+}
+
 func (s *stubService) CreateContextNode(input ContextCreateInput) (ContextNode, error) {
 	now := time.Now().UTC()
 	return ContextNode{

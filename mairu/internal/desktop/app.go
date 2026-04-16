@@ -165,7 +165,9 @@ func (a *App) Startup(ctx context.Context) {
 		LLMModel:          cfg.LLM.Model,
 		LLMBaseURL:        cfg.LLM.BaseURL,
 		ModerationEnabled: cfg.Server.ModerationEnabled,
-		OllamaURL:         cfg.Embedding.OllamaURL,
+		EmbeddingProvider: cfg.Embedding.Provider,
+		EmbeddingBaseURL:  cfg.Embedding.BaseURL,
+		EmbeddingAPIKey:   cfg.Embedding.APIKey,
 		EmbeddingModel:    cfg.Embedding.Model,
 	}
 

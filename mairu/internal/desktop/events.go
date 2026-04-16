@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -72,9 +73,9 @@ func (a *App) getOrCreateAgent(session string) (*agent.Agent, error) {
 		providerCfg.APIKey = a.cfg.API.KimiAPIKey
 	}
 
-	embedder := llm.NewOllamaEmbedder(a.cfg.Embedding.Model)
-	if a.cfg.Embedding.OllamaURL != "" {
-		embedder.BaseURL = a.cfg.Embedding.OllamaURL
+	embedder, err := llm.NewEmbedder(a.cfg.Embedding)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create embedder: %w", err)
 	}
 	indexer := contextsrv.NewMeiliIndexer(a.meili.URL(), a.meili.APIKey(), embedder)
 

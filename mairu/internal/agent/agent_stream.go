@@ -141,14 +141,19 @@ func (a *Agent) Run(prompt string) (string, error) {
 
 	var result string
 	var err error
+	var sawContent bool
 	for ev := range outChan {
 		if ev.Type == "text" {
 			result += ev.Content
+			sawContent = true
 		} else if ev.Type == "error" {
 			err = fmt.Errorf("%s", ev.Content)
 		} else if ev.Type == "status" {
 			fmt.Println(ev.Content)
 		}
+	}
+	if err == nil && !sawContent {
+		err = fmt.Errorf("LLM returned an empty response")
 	}
 	return result, err
 }
