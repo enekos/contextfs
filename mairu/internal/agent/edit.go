@@ -1,12 +1,14 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/pmezard/go-difflib/difflib"
+	"mairu/internal/llm"
 )
 
 type EditBlock struct {
@@ -107,4 +109,102 @@ func (a *Agent) ReplaceBlock(filePath string, oldString, newString string) (stri
 		return "", err
 	}
 	return diffStr, nil
+}
+
+type replaceBlockTool struct{}
+
+func (t *replaceBlockTool) Definition() llm.Tool {
+	return llm.Tool{
+		Name:        "replace_block",
+		Description: "Safely apply a Search-and-Replace block edit to a file. You must provide the EXACT existing code block you want to replace, including all whitespace. This is much safer and more reliable than multi_edit.",
+		Parameters: &llm.JSONSchema{
+			Type: llm.TypeObject,
+			Properties: map[string]*llm.JSONSchema{
+				"file_path": {Type: llm.TypeString, Description: "The relative path to the file."},
+				"old_code":  {Type: llm.TypeString, Description: "The exact existing code block to be replaced. Must match exactly, including indentation."},
+				"new_code":  {Type: llm.TypeString, Description: "The new code block to insert in its place."},
+			},
+			Required: []string{"file_path", "old_code", "new_code"},
+		},
+	}
+}
+
+func (t *replaceBlockTool) Execute(ctx context.Context, args map[string]any, a *Agent, outChan chan<- AgentEvent) (map[string]any, error) {
+	filePath, _ := args["file_path"].(string)
+	oldCode, _ := args["old_code"].(string)
+	newCode, _ := args["new_code"].(string)
+
+	diffStr, err := a.ReplaceBlock(filePath, oldCode, newCode)
+	if err != nil {
+		return map[string]any{"error": err.Error()}, nil
+	}
+
+	outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("✏️ Edited %s", filePath)}
+	if diffStr != "" {
+		outChan <- AgentEvent{Type: "diff", Content: fmt.Sprintf("```diff\n%s\n```", diffStr)}
+	}
+
+	verifOut, verifErr := a.runAutoVerification(ctx, filePath, outChan)
+	if verifErr != nil {
+		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("⚠️ Auto-verification failed for %s", filePath)}
+		return map[string]any{
+			"status":  "edit applied but auto-verification failed",
+			"error":   verifErr.Error(),
+			"output":  verifOut,
+			"message": "The edit was applied, but the project failed to build/lint. Please review the output and fix the errors immediately.",
+		}, nil
+	}
+	return map[string]any{"status": "success", "verification": "passed"}, nil
+}
+
+type multiEditTool struct{}
+
+func (t *multiEditTool) Definition() llm.Tool {
+	return llm.Tool{
+		Name:        "multi_edit",
+		Description: "Apply a block replacement to a specific file.",
+		Parameters: &llm.JSONSchema{
+			Type: llm.TypeObject,
+			Properties: map[string]*llm.JSONSchema{
+				"file_path":  {Type: llm.TypeString, Description: "The relative path to the file."},
+				"start_line": {Type: llm.TypeInteger, Description: "The 1-indexed starting line to replace."},
+				"end_line":   {Type: llm.TypeInteger, Description: "The 1-indexed ending line to replace."},
+				"content":    {Type: llm.TypeString, Description: "The new content to insert in place of those lines."},
+			},
+			Required: []string{"file_path", "start_line", "end_line", "content"},
+		},
+	}
+}
+
+func (t *multiEditTool) Execute(ctx context.Context, args map[string]any, a *Agent, outChan chan<- AgentEvent) (map[string]any, error) {
+	filePath, _ := args["file_path"].(string)
+	startLineFloat, _ := args["start_line"].(float64)
+	endLineFloat, _ := args["end_line"].(float64)
+	content, _ := args["content"].(string)
+
+	diffStr, err := a.MultiEdit(filePath, []EditBlock{{
+		StartLine: uint32(startLineFloat),
+		EndLine:   uint32(endLineFloat),
+		Content:   content,
+	}})
+	if err != nil {
+		return map[string]any{"error": err.Error()}, nil
+	}
+
+	outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("✏️ Edited %s (%d-%d)", filePath, uint32(startLineFloat), uint32(endLineFloat))}
+	if diffStr != "" {
+		outChan <- AgentEvent{Type: "diff", Content: fmt.Sprintf("```diff\n%s\n```", diffStr)}
+	}
+
+	verifOut, verifErr := a.runAutoVerification(ctx, filePath, outChan)
+	if verifErr != nil {
+		outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("⚠️ Auto-verification failed for %s", filePath)}
+		return map[string]any{
+			"status":  "edit applied but auto-verification failed",
+			"error":   verifErr.Error(),
+			"output":  verifOut,
+			"message": "The edit was applied, but the project failed to build/lint. Please review the output and fix the errors immediately.",
+		}, nil
+	}
+	return map[string]any{"status": "success", "verification": "passed"}, nil
 }

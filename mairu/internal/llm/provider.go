@@ -40,9 +40,6 @@ type Provider interface {
 	// IsNewSession returns true if no messages have been exchanged yet
 	IsNewSession() bool
 
-	// SetupTools configures the available tools for the model
-	SetupTools()
-
 	// GetTools returns the currently configured base tools
 	GetTools() []Tool
 
