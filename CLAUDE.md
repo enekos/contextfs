@@ -252,8 +252,14 @@ Agents can query the developer's bash history to understand previous commands, o
 - `mairu history feedback <id> -r 10` -> Apply reinforcement learning feedback to a command execution.
 - `mairu history import --from ~/.zsh_history --project my-project` -> Backfill shell history (zsh or bash) into the searchable store. Every entry is run through the `internal/redact` pipeline before persistence — Layer 1 (known-token regex), Layer 2 (arg/flag heuristics), Layer 3 (entropy), Layer 4 (credential-handling tool denylist), Layer 5 (damage cap). Entries whose damage cap triggers are dropped entirely. Dedup is by sha256 of the redacted command within a single import run. Supports `--dry-run` for preview and `--format zsh|bash` to override filename-based detection.
 
-**Real-time shell integration (zsh only in v1):**
-Run `mairu ingestd run &` once per session (or under launchd/systemd), then add `eval "$(mairu shell init zsh)"` to your `.zshrc`. Every command you run is captured via zsh `preexec`/`precmd` hooks, sent non-blockingly over a Unix socket (`$MAIRU_INGEST_SOCK`, default `~/.mairu/ingest.sock`), redacted through `internal/redact`, and stored in the same searchable bash-history as imports and agent-logged commands. Metadata only (command + exit code + duration + cwd) — no stdout/stderr capture yet. Set `MAIRU_NO_HOOK=1` to suspend capture without editing your rc file; `mairu shell init bash` and `mairu shell init fish` are stubbed and error out pending future work. If the daemon isn't running, the client fails silently — the shell prompt never blocks or errors.
+**Real-time shell integration (zsh, bash, fish):**
+Run `mairu ingestd run &` once per session (or under launchd/systemd), then add the appropriate init line to your shell rc file:
+
+- **zsh (`~/.zshrc`):** `eval "$(mairu shell init zsh)"` — uses `add-zsh-hook` with `preexec`/`precmd` and `$EPOCHREALTIME` for sub-ms timing.
+- **bash (`~/.bashrc`):** `eval "$(mairu shell init bash)"` — uses a `DEBUG` trap plus `PROMPT_COMMAND`. Requires bash 5.0+ for `$EPOCHREALTIME`; older bash silently reports `duration_ms=0`.
+- **fish (`~/.config/fish/config.fish`):** `mairu shell init fish | source` — uses `fish_preexec` / `fish_postexec` event handlers and the built-in `$CMD_DURATION` (already in milliseconds).
+
+Every command you run is captured by the hook, sent non-blockingly over a Unix socket (`$MAIRU_INGEST_SOCK`, default `~/.mairu/ingest.sock`), redacted through `internal/redact`, and stored in the same searchable bash-history as imports and agent-logged commands. Metadata only — command + exit code + duration + cwd — no stdout/stderr capture yet. Set `MAIRU_NO_HOOK=1` to suspend capture without editing your rc file. If the daemon isn't running, the client fails silently — the shell prompt never blocks or errors.
 
 **Automatic Logging:** When using the mairu agent (via `mairu tui`, `mairu web`, or headless mode), all bash commands executed by the agent are **automatically stored** in mairu history through the `HistoryLogger` interface. This includes command, exit code, duration, and output - making your command history fully searchable for future sessions without any manual intervention.
 
