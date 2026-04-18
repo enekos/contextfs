@@ -76,7 +76,6 @@ func NewGeminiProviderFromConfig(ctx context.Context, cfg ProviderConfig) (*Gemi
 		isNew:     true,
 		modelName: modelName,
 	}
-	provider.SetupTools()
 	return provider, nil
 }
 
@@ -106,10 +105,9 @@ func (g *GeminiProvider) SetModel(modelName string) {
 	g.modelName = modelName
 	g.model = newModel
 	g.session = newSession
-	g.SetupTools()
-	// Re-register dynamic tools
-	if len(g.dynamicTools) > 0 {
-		g.model.Tools[0].FunctionDeclarations = append(g.model.Tools[0].FunctionDeclarations, g.dynamicTools...)
+	if len(g.baseTools) > 0 || len(g.dynamicTools) > 0 {
+		allTools := append(append([]*genai.FunctionDeclaration(nil), g.baseTools...), g.dynamicTools...)
+		g.model.Tools = []*genai.Tool{{FunctionDeclarations: allTools}}
 	}
 }
 
@@ -316,4 +314,21 @@ func (g *GeminiProvider) GenerateContent(ctx context.Context, modelName, prompt 
 		return fmt.Sprintf("%v", res.Candidates[0].Content.Parts[0]), nil
 	}
 	return "", fmt.Errorf("no content generated")
+}
+
+// RegisterDynamicTools implements the Provider interface
+func (g *GeminiProvider) RegisterDynamicTools(tools []Tool) {
+	if len(tools) == 0 {
+		return
+	}
+
+	// Convert to genai format and store
+	funcDecls := toolsToGenaiFunctionDeclarations(tools)
+	g.dynamicTools = append(g.dynamicTools, funcDecls...)
+
+	if len(g.model.Tools) == 0 {
+		g.model.Tools = []*genai.Tool{{FunctionDeclarations: funcDecls}}
+		return
+	}
+	g.model.Tools[0].FunctionDeclarations = append(g.model.Tools[0].FunctionDeclarations, funcDecls...)
 }

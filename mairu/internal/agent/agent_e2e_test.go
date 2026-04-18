@@ -153,7 +153,6 @@ func (m *mockProvider) SetHistory(history []llm.Message) {
 	m.isNew = false
 }
 func (m *mockProvider) IsNewSession() bool   { return m.isNew }
-func (m *mockProvider) SetupTools()          {}
 func (m *mockProvider) GetTools() []llm.Tool { return append([]llm.Tool(nil), m.tools...) }
 func (m *mockProvider) SetTools(tools []llm.Tool) {
 	m.setToolsCalls = append(m.setToolsCalls, append([]llm.Tool(nil), tools...))

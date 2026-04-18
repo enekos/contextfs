@@ -60,7 +60,6 @@ func NewKimiProvider(cfg ProviderConfig) (*KimiProvider, error) {
 		dynamicTools: make([]Tool, 0),
 	}
 
-	provider.SetupTools()
 	return provider, nil
 }
 
@@ -342,8 +341,12 @@ func (k *KimiProvider) GenerateContent(ctx context.Context, model, prompt string
 	return resp.Choices[0].Message.Content, nil
 }
 
-// SetupTools configures the available tools
 // Close cleans up resources.
 func (k *KimiProvider) Close() error {
 	return nil
+}
+
+// RegisterDynamicTools registers additional tools at runtime.
+func (k *KimiProvider) RegisterDynamicTools(tools []Tool) {
+	k.dynamicTools = append(k.dynamicTools, tools...)
 }
