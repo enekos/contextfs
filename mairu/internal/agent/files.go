@@ -230,7 +230,8 @@ func (t *deleteFileTool) Definition() llm.Tool {
 func (t *deleteFileTool) Execute(ctx context.Context, args map[string]any, a *Agent, outChan chan<- AgentEvent) (map[string]any, error) {
 	pathToDelete, _ := args["path"].(string)
 	outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🗑️ Deleting: %s", pathToDelete)}
-	if err := os.RemoveAll(pathToDelete); err != nil {
+	fullPath := filepath.Join(a.root, pathToDelete)
+	if err := os.RemoveAll(fullPath); err != nil {
 		return map[string]any{"error": err.Error()}, nil
 	}
 	return map[string]any{"status": "success"}, nil
