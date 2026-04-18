@@ -101,6 +101,10 @@ func (r *Redactor) Redact(input string, kind Kind) (res Result) {
 		embeddingSafe = false
 	}
 
+	l2Cleaned, l2Findings := scanArguments(current)
+	current = l2Cleaned
+	findings = append(findings, l2Findings...)
+
 	return Result{
 		Redacted:      current,
 		Findings:      findings,

@@ -137,3 +137,65 @@ func TestLayer1RedactsPEMPrivateKey(t *testing.T) {
 		t.Errorf("PEM body leaked: %q", got.Redacted)
 	}
 }
+
+func TestLayer2RedactsAuthorizationHeader(t *testing.T) {
+	in := `curl -H "Authorization: Bearer abc123xyz" https://api.example.com`
+	got := New().Redact(in, KindCommand)
+	if contains(got.Redacted, "abc123xyz") {
+		t.Errorf("bearer token leaked: %q", got.Redacted)
+	}
+}
+
+func TestLayer2RedactsAPIKeyHeader(t *testing.T) {
+	in := `curl -H "X-Api-Key: supersecretkey123" https://api.example.com`
+	got := New().Redact(in, KindCommand)
+	if contains(got.Redacted, "supersecretkey123") {
+		t.Errorf("api key leaked: %q", got.Redacted)
+	}
+}
+
+func TestLayer2RedactsCurlUserPass(t *testing.T) {
+	in := `curl -u admin:hunter2 https://api.example.com`
+	got := New().Redact(in, KindCommand)
+	if contains(got.Redacted, "hunter2") {
+		t.Errorf("curl user:pass leaked: %q", got.Redacted)
+	}
+}
+
+func TestLayer2RedactsTokenFlag(t *testing.T) {
+	in := `deploy --token=abcdefg12345 --env=prod`
+	got := New().Redact(in, KindCommand)
+	if contains(got.Redacted, "abcdefg12345") {
+		t.Errorf("--token= value leaked: %q", got.Redacted)
+	}
+	if !contains(got.Redacted, "prod") {
+		t.Errorf("non-sensitive flag should be preserved: %q", got.Redacted)
+	}
+}
+
+func TestLayer2RedactsSpaceSeparatedPasswordFlag(t *testing.T) {
+	in := `login --password sekret`
+	got := New().Redact(in, KindCommand)
+	if contains(got.Redacted, "sekret") {
+		t.Errorf("--password value leaked: %q", got.Redacted)
+	}
+}
+
+func TestLayer2RedactsInlineEnvPrefix(t *testing.T) {
+	in := `API_KEY=leakme_12345 ./deploy.sh`
+	got := New().Redact(in, KindCommand)
+	if contains(got.Redacted, "leakme_12345") {
+		t.Errorf("inline env value leaked: %q", got.Redacted)
+	}
+	if !contains(got.Redacted, "./deploy.sh") {
+		t.Errorf("command body should be preserved: %q", got.Redacted)
+	}
+}
+
+func TestLayer2DoesNotTouchNonSensitiveFlags(t *testing.T) {
+	in := `deploy --env=prod --region=us-east-1 --replicas=3`
+	got := New().Redact(in, KindCommand)
+	if got.Redacted != in {
+		t.Errorf("non-sensitive flags were modified: %q", got.Redacted)
+	}
+}
