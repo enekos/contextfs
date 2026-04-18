@@ -15,10 +15,14 @@ import (
 
 // Helper to run mairu command
 func runMairu(args ...string) (string, error) {
-	// Find the root mairu directory (where go.mod is) to run the command safely
-	// regardless of working directory changes by other tests.
+	// Find the module root (directory containing go.mod) by walking up from CWD.
+	// This replaces a fragile suffix check (`mairu/mairu`) that failed whenever
+	// the checkout lived at a different path — e.g. inside a git worktree.
 	pwd, _ := os.Getwd()
-	for !strings.HasSuffix(pwd, "mairu/mairu") && pwd != "/" {
+	for pwd != "/" {
+		if _, err := os.Stat(filepath.Join(pwd, "go.mod")); err == nil {
+			break
+		}
 		pwd = filepath.Dir(pwd)
 	}
 
