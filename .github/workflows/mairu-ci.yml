@@ -65,3 +65,9 @@ jobs:
 
       - name: Build Go binaries
         run: go -C mairu build -v ./...
+
+      - name: Verify tagged builds compile
+        run: |
+          go build -C mairu -tags slim -o /dev/null ./cmd/mairu
+          go build -C mairu -tags headless -o /dev/null ./cmd/mairu
+          go build -C mairu -tags contextsrvonly -o /dev/null ./cmd/mairu

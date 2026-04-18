@@ -1,3 +1,5 @@
+//go:build !slim && !contextsrvonly
+
 package cmd
 
 import (

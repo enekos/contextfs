@@ -2,7 +2,7 @@
   "name": "mairu",
   "version": "2.0.0",
   "description": "Mairu monorepo: Go coding agent, context server, and context engine with dashboard.",
-  "license": "ISC",
+  "license": "BlueOak-1.0.0",
   "private": false,
   "engines": {
     "bun": ">=1"

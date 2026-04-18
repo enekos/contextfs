@@ -25,4 +25,4 @@ Welcome to the Mairu documentation. This repository contains detailed guides and
 
 ## License
 
-ISC
+Blue Oak Model License 1.0.0

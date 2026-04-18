@@ -3,24 +3,19 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
-	"mairu/internal/agent"
-	"mairu/internal/cmd/admincmd"
 	"mairu/internal/config"
-
 	"mairu/internal/logger"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	agentSystemData map[string]any
-	debugMode       bool
-	outputFormat    string
-	verbose         bool
-	quiet           bool
-	appConfig       *config.Config
+	debugMode    bool
+	outputFormat string
+	verbose      bool
+	quiet        bool
+	appConfig    *config.Config
 )
 
 var rootCmd = &cobra.Command{
@@ -40,10 +35,6 @@ var rootCmd = &cobra.Command{
 		}
 		appConfig = cfg
 
-		agentSystemData = map[string]any{
-			"CliHelp": GenerateAgentCLIRef(cmd.Root()),
-		}
-
 		// CLI flag overrides for output
 		if !cmd.Flags().Changed("output") && appConfig.Output.Format != "" {
 			outputFormat = appConfig.Output.Format
@@ -57,11 +48,10 @@ var rootCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) > 0 {
-			prompt := strings.Join(args, " ")
-			runHeadless(prompt)
-			return
+			fmt.Println("No default prompt handler available in this build.")
+			os.Exit(1)
 		}
-		fmt.Println("Welcome to Mairu! Use 'mairu tui' or 'mairu web' to start.")
+		fmt.Println("Welcome to Mairu! Use 'mairu --help' to see available commands.")
 		cmd.Help()
 	},
 }
@@ -77,60 +67,6 @@ func GetFormatter() *Formatter {
 	return NewFormatter(outputFormat)
 }
 
-// GetAgentConfig returns a populated agent.Config using the global config and contextsrv.App
-func GetAgentConfig() agent.Config {
-	cfg := GetConfig()
-	var interceptors []agent.ToolInterceptor
-	if cfg != nil {
-		interceptors = append(interceptors, &agent.SecurityFilter{
-			BlockedCommands: cfg.Security.BlockedCommands,
-			BlockedPaths:    cfg.Security.BlockedPaths,
-		})
-	}
-
-	app := GetLocalApp()
-	var repo agent.HistoryLogger
-	if app != nil {
-		repo = app.Repo()
-	}
-
-	return agent.Config{
-		SymbolLocator:   GetLocalApp().SymbolLocator(),
-		HistoryLogger:   repo,
-		Interceptors:    interceptors,
-		UTCPProviders:   cfg.Tools.UTCPProviders,
-		AgentSystemData: agentSystemData,
-	}
-}
-
-func runHeadless(prompt string) {
-	providerCfg := GetLLMProviderConfig()
-	if providerCfg.APIKey == "" {
-		providerName := providerCfg.Type
-		if providerName == "" {
-			providerName = "gemini"
-		}
-		slog.Error(fmt.Sprintf("%s API key not found. Please run 'mairu setup' or set the appropriate API key environment variable.", providerName))
-		os.Exit(1)
-	}
-
-	cwd, _ := os.Getwd()
-	a, err := agent.New(cwd, providerCfg, GetAgentConfig())
-	if err != nil {
-		slog.Error("Failed to initialize agent", "error", err)
-		os.Exit(1)
-	}
-	defer a.Close()
-
-	response, err := a.Run(prompt)
-	if err != nil {
-		slog.Error("Agent error", "error", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("\n" + response)
-}
-
 // Execute adds all child commands to the root command and sets flags appropriately.
 func Execute() error {
 	return rootCmd.Execute()
@@ -141,65 +77,4 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "table", "Output format: table, json, plain")
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Show extra details (timing, weights, query plan)")
 	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "Only output results, no status messages")
-}
-
-func init() {
-	// AI-Optimized Tools (Keep at top level)
-	rootCmd.AddCommand(
-		NewMapCmd(),
-		NewSysCmd(),
-		NewEnvCmd(),
-		NewInfoCmd(),
-		NewOutlineCmd(),
-		NewPeekCmd(),
-		NewScanCmd(),
-		NewDistillCmd(),
-		NewSpliceCmd(),
-		NewDockerCmd(),
-		NewProcCmd(),
-		NewDevCmd(),
-		NewGitCmd(),
-	)
-
-	// Subsystems & Workflows
-	rootCmd.AddCommand(
-		NewMemoryCmd(),
-		NewSkillCmd(),
-		NewNodeCmd(),
-		NewCodeCmd(),
-		NewHistoryCmd(),
-		NewSyncCmd(),
-		NewVibeCmd(),
-		NewScrapeCmd(),
-		NewAnalyzeCmd(),
-		NewIngestCmd(),
-		NewIngestdCmd(),
-		NewCaptureCmd(),
-		NewShellCmd(),
-		NewImpactCmd(),
-		NewGithubCmd(),
-		NewLinearCmd(),
-	)
-
-	// Agent & Servers
-	rootCmd.AddCommand(
-		NewMinionCmd(),
-		NewDaemonCmd(),
-		NewContextServerCmd(),
-		NewWebCmd(),
-		NewTuiCmd(),
-		NewTelegramCmd(),
-		NewMCPCmd(),
-		NewUTCPCmd(),
-	)
-
-	// Core / Admin / Misc
-	rootCmd.AddCommand(
-		admincmd.NewInitCmd(),
-		NewConfigCmd(),
-		admincmd.NewCompletionCmd(rootCmd),
-		NewDoctorCmd(),
-		NewSetupCmd(),
-		NewEvalCmd(),
-	)
 }

@@ -1,3 +1,5 @@
+//go:build !contextsrvonly
+
 package cmd
 
 import "testing"

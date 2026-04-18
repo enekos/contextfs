@@ -234,4 +234,4 @@ mairu minion --github-issue 42 --council                # resolve a GitHub issue
 
 ## License
 
-ISC (`LICENSE`)
+Blue Oak Model License 1.0.0 (`LICENSE`)

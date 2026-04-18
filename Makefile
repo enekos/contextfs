@@ -7,6 +7,7 @@ SHELL := /bin/bash
 .PHONY: eval-retrieval eval-seed eval-llm
 .PHONY: meili-up meili-down meili-status meili-clean setup-no-docker dev-no-docker mairu-no-docker
 .PHONY: build-browser-extension install-browser-extension test-browser-extension
+.PHONY: mairu-build-slim mairu-build-headless mairu-build-contextsrvonly
 
 help:
 	@echo "mairu monorepo Makefile"
@@ -31,7 +32,10 @@ help:
 	@echo "Runtime:"
 	@echo "  make setup              Initialize indexes (requires Meilisearch)"
 	@echo "  make dashboard          Start dashboard API + UI"
-	@echo "  make mairu-build        Build mairu binary"
+	@echo "  make mairu-build        Build mairu binary (full)"
+	@echo "  make mairu-build-slim   Build mairu binary (slim: no TUI/Web/Telegram/MCP)"
+	@echo "  make mairu-build-headless  Build mairu binary (headless: no TUI/Web)"
+	@echo "  make mairu-build-contextsrvonly  Build mairu binary (context-server only)"
 	@echo "  make mairu-web          Start mairu web UI (expects binary)"
 	@echo
 	@echo "No Docker (self-contained Meilisearch fallback):"
@@ -114,6 +118,51 @@ mairu-build:
 		echo ""; \
 		echo "Build completed in $$((end - start))s"; \
 		ls -lh mairu/bin/mairu; \
+	else \
+		exit $$status; \
+	fi
+
+mairu-build-slim:
+	@mkdir -p mairu/bin
+	@echo "Building mairu (slim)..."
+	@start=$$(date +%s); \
+	go build -C mairu -tags slim -v -o bin/mairu-slim ./cmd/mairu; \
+	status=$$?; \
+	end=$$(date +%s); \
+	if [ $$status -eq 0 ]; then \
+		echo ""; \
+		echo "Build completed in $$((end - start))s"; \
+		ls -lh mairu/bin/mairu-slim; \
+	else \
+		exit $$status; \
+	fi
+
+mairu-build-headless:
+	@mkdir -p mairu/bin
+	@echo "Building mairu (headless)..."
+	@start=$$(date +%s); \
+	go build -C mairu -tags headless -v -o bin/mairu-headless ./cmd/mairu; \
+	status=$$?; \
+	end=$$(date +%s); \
+	if [ $$status -eq 0 ]; then \
+		echo ""; \
+		echo "Build completed in $$((end - start))s"; \
+		ls -lh mairu/bin/mairu-headless; \
+	else \
+		exit $$status; \
+	fi
+
+mairu-build-contextsrvonly:
+	@mkdir -p mairu/bin
+	@echo "Building mairu (contextsrvonly)..."
+	@start=$$(date +%s); \
+	go build -C mairu -tags contextsrvonly -v -o bin/mairu-contextsrv ./cmd/mairu; \
+	status=$$?; \
+	end=$$(date +%s); \
+	if [ $$status -eq 0 ]; then \
+		echo ""; \
+		echo "Build completed in $$((end - start))s"; \
+		ls -lh mairu/bin/mairu-contextsrv; \
 	else \
 		exit $$status; \
 	fi
