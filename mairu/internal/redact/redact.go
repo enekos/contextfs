@@ -90,5 +90,20 @@ func (r *Redactor) Redact(input string, kind Kind) (res Result) {
 			}
 		}
 	}()
-	return Result{Redacted: input, EmbeddingSafe: true}
+	current := input
+	var findings []Finding
+	embeddingSafe := true
+
+	cleaned, l1Findings, l1Hit := scanKnownTokens(current)
+	current = cleaned
+	findings = append(findings, l1Findings...)
+	if l1Hit {
+		embeddingSafe = false
+	}
+
+	return Result{
+		Redacted:      current,
+		Findings:      findings,
+		EmbeddingSafe: embeddingSafe,
+	}
 }
