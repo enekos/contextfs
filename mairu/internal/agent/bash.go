@@ -13,6 +13,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"mairu/internal/llm"
 )
 
 var ansiPattern = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
@@ -208,4 +210,56 @@ func isHangupExit(waitErr error, output string) bool {
 	}
 	lower := strings.ToLower(output)
 	return strings.Contains(lower, "hangup") || strings.Contains(lower, "sighup")
+}
+
+type bashTool struct{}
+
+func (t *bashTool) Definition() llm.Tool {
+	return llm.Tool{
+		Name:        "bash",
+		Description: "Execute a bash command in the project root directory. Use this to run tests, linters, or explore the file system.",
+		Parameters: &llm.JSONSchema{
+			Type: llm.TypeObject,
+			Properties: map[string]*llm.JSONSchema{
+				"command":    {Type: llm.TypeString, Description: "The bash command to execute."},
+				"timeout_ms": {Type: llm.TypeInteger, Description: "Optional timeout in milliseconds (default 30000)."},
+			},
+			Required: []string{"command"},
+		},
+	}
+}
+
+func (t *bashTool) Execute(ctx context.Context, args map[string]any, a *Agent, outChan chan<- AgentEvent) (map[string]any, error) {
+	command, _ := args["command"].(string)
+	timeoutMsFloat, ok := args["timeout_ms"].(float64)
+	var timeout int
+	if ok {
+		timeout = int(timeoutMsFloat)
+	}
+
+	outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🖥️ Running bash: %s", command)}
+
+	start := time.Now()
+	out, err := a.RunBash(ctx, command, timeout, outChan)
+	duration := int(time.Since(start).Milliseconds())
+
+	exitCode := 0
+	var result map[string]any
+	if err != nil {
+		result = map[string]any{"error": err.Error(), "output": out}
+		exitCode = 1
+	} else {
+		result = map[string]any{"output": out}
+		if strings.HasPrefix(out, "STDOUT:\ndiff ") || strings.Contains(out, "\n--- ") && strings.Contains(out, "\n+++ ") {
+			outChan <- AgentEvent{Type: "diff", Content: fmt.Sprintf("```diff\n%s\n```", out)}
+		}
+	}
+
+	if a.historyLogger != nil {
+		go func() {
+			_ = a.historyLogger.InsertBashHistory(context.Background(), a.root, command, exitCode, duration, out)
+		}()
+	}
+
+	return result, nil
 }
