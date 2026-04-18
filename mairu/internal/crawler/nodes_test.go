@@ -13,7 +13,7 @@ func TestFetchNode(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	node := &FetchNode{}
+	node := &FetchNode{Engine: NewEngine(nil)}
 	state := State{"url": ts.URL}
 
 	newState, err := node.Execute(context.Background(), state)
@@ -32,7 +32,7 @@ func TestFetchNode(t *testing.T) {
 }
 
 func TestParseNodeHTML(t *testing.T) {
-	node := &ParseNode{}
+	node := &ParseNode{Engine: NewEngine(nil)}
 	html := `<html><head><title>Test</title></head><body><h1>Header</h1><p>Some paragraph text.</p></body></html>`
 	state := State{"html": html, "url": "http://localhost"}
 
@@ -53,7 +53,7 @@ func TestParseNodeHTML(t *testing.T) {
 }
 
 func TestParseNodeJSONBypass(t *testing.T) {
-	node := &ParseNode{}
+	node := &ParseNode{Engine: NewEngine(nil)}
 	jsonContent := `{"name":"test", "value":123}`
 	state := State{"html": jsonContent, "url": "http://localhost"}
 

@@ -2,12 +2,9 @@ package crawler
 
 import (
 	"context"
-	"encoding/json"
-	"regexp"
 	"strings"
 
-	"github.com/google/generative-ai-go/genai"
-	"google.golang.org/api/option"
+	"mairu/internal/llm"
 	"mairu/internal/prompts"
 )
 
@@ -59,49 +56,20 @@ func fallbackSummary(title, markdown, url string) PageSummary {
 	}
 }
 
-// SummarizePage summarizes the given markdown content using Gemini LLM.
-func SummarizePage(ctx context.Context, apiKey, title, markdown, url string) PageSummary {
+// SummarizePage summarizes the given markdown content using the provided LLM.
+func SummarizePage(ctx context.Context, provider llm.Provider, title, markdown, url string) PageSummary {
 	words := strings.Fields(markdown)
-	if len(words) < shortPageThreshold || apiKey == "" {
+	if len(words) < shortPageThreshold || provider == nil {
 		return fallbackSummary(title, markdown, url)
 	}
-
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
-	if err != nil {
-		return fallbackSummary(title, markdown, url)
-	}
-	defer client.Close()
 
 	prompt, err := buildPrompt(title, markdown, url)
 	if err != nil {
 		return fallbackSummary(title, markdown, url)
 	}
-	model := client.GenerativeModel("gemini-2.5-flash") // Default model
-
-	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
-	if err != nil || resp == nil || len(resp.Candidates) == 0 {
-		return fallbackSummary(title, markdown, url)
-	}
-
-	var text string
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if t, ok := part.(genai.Text); ok {
-			text += string(t)
-		}
-	}
-
-	text = strings.TrimSpace(text)
-	reFences := regexp.MustCompile(`(?s)^${1,3}(?:json)?\n?(.*?)\n?${1,3}$`)
-	if match := reFences.FindStringSubmatch(text); len(match) > 1 {
-		text = match[1]
-	} else {
-		text = strings.TrimPrefix(text, "```json")
-		text = strings.TrimPrefix(text, "```")
-		text = strings.TrimSuffix(text, "```")
-	}
 
 	var parsed PageSummary
-	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
+	if err := provider.GenerateJSON(ctx, "", prompt, nil, &parsed); err != nil {
 		return fallbackSummary(title, markdown, url)
 	}
 

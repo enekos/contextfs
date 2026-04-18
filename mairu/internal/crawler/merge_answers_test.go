@@ -29,7 +29,7 @@ func TestMergeAnswersNodeValidation(t *testing.T) {
 	// Test missing provider
 	state3 := State{"results": results, "prompt": "prompt"}
 	_, err = node.Execute(context.Background(), state3)
-	if err == nil || !strings.Contains(err.Error(), "missing GeminiProvider") {
-		t.Fatalf("Expected error for missing GeminiProvider, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "missing Provider") {
+		t.Fatalf("Expected error for missing Provider, got: %v", err)
 	}
 }

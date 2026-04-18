@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"mairu/internal/contextsrv"
+	"mairu/internal/crawler"
 	"mairu/internal/llm"
 )
 
@@ -194,6 +195,11 @@ func (a *Agent) IsCouncilEnabled() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.council.Enabled
+}
+
+// scraper returns a crawler.Scraper backed by the agent's LLM provider.
+func (a *Agent) scraper() *crawler.Scraper {
+	return crawler.NewScraper(crawler.NewEngine(nil), a.llm)
 }
 
 type AgentEvent struct {

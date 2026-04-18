@@ -12,7 +12,7 @@ func TestExtractNodeWithMock(t *testing.T) {
 
 	state := State{"doc": "test", "prompt": "test"}
 	_, err := node.Execute(context.Background(), state)
-	if err == nil || !strings.Contains(err.Error(), "missing GeminiProvider") {
+	if err == nil || !strings.Contains(err.Error(), "missing Provider") {
 		t.Errorf("ExtractNode missed provider validation: %v", err)
 	}
 
@@ -20,7 +20,7 @@ func TestExtractNodeWithMock(t *testing.T) {
 	longDoc := strings.Repeat("A", 70000)
 	state["doc"] = longDoc
 	_, err = node.Execute(context.Background(), state)
-	if err == nil || !strings.Contains(err.Error(), "missing GeminiProvider") {
+	if err == nil || !strings.Contains(err.Error(), "missing Provider") {
 		t.Errorf("ExtractNode missed provider validation on long doc: %v", err)
 	}
 }
@@ -33,14 +33,14 @@ func TestSearchLinkNodeWithMock(t *testing.T) {
 
 	// This should fail because of provider missing
 	_, err := node.Execute(context.Background(), state)
-	if err == nil || !strings.Contains(err.Error(), "missing GeminiProvider") {
+	if err == nil || !strings.Contains(err.Error(), "missing Provider") {
 		t.Errorf("SearchLinkNode missed provider validation on empty links: %v", err)
 	}
 
 	// With links it should hit the provider validation
 	state["html"] = "<html><body><a href='/test'>Link</a></body></html>"
 	_, err = node.Execute(context.Background(), state)
-	if err == nil || !strings.Contains(err.Error(), "missing GeminiProvider") {
+	if err == nil || !strings.Contains(err.Error(), "missing Provider") {
 		t.Errorf("SearchLinkNode missed provider validation on links: %v", err)
 	}
 }
@@ -54,7 +54,7 @@ func TestMergeAnswersNodeWithMock(t *testing.T) {
 	}
 	state := State{"results": results, "prompt": "test"}
 	_, err := node.Execute(context.Background(), state)
-	if err == nil || !strings.Contains(err.Error(), "missing GeminiProvider") {
+	if err == nil || !strings.Contains(err.Error(), "missing Provider") {
 		t.Errorf("MergeAnswers missed provider validation on long results: %v", err)
 	}
 }

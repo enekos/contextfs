@@ -19,7 +19,7 @@ func TestPromptRefinerNodeValidation(t *testing.T) {
 	// Test missing provider
 	state2 := State{"prompt": "Get emails"}
 	_, err = node.Execute(context.Background(), state2)
-	if err == nil || !strings.Contains(err.Error(), "missing GeminiProvider") {
-		t.Fatalf("Expected error for missing GeminiProvider, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "missing Provider") {
+		t.Fatalf("Expected error for missing Provider, got: %v", err)
 	}
 }

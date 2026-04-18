@@ -71,7 +71,7 @@ func TestNodesStateValidation(t *testing.T) {
 		t.Errorf("GenerateScriptNode missed prompt validation: %v", err)
 	}
 	_, err = script.Execute(ctx, State{"minified_html": "test", "prompt": "test"})
-	if err == nil || !strings.Contains(err.Error(), "missing GeminiProvider") {
+	if err == nil || !strings.Contains(err.Error(), "missing Provider") {
 		t.Errorf("GenerateScriptNode missed provider validation: %v", err)
 	}
 
@@ -86,7 +86,7 @@ func TestNodesStateValidation(t *testing.T) {
 		t.Errorf("SearchLinkNode missed prompt validation: %v", err)
 	}
 	_, err = searchLink.Execute(ctx, State{"html": "test", "prompt": "test"})
-	if err == nil || !strings.Contains(err.Error(), "missing GeminiProvider") {
+	if err == nil || !strings.Contains(err.Error(), "missing Provider") {
 		t.Errorf("SearchLinkNode missed provider validation: %v", err)
 	}
 }

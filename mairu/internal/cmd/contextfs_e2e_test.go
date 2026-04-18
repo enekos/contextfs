@@ -576,8 +576,8 @@ func Skip_TestContextCommandsEndToEnd(t *testing.T) {
 		SetArgs([]string)
 		Execute() error
 	} {
-		return NewScrapeWebCmd()
-	}, "-P", project, pageSrv.URL+"/docs")
+		return NewScrapeCmd()
+	}, "--mode=web", "-P", project, pageSrv.URL+"/docs")
 
 	api.mu.Lock()
 	defer api.mu.Unlock()

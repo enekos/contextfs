@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"mairu/internal/crawler"
 	"mairu/internal/llm"
 	"mairu/internal/prompts"
 )
@@ -313,7 +312,8 @@ func (a *Agent) executeToolCall(ctx context.Context, funcCall llm.ToolCall, outC
 			urlToFetch, _ := funcCall.Arguments["url"].(string)
 			outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🌐 Fetching URL: %s", urlToFetch)}
 
-			content, err := a.FetchURL(urlToFetch)
+			scraper := a.scraper()
+			content, err := scraper.Fetch(ctx, urlToFetch)
 			if err != nil {
 				result = map[string]any{"error": err.Error()}
 			} else {
@@ -325,8 +325,8 @@ func (a *Agent) executeToolCall(ctx context.Context, funcCall llm.ToolCall, outC
 			prompt, _ := funcCall.Arguments["prompt"].(string)
 			outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🕸️ Scraping URL: %s", urlToScrape)}
 
-			graph := crawler.NewSmartScraperGraph(a.llm)
-			data, err := graph.Run(ctx, urlToScrape, prompt)
+			scraper := a.scraper()
+			data, err := scraper.Smart(ctx, urlToScrape, prompt)
 			if err != nil {
 				result = map[string]any{"error": err.Error()}
 			} else {
@@ -338,8 +338,8 @@ func (a *Agent) executeToolCall(ctx context.Context, funcCall llm.ToolCall, outC
 			prompt, _ := funcCall.Arguments["prompt"].(string)
 			outChan <- AgentEvent{Type: "status", Content: fmt.Sprintf("🔍 Searching Web: %s", query)}
 
-			graph := crawler.NewSearchScraperGraph(a.llm)
-			data, err := graph.Run(ctx, query, prompt, 3)
+			scraper := a.scraper()
+			data, err := scraper.Search(ctx, query, prompt, 3)
 			if err != nil {
 				result = map[string]any{"error": err.Error()}
 			} else {
