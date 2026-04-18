@@ -173,6 +173,7 @@ func init() {
 		NewScrapeCmd(),
 		NewAnalyzeCmd(),
 		NewIngestCmd(),
+		NewIngestdCmd(),
 		NewImpactCmd(),
 		NewGithubCmd(),
 		NewLinearCmd(),

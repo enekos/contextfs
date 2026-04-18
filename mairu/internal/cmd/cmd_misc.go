@@ -84,5 +84,8 @@ func NewIngestCmd() *cobra.Command {
 	cmd.Flags().StringVar(&baseURI, "base-uri", "contextfs://ingested", "Base URI namespace for generated nodes")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip interactive review and persist all proposed nodes")
 	cmd.Flags().BoolVar(&noRouter, "no-router", false, "Skip LLM dedup router when persisting nodes")
+
+	// Shell-history sub-command (ingest record).
+	cmd.AddCommand(NewIngestRecordSubCmd())
 	return cmd
 }
