@@ -5,26 +5,6 @@ import (
 	"net/http"
 )
 
-func (h *Handler) vibeQuery(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Prompt  string `json:"prompt"`
-		Project string `json:"project"`
-		TopK    int    `json:"topK"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONErrorString(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-	out, err := h.svc.VibeQuery(req.Prompt, req.Project, req.TopK)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(out)
-}
-
 func (h *Handler) vibeMutationPlan(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Prompt  string `json:"prompt"`

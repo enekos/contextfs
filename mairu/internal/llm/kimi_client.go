@@ -44,11 +44,6 @@ func NewKimiClient(apiKey string, baseURL string) *KimiClient {
 	}
 }
 
-// SetHTTPClient allows customizing the HTTP client (for tests)
-func (c *KimiClient) SetHTTPClient(client *http.Client) {
-	c.httpClient = client
-}
-
 // ChatCompletion sends a chat completion request
 func (c *KimiClient) ChatCompletion(ctx context.Context, req KimiChatRequest) (*KimiChatResponse, error) {
 	url := fmt.Sprintf("%s/chat/completions", c.baseURL)

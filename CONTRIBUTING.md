@@ -37,7 +37,6 @@ make install-hooks
 - `bun run --cwd mairu/ui dev` - run unified Svelte dashboard (`mairu/ui`).
 - `make eval-retrieval` - run retrieval benchmark.
 - `./mairu/bin/mairu memory search "query" -P my-project` - search project memories.
-- `./mairu/bin/mairu vibe query "how does auth work?" -P my-project` - natural-language retrieval.
 - `./mairu/bin/mairu vibe mutation "remember X" -P my-project -y` - store/update context from plain English.
 
 ## Contribution Guidelines

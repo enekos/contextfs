@@ -62,5 +62,4 @@ mairu.db-shm
 mairu.db-wal
 
 docs/superpowers/
-mairu/ui/wailsjs/
 browser-extension/extension/pkg/

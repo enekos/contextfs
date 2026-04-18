@@ -1,6 +1,6 @@
 ## mairu code
 
-Semantic code search (bypasses LLM vibe query)
+Semantic code search
 
 ### Options
 

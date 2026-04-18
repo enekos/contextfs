@@ -109,57 +109,57 @@ local function send_query()
   append_to_history(query, true)
   append_raw("Thinking...")
   
-  api.vibe_query(query, function(data, err)
+  api.search(query, function(data, err)
     if not top_popup or not top_popup.bufnr then return end
-    
+
     -- Remove the "Thinking..." line
     vim.api.nvim_set_option_value("modifiable", true, { buf = top_popup.bufnr })
     vim.api.nvim_set_option_value("readonly", false, { buf = top_popup.bufnr })
-    
+
     local line_count = vim.api.nvim_buf_line_count(top_popup.bufnr)
     vim.api.nvim_buf_set_lines(top_popup.bufnr, line_count - 1, line_count, false, {})
-    
+
     vim.api.nvim_set_option_value("modifiable", false, { buf = top_popup.bufnr })
     vim.api.nvim_set_option_value("readonly", true, { buf = top_popup.bufnr })
-    
+
     if err then
       append_raw("Error: " .. err)
       return
     end
-    
-    -- vibe_query returns { reasoning = "...", results = [ { store, items } ] }
+
+    -- search returns { memories = [...], skills = [...], contextNodes = [...] }
     local reply = ""
-    if data.reasoning then
-      reply = reply .. data.reasoning .. "\n\n"
-    end
-    
     local found_any = false
-    if data.results then
-      for _, group in ipairs(data.results) do
-        if group.items and #group.items > 0 then
-          found_any = true
-          reply = reply .. "**" .. group.store:gsub("^%l", string.upper) .. " Matches:**\n"
-          for _, item in ipairs(group.items) do
-             local label = item.content or item.name or item.abstract or item.uri or item.id or "Unknown"
-             -- Truncate label if it's too long
-             if string.len(label) > 100 then
-               label = string.sub(label, 1, 100) .. "..."
-             end
-             -- Format on one line
-             reply = reply .. "- " .. label:gsub("\n", " ") .. "\n"
-          end
-          reply = reply .. "\n"
+
+    local stores = {
+      { key = "memories", label = "Memory" },
+      { key = "skills", label = "Skill" },
+      { key = "contextNodes", label = "Node" },
+    }
+
+    for _, store in ipairs(stores) do
+      local items = data[store.key]
+      if items and #items > 0 then
+        found_any = true
+        reply = reply .. "**" .. store.label .. " Matches:**\n"
+        for _, item in ipairs(items) do
+           local label = item.content or item.name or item.abstract or item.uri or item.id or "Unknown"
+           -- Truncate label if it's too long
+           if string.len(label) > 100 then
+             label = string.sub(label, 1, 100) .. "..."
+           end
+           -- Format on one line
+           reply = reply .. "- " .. label:gsub("\n", " ") .. "\n"
         end
+        reply = reply .. "\n"
       end
     end
-    
+
     if not found_any then
       reply = reply .. "*(No matching context found)*"
     end
-    
-    append_to_history(reply, false)
-    
 
+    append_to_history(reply, false)
   end)
 end
 

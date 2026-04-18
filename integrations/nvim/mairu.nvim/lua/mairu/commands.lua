@@ -24,15 +24,6 @@ local function search_context()
   end)
 end
 
-local function vibe_query()
-  vim.ui.input({ prompt = "Vibe Query: " }, function(input)
-    if not input or input == "" then return end
-    
-    -- Open chat window and seed the query
-    require("mairu.ui.chat").open()
-  end)
-end
-
 local function vibe_mutation()
   vim.ui.input({ prompt = "Mutation Plan: " }, function(input)
     if not input or input == "" then return end
@@ -59,7 +50,6 @@ function M.command_palette()
     { display = "Search Context (Contextual Search)", cmd = search_context },
     { display = "Find Symbol Impact (Blast Radius)", cmd = find_symbol_impact },
     { display = "Store Memory (Natural Language)", cmd = store_memory },
-    { display = "Ask Mairu (Vibe Query)", cmd = vibe_query },
     { display = "Mairu Update Knowledge (Vibe Mutation)", cmd = vibe_mutation },
     { display = "Toggle Ambient Context Sidebar", cmd = require("mairu.ui.sidebar").toggle },
     { display = "Open Mairu Chat", cmd = require("mairu.ui.chat").open },

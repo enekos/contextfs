@@ -2,16 +2,7 @@ SHELL := /bin/bash
 
 .DEFAULT_GOAL := help
 
-desktop-dev:
-	cd mairu/cmd/desktop && wails dev
-
-desktop-build:
-	cd mairu/cmd/desktop && wails build -o mairu-desktop
-
-desktop-clean:
-	rm -rf mairu/cmd/desktop/build/bin
-
-.PHONY: help install install-dashboard setup build lint test clean dashboard dashboard-api dashboard-dev mairu-build mairu-web desktop-dev desktop-build desktop-clean
+.PHONY: help install install-dashboard setup build lint test clean dashboard dashboard-api dashboard-dev mairu-build mairu-web
 .PHONY: fmt-go fmt-go-check lint-go test-go test-go-race test-go-cover check-go check-go-ci install-hooks
 .PHONY: eval-retrieval eval-seed eval-llm
 .PHONY: meili-up meili-down meili-status meili-clean setup-no-docker dev-no-docker mairu-no-docker
@@ -113,8 +104,19 @@ dashboard:
 	./mairu/bin/mairu context-server -p 8788 & MAIRU_CONTEXT_SERVER_URL=http://localhost:8788 ./mairu/bin/mairu web -p 8080 & bun run --cwd mairu/ui dev
 
 mairu-build:
-	mkdir -p mairu/bin
-	go build -C mairu -o bin/mairu ./cmd/mairu
+	@mkdir -p mairu/bin
+	@echo "Building mairu..."
+	@start=$$(date +%s); \
+	go build -C mairu -v -o bin/mairu ./cmd/mairu; \
+	status=$$?; \
+	end=$$(date +%s); \
+	if [ $$status -eq 0 ]; then \
+		echo ""; \
+		echo "Build completed in $$((end - start))s"; \
+		ls -lh mairu/bin/mairu; \
+	else \
+		exit $$status; \
+	fi
 
 mairu-web:
 	$(MAKE) mairu-build

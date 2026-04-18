@@ -24,12 +24,7 @@ type Server struct {
 	path     string
 	repo     BashRepo
 	redactor *redact.Redactor
-
-	// testHook, if non-nil, replaces the default processRecord path.
-	// It is unexported so only tests within this package can set it.
-	testHook func(context.Context, Record)
-
-	wg sync.WaitGroup
+	wg       sync.WaitGroup
 }
 
 // NewServer constructs a Server that will listen at path.
@@ -110,13 +105,8 @@ func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 	}
 }
 
-// processRecord dispatches rec. If testHook is set it takes priority;
-// otherwise redacts the command and persists it via repo.
+// processRecord redacts rec and persists it via repo.
 func (s *Server) processRecord(ctx context.Context, rec Record) {
-	if s.testHook != nil {
-		s.testHook(ctx, rec)
-		return
-	}
 	project := rec.Project
 	if project == "" {
 		project = ResolveProject(rec.Cwd)

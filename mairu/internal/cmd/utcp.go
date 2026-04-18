@@ -68,19 +68,6 @@ var utcpTools = []Tool{
 		},
 	},
 	{
-		Name:        "vibe_query",
-		Description: "Run an LLM-powered free-form query against the codebase using vibe query.",
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"prompt":  map[string]interface{}{"type": "string", "description": "The natural language question about the codebase"},
-				"project": map[string]interface{}{"type": "string", "description": "Project namespace"},
-				"k":       map[string]interface{}{"type": "number", "description": "Top K results for the underlying context search (default 5)"},
-			},
-			"required": []string{"prompt"},
-		},
-	},
-	{
 		Name:        "vibe_mutation",
 		Description: "Suggest and automatically perform database updates (memories, nodes) based on recent facts/instructions.",
 		InputSchema: map[string]interface{}{
@@ -193,24 +180,6 @@ func NewUTCPCmd() *cobra.Command {
 					}
 					var out []byte
 					out, err = ContextGet("/api/search", params)
-					if err == nil {
-						var v any
-						json.Unmarshal(out, &v)
-						result = v
-					}
-				case "vibe_query":
-					prompt, _ := args["prompt"].(string)
-					project, _ := args["project"].(string)
-					k := 5
-					if kv, ok := args["k"].(float64); ok {
-						k = int(kv)
-					}
-					var out []byte
-					out, err = ContextPost("/api/vibe/query", map[string]any{
-						"prompt":  prompt,
-						"project": project,
-						"topK":    k,
-					})
 					if err == nil {
 						var v any
 						json.Unmarshal(out, &v)

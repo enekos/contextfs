@@ -29,30 +29,15 @@ func (s *AppService) VibeQuery(prompt, project string, topK int) (VibeQueryResul
 		topK = 5
 	}
 
-	queries := []vibeQueryPlanItem{
+	queries := []struct {
+		Store string
+		Query string
+	}{
 		{Store: StoreMemory, Query: prompt},
 		{Store: StoreSkill, Query: prompt},
 		{Store: StoreNode, Query: prompt},
 	}
 	reasoning := "Queried memories, skills, and context nodes with the same prompt for broad recall."
-
-	if s.llmClient != nil {
-		if sys, err := prompts.Get("vibe_query_planner", struct {
-			Project string
-		}{
-			Project: strings.TrimSpace(project),
-		}); err == nil {
-			var res vibeQueryPlan
-			err := s.llmClient.GenerateJSON(context.Background(), sys, prompt, nil, &res)
-			if err == nil {
-				plannedReasoning, plannedQueries := validateSearchPlan(res)
-				if len(plannedQueries) > 0 {
-					reasoning = plannedReasoning
-					queries = plannedQueries
-				}
-			}
-		}
-	}
 
 	results := make([]VibeSearchGroup, 0, len(queries))
 	for _, q := range queries {

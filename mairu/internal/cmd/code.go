@@ -12,7 +12,7 @@ func NewCodeCmd() *cobra.Command {
 	var project string
 	c := &cobra.Command{
 		Use:   "code",
-		Short: "Semantic code search (bypasses LLM vibe query)",
+		Short: "Semantic code search",
 	}
 	c.PersistentFlags().StringVarP(&project, "project", "P", "", "Project name")
 

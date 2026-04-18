@@ -24,8 +24,6 @@ declare namespace Preferences {
   export type SearchNodes = ExtensionPreferences & {}
   /** Preferences accessible in the `store-memory` command */
   export type StoreMemory = ExtensionPreferences & {}
-  /** Preferences accessible in the `vibe-query` command */
-  export type VibeQuery = ExtensionPreferences & {}
   /** Preferences accessible in the `history-search` command */
   export type HistorySearch = ExtensionPreferences & {}
   /** Preferences accessible in the `scrape-web` command */
@@ -49,8 +47,6 @@ declare namespace Arguments {
   export type SearchNodes = {}
   /** Arguments passed to the `store-memory` command */
   export type StoreMemory = {}
-  /** Arguments passed to the `vibe-query` command */
-  export type VibeQuery = {}
   /** Arguments passed to the `history-search` command */
   export type HistorySearch = {}
   /** Arguments passed to the `scrape-web` command */

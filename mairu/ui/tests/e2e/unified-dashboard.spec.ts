@@ -57,17 +57,6 @@ test.beforeEach(async ({ page }) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ uri: "contextfs://demo/new", created: true }) });
   });
 
-  await page.route("**/api/vibe/query", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        reasoning: "Query executed",
-        results: [{ store: "memory", query: "hello", items: [{ id: "m1", content: "result" }] }],
-      }),
-    });
-  });
-
   await page.route("**/api/vibe/mutation/plan", async (route) => {
     await route.fulfill({
       status: 200,

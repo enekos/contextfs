@@ -1,17 +1,12 @@
 <script lang="ts">
   import { fmtDate, categoryColors, scoreColor, impColor } from "../lib/utils";
-  import { vibeQuery, vibeMutationPlan, vibeMutationExecute } from "../../lib/api";
+  import { vibeMutationPlan, vibeMutationExecute } from "../../lib/api";
 
-  type Mode = "query" | "mutation";
-  let mode: Mode = "query";
   let prompt = "";
   let project = "";
   let topK = 5;
   let loading = false;
   let error = "";
-
-  // Query state
-  let queryResult: { reasoning: string; results: Array<{ store: string; query: string; items: Record<string, any>[] }> } | null = null;
 
   // Mutation state
   let mutationPlan: { reasoning: string; operations: Array<{ op: string; target?: string; description: string; data: Record<string, any> }> } | null = null;
@@ -20,30 +15,16 @@
   let executionResults: Array<{ op: string; result?: string; error?: string }> | null = null;
 
   // History
-  let history: Array<{ mode: Mode; prompt: string; timestamp: Date; reasoning: string }> = [];
-
-  async function runVibeQuery() {
-    if (!prompt.trim()) return;
-    loading = true; error = ""; queryResult = null; mutationPlan = null; executionResults = null;
-    try {
-      const data = await vibeQuery(prompt, project || "", topK);
-      queryResult = data;
-      history = [{ mode: "query", prompt, timestamp: new Date(), reasoning: queryResult?.reasoning || "" }, ...history.slice(0, 19)];
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+  let history: Array<{ prompt: string; timestamp: Date; reasoning: string }> = [];
 
   async function runVibeMutation() {
     if (!prompt.trim()) return;
-    loading = true; error = ""; queryResult = null; mutationPlan = null; executionResults = null;
+    loading = true; error = "";
     try {
       const data = await vibeMutationPlan(prompt, project || "", topK);
       mutationPlan = data;
       selectedOps = (mutationPlan?.operations || []).map(() => true);
-      history = [{ mode: "mutation", prompt, timestamp: new Date(), reasoning: mutationPlan?.reasoning || "" }, ...history.slice(0, 19)];
+      history = [{ prompt, timestamp: new Date(), reasoning: mutationPlan?.reasoning || "" }, ...history.slice(0, 19)];
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -66,13 +47,8 @@
     }
   }
 
-  function submit() {
-    if (mode === "query") runVibeQuery();
-    else runVibeMutation();
-  }
-
   function keydown(e: KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runVibeMutation(); }
   }
 
   function toggleAll() {
@@ -92,37 +68,23 @@
     return "~";
   }
 
-  $: totalItems = queryResult ? queryResult.results.reduce((sum, r) => sum + r.items.length, 0) : 0;
   $: approvedCount = selectedOps.filter(Boolean).length;
 </script>
 
 <section class="vibe-section">
-  <!-- Mode toggle + input -->
+  <!-- Header -->
   <div class="vibe-header">
-    <h2 class="vibe-title">Vibe Engine</h2>
+    <h2 class="vibe-title">Vibe Mutation</h2>
     <p class="vibe-desc">
-      {#if mode === "query"}
-        Ask anything in plain English. The LLM plans and runs semantic searches across all stores.
-      {:else}
-        Describe changes in plain English. The LLM plans mutations, you review and approve.
-      {/if}
+      Describe changes in plain English. The LLM plans mutations, you review and approve.
     </p>
   </div>
 
   <div class="vibe-controls">
-    <div class="vibe-mode-toggle">
-      <button class:active={mode === "query"} on:click={() => { mode = "query"; mutationPlan = null; executionResults = null; }}>
-        Query
-      </button>
-      <button class:active={mode === "mutation"} on:click={() => { mode = "mutation"; queryResult = null; }}>
-        Mutation
-      </button>
-    </div>
-
     <div class="vibe-input-row">
       <textarea
         class="vibe-input"
-        placeholder={mode === "query" ? "What do you want to find? e.g. 'Show me all auth-related decisions'" : "What do you want to change? e.g. 'Mark all testing memories as importance 8'"}
+        placeholder="What do you want to change? e.g. 'Mark all testing memories as importance 8'"
         bind:value={prompt}
         on:keydown={keydown}
         disabled={loading || executing}
@@ -142,13 +104,11 @@
         </div>
         <button
           class="btn-primary vibe-submit"
-          on:click={submit}
+          on:click={runVibeMutation}
           disabled={loading || executing || !prompt.trim()}
         >
           {#if loading}
             Thinking...
-          {:else if mode === "query"}
-            Search
           {:else}
             Plan
           {/if}
@@ -162,74 +122,6 @@
       <strong>Error:</strong> {error}
       <button on:click={() => error = ""}>x</button>
     </div>
-  {/if}
-
-  <!-- Query Results -->
-  {#if queryResult}
-    <div class="vibe-reasoning">
-      <span class="vibe-reasoning-label">Strategy</span>
-      {queryResult.reasoning}
-    </div>
-
-    <div class="vibe-meta">
-      {totalItems} result{totalItems !== 1 ? "s" : ""} across {queryResult.results.length} quer{queryResult.results.length !== 1 ? "ies" : "y"}
-    </div>
-
-    {#each queryResult.results as group}
-      <div class="vibe-group">
-        <div class="vibe-group-header">
-          <span class="lab-type-badge lab-type-{group.store}">{group.store}</span>
-          <span class="vibe-group-query">"{group.query}"</span>
-          <span class="vibe-group-count">{group.items.length} result{group.items.length !== 1 ? "s" : ""}</span>
-        </div>
-
-        {#if group.items.length === 0}
-          <p class="vibe-no-results">No results</p>
-        {:else}
-          <div class="vibe-items">
-            {#each group.items as item, i}
-              <div class="vibe-item">
-                <div class="vibe-item-rank">#{i + 1}</div>
-                <div class="vibe-item-body">
-                  <div class="vibe-item-top">
-                    {#if group.store === "memory"}
-                      <span class="lab-type-cat" style="background:{categoryColors[item.category] || 'var(--text-muted)'}">{item.category}</span>
-                      <span class="lab-imp-badge {impColor(item.importance)}">{item.importance}</span>
-                      {#if item.owner}<span class="vibe-item-owner">{item.owner}</span>{/if}
-                    {:else if group.store === "skill"}
-                      <strong class="vibe-item-title">{item.name}</strong>
-                    {:else}
-                      <code class="lab-uri">{item.uri}</code>
-                      <strong class="vibe-item-title">{item.name}</strong>
-                    {/if}
-                    {#if item._hybrid_score !== undefined}
-                      <span class="vibe-score" style="color:{scoreColor(item._hybrid_score)}">
-                        {(item._hybrid_score * 100).toFixed(1)}%
-                      </span>
-                    {/if}
-                  </div>
-                  <div class="vibe-item-content">
-                    {#if group.store === "memory"}
-                      {item.content}
-                    {:else if group.store === "skill"}
-                      {item.description}
-                    {:else}
-                      {item.abstract}
-                      {#if item.overview}
-                        <div class="vibe-item-overview">{item.overview}</div>
-                      {/if}
-                    {/if}
-                  </div>
-                  {#if item.project}
-                    <span class="vibe-item-project">{item.project}</span>
-                  {/if}
-                </div>
-              </div>
-            {/each}
-          </div>
-        {/if}
-      </div>
-    {/each}
   {/if}
 
   <!-- Mutation Plan -->
@@ -316,34 +208,29 @@
   {/if}
 
   <!-- History sidebar -->
-  {#if history.length > 0 && !queryResult && !mutationPlan}
+  {#if history.length > 0 && !mutationPlan}
     <div class="vibe-history">
       <h3 class="vibe-history-title">Recent</h3>
       {#each history as h}
-        <button class="vibe-history-item" on:click={() => { prompt = h.prompt; mode = h.mode; }}>
-          <span class="vibe-history-mode" class:vibe-history-mutation={h.mode === "mutation"}>
-            {h.mode === "query" ? "Q" : "M"}
-          </span>
+        <button class="vibe-history-item" on:click={() => { prompt = h.prompt; }}>
+          <span class="vibe-history-mode">M</span>
           <span class="vibe-history-prompt">{h.prompt}</span>
         </button>
       {/each}
     </div>
   {/if}
 
-  {#if !loading && !queryResult && !mutationPlan && history.length === 0}
+  {#if !loading && !mutationPlan && history.length === 0}
     <div class="vibe-empty">
       <div class="vibe-empty-icon">~</div>
-      <p>Type a prompt and press <kbd>Enter</kbd> or click <strong>{mode === "query" ? "Search" : "Plan"}</strong>.</p>
+      <p>Type a prompt and press <kbd>Enter</kbd> or click <strong>Plan</strong>.</p>
       <div class="vibe-examples">
         <p class="vibe-examples-title">Try these:</p>
-        <button class="vibe-example" on:click={() => { prompt = "What testing frameworks and patterns are used?"; mode = "query"; }}>
-          "What testing frameworks and patterns are used?"
-        </button>
-        <button class="vibe-example" on:click={() => { prompt = "Show me all architecture decisions"; mode = "query"; }}>
-          "Show me all architecture decisions"
-        </button>
-        <button class="vibe-example" on:click={() => { prompt = "Remember that we now use Bun instead of Node"; mode = "mutation"; }}>
+        <button class="vibe-example" on:click={() => { prompt = "Remember that we now use Bun instead of Node"; }}>
           "Remember that we now use Bun instead of Node"
+        </button>
+        <button class="vibe-example" on:click={() => { prompt = "Mark all testing memories as importance 8"; }}>
+          "Mark all testing memories as importance 8"
         </button>
       </div>
     </div>
@@ -360,18 +247,6 @@
     display: flex; flex-direction: column; gap: 16px;
     background: var(--bg-card); border: 1px solid var(--border-main); 
     padding: 24px; box-shadow: var(--shadow-sm);
-  }
-
-  .vibe-mode-toggle { display: flex; gap: 2px; }
-  .vibe-mode-toggle button {
-    background: none; border: 1px solid var(--border-main); color: var(--text-secondary);
-    padding: 8px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
-    transition: all 0.15s;
-  }
-  .vibe-mode-toggle button:first-child {  }
-  .vibe-mode-toggle button:last-child {  }
-  .vibe-mode-toggle button.active {
-    background: var(--bg-active); border-color: #4f46e5; color: var(--text-active);
   }
 
   .vibe-input-row { display: flex; gap: 16px; align-items: flex-start; }
@@ -419,44 +294,6 @@
     text-transform: uppercase; letter-spacing: 0.05em;
     color: var(--accent-main); margin-right: 8px;
     background: var(--bg-active); padding: 2px 7px; 
-  }
-
-  .vibe-meta {
-    font-size: 12px; color: var(--text-light);
-    padding: 4px 0; border-bottom: 1px solid var(--bg-card);
-  }
-
-  /* Query result groups */
-  .vibe-group { display: flex; flex-direction: column; gap: 8px; }
-  .vibe-group-header {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 0 4px;
-  }
-  .vibe-group-query { font-size: 12px; color: var(--text-link); font-style: italic; }
-  .vibe-group-count { font-size: 11px; color: var(--text-light); margin-left: auto; }
-
-  .vibe-no-results { color: var(--text-light); font-size: 13px; padding: 12px 0; }
-
-  .vibe-items { display: flex; flex-direction: column; gap: 12px; }
-
-  .vibe-item {
-    display: flex; gap: 16px;
-    background: var(--bg-card); border: 1px solid var(--border-main); 
-    padding: 16px 20px; transition: border-color 0.15s;
-  }
-  .vibe-item:hover { border-color: var(--text-light); }
-
-  .vibe-item-rank { font-size: 12px; font-weight: 700; color: var(--text-light); min-width: 24px; padding-top: 2px; }
-  .vibe-item-body { flex: 1; display: flex; flex-direction: column; gap: 6px; }
-  .vibe-item-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .vibe-item-title { color: var(--text-bold); font-size: 13px; }
-  .vibe-item-owner { font-size: 11px; color: var(--text-light); }
-  .vibe-score { font-size: 12px; font-weight: 700; margin-left: auto; }
-  .vibe-item-content { font-size: 13px; color: var(--text-secondary); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-  .vibe-item-overview { margin-top: 4px; font-size: 12px; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; }
-  .vibe-item-project {
-    display: inline-block; font-size: 10px; color: var(--text-muted);
-    background: var(--bg-main); padding: 2px 6px;  width: fit-content;
   }
 
   /* Mutation plan */
@@ -542,7 +379,6 @@
     font-size: 11px; font-weight: 700;
     background: var(--bg-active); color: var(--text-active);
   }
-  .vibe-history-mutation { background: #3b1c0a; color: #fdba74; }
   .vibe-history-prompt {
     font-size: 13px; color: var(--text-secondary);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;

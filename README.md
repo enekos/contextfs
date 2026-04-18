@@ -162,7 +162,6 @@ mairu sync            # force sync search_outbox to Meilisearch
 
 ### Vibe Commands (LLM Powered)
 ```bash
-mairu vibe query "how does auth work?" -P my-project
 mairu vibe mutation "remember we use gRPC internally" -P my-project
 ```
 

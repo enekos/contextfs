@@ -182,12 +182,8 @@ When you successfully complete a complex task, summarize the structural decision
 mairu vibe-mutation "remember that we switched from REST to gRPC for internal service calls" -P my-project -y
 ```
 
-### 3. Natural-Language Retrieval (Optional Fallback)
-Use `vibe-query` only when direct memory/node searches are not sufficient (for example, broad or ambiguous questions that need multi-step planning).
-
-```bash
-mairu vibe-query "how does the authentication system work?" -P my-project
-```
+### 3. Natural-Language Retrieval
+Use direct `memory search` and `node search` for all retrieval needs. Combine multiple targeted searches for broad or ambiguous questions.
 
 ### 4. Advanced/Precise Operations
 Use direct commands when you need exact control over what is stored or retrieved.

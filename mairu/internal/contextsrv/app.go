@@ -45,7 +45,7 @@ type App struct {
 	svc       Service
 }
 
-// Service returns the underlying service for external consumers (e.g., Wails bindings).
+// Service returns the underlying service for external consumers.
 func (a *App) Service() Service {
 	return a.svc
 }

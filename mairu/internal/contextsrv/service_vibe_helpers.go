@@ -7,34 +7,6 @@ import (
 	"strings"
 )
 
-type vibeQueryPlan struct {
-	Reasoning string              `json:"reasoning"`
-	Queries   []vibeQueryPlanItem `json:"queries"`
-}
-
-type vibeQueryPlanItem struct {
-	Store string `json:"store"`
-	Query string `json:"query"`
-}
-
-func validateSearchPlan(parsed vibeQueryPlan) (string, []vibeQueryPlanItem) {
-	valid := make([]vibeQueryPlanItem, 0, len(parsed.Queries))
-	for _, q := range parsed.Queries {
-		if strings.TrimSpace(q.Query) == "" {
-			continue
-		}
-		store := strings.ToLower(strings.TrimSpace(q.Store))
-		if store != "memory" && store != "skill" && store != "node" {
-			continue
-		}
-		valid = append(valid, vibeQueryPlanItem{
-			Store: store,
-			Query: q.Query,
-		})
-	}
-	return parsed.Reasoning, valid
-}
-
 func parseMutationPlan(parsed VibeMutationPlan) (VibeMutationPlan, bool) {
 	if len(parsed.Operations) == 0 {
 		return VibeMutationPlan{Reasoning: parsed.Reasoning, Operations: []VibeMutationOp{}}, true

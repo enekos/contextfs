@@ -171,7 +171,7 @@ type SearchOptions struct {
 	RecencyDecay  float64            `json:"recencyDecay"`
 }
 
-// VibeQueryResult represents the output of a natural language read operation (vibe query).
+// VibeQueryResult represents the output of a natural language read operation.
 type VibeQueryResult struct {
 	Reasoning string            `json:"reasoning"`
 	Results   []VibeSearchGroup `json:"results"`

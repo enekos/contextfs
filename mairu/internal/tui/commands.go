@@ -22,7 +22,6 @@ var allSlashCommands = []SlashCommand{
 	{"/node ls", "List contextfs node children"},
 	{"/node store", "Store/update a contextfs node"},
 	{"/node write", "Write/update a contextfs node"},
-	{"/vibe", "Run contextfs vibe-query"},
 	{"/remember", "Run contextfs vibe-mutation"},
 	{"/save", "Save the current session"},
 	{"/fork", "Fork the current session to a new name"},

@@ -60,7 +60,6 @@ func NewHandler(svc Service, authToken string) *Handler {
 	mux.HandleFunc("GET /api/search", authMiddleware(h.search))
 
 	// Vibe
-	mux.HandleFunc("POST /api/vibe/query", authMiddleware(h.vibeQuery))
 	mux.HandleFunc("POST /api/vibe/mutation/plan", authMiddleware(h.vibeMutationPlan))
 	mux.HandleFunc("POST /api/vibe/mutation/execute", authMiddleware(h.vibeMutationExecute))
 	mux.HandleFunc("POST /api/vibe/ingest", authMiddleware(h.vibeIngest))

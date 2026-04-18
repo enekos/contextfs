@@ -29,12 +29,6 @@
       "mode": "view"
     },
     {
-      "name": "vibe-query",
-      "title": "Vibe Query",
-      "description": "Query Mairu using natural language.",
-      "mode": "view"
-    },
-    {
       "name": "history-search",
       "title": "Search History",
       "description": "Semantically search past bash commands and outputs.",

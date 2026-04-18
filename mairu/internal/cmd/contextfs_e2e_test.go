@@ -75,11 +75,6 @@ func (a *e2eContextAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.handleRestoreNode(w, r)
 	case r.URL.Path == "/api/search":
 		a.handleSearch(w, r)
-	case r.URL.Path == "/api/vibe/query":
-		writeJSON(w, http.StatusOK, map[string]any{
-			"reasoning": "ok",
-			"results":   []map[string]any{},
-		})
 	case r.URL.Path == "/api/vibe/mutation/plan":
 		writeJSON(w, http.StatusOK, map[string]any{
 			"operations": []map[string]any{
@@ -557,14 +552,6 @@ func Skip_TestContextCommandsEndToEnd(t *testing.T) {
 	}, "-P", project, "restore", childURI)
 
 	// vibe and aliases
-	execCommand(t, func() interface {
-		SetOut(io.Writer)
-		SetErr(io.Writer)
-		SetArgs([]string)
-		Execute() error
-	} {
-		return NewVibeCmd()
-	}, "-P", project, "query", "summarize auth context", "-k", "3")
 	execCommand(t, func() interface {
 		SetOut(io.Writer)
 		SetErr(io.Writer)

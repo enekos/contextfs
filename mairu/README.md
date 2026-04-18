@@ -50,7 +50,6 @@ Inside the TUI, use `/council status` to inspect current agent coordination. See
 ./mairu/bin/mairu memory search "auth token" -P my-project -k 5
 ./mairu/bin/mairu memory store "we use Postgres for context server" -P my-project -c observation -o agent -i 5
 ./mairu/bin/mairu node search "authentication architecture" -P my-project -k 5
-./mairu/bin/mairu vibe query "how does auth work?" -P my-project -k 5
 ./mairu/bin/mairu vibe mutation "remember we use gRPC internally" -P my-project -k 5
 
 # File/Knowledge Ingestion
@@ -67,5 +66,5 @@ Inside the TUI, use `/council status` to inspect current agent coordination. See
 ## Notes
 
 - The unified dashboard UI lives at `mairu/ui/`.
-- Core ContextFS workflows (`memory`, `skill`, `node`, `vibe query`, `vibe mutation`, `ingest`, `daemon`) are native Go commands in `mairu` CLI.
+- Core ContextFS workflows (`memory`, `skill`, `node`, `vibe mutation`, `ingest`, `daemon`) are native Go commands in `mairu` CLI.
 - Go developer tooling is centralized in `mairu/scripts/go-dev.sh` and surfaced via root `make` targets.

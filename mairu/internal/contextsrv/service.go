@@ -59,7 +59,7 @@ type BashHistoryService interface {
 }
 
 // Service defines the interface for core functionality, including memories, skills,
-// context nodes, vibe querying and mutation, and moderation.
+// context nodes, vibe mutation, and moderation.
 // It composes the domain-scoped sub-interfaces so that callers that only need
 // one domain can depend on the narrower type.
 type Service interface {

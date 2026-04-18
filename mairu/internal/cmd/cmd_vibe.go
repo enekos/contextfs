@@ -41,27 +41,6 @@ func NewVibeCmd() *cobra.Command {
 	}
 	cmd.PersistentFlags().StringVarP(&project, "project", "P", "", "Project name")
 
-	queryCmd := &cobra.Command{
-		Use:   "query <prompt>",
-		Short: "Run vibe query",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			k, _ := cmd.Flags().GetInt("k")
-			out, err := ContextPost("/api/vibe/query", map[string]any{
-				"prompt":  args[0],
-				"project": project,
-				"topK":    k,
-			})
-			if err != nil {
-				return err
-			}
-			PrintJSON(out)
-			return nil
-		},
-	}
-	queryCmd.Flags().IntP("k", "k", 5, "Top K results")
-	queryCmd.Aliases = []string{"summarize"}
-
 	mutationCmd := &cobra.Command{
 		Use:   "mutation [prompt]",
 		Short: "Plan and execute vibe mutation",
@@ -77,6 +56,6 @@ func NewVibeCmd() *cobra.Command {
 	mutationCmd.Flags().IntP("k", "k", 5, "Top K results")
 	mutationCmd.Aliases = []string{"flush", "nudge"}
 
-	cmd.AddCommand(queryCmd, mutationCmd)
+	cmd.AddCommand(mutationCmd)
 	return cmd
 }

@@ -28,6 +28,6 @@ If it is installed somewhere else, you can configure the path in Zed's settings 
 
 ## Usage
 
-Once installed, Zed will automatically start `mairu mcp` when it needs context. It exposes tools like `search_memories`, `store_memory`, `search_nodes`, `vibe_query`, and `vibe_mutation` which Zed can use to retrieve context from the `mairu` database.
+Once installed, Zed will automatically start `mairu mcp` when it needs context. It exposes tools like `search_memories`, `store_memory`, `search_nodes`, and `vibe_mutation` which Zed can use to retrieve context from the `mairu` database.
 
 Make sure you have Mairu configured properly and that you pass the correct `-P, --project` identifiers in prompts if necessary (although the Mairu agent MCP server handles extracting them via the agent prompts).

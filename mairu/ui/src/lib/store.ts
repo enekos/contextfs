@@ -1,12 +1,5 @@
 import { writable } from 'svelte/store';
 
-const isWails = typeof window !== 'undefined' && !!window.go?.desktop?.App;
-let EventsOn: any = () => {};
-if (isWails) {
-  const runtime = window.runtime;
-  EventsOn = runtime?.EventsOn ?? (() => {});
-}
-
 export type AgentEvent = {
   Type: "text" | "status" | "error" | "done" | "tool_call" | "tool_result" | "log" | "bash_output" | "approval_request";
   Content: string;
@@ -67,20 +60,11 @@ function mapSavedRole(role: "user" | "model"): "user" | "assistant" {
 async function loadSessionMessages(sessionName: string) {
   let payload: { messages?: SessionMessage[] } = { messages: [] };
 
-  if (isWails) {
-    try {
-      const msgs = await (window as any).go.desktop.App.LoadSessionHistory(sessionName);
-      payload.messages = msgs;
-    } catch {
-      // ignore Wails session history load error
-    }
-  } else {
-    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/messages`);
-    if (!response.ok) {
-      throw new Error(`failed to load session: ${response.statusText}`);
-    }
-    payload = await response.json() as { messages?: SessionMessage[] };
+  const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/messages`);
+  if (!response.ok) {
+    throw new Error(`failed to load session: ${response.statusText}`);
   }
+  payload = await response.json() as { messages?: SessionMessage[] };
   
   const loaded: Message[] = [];
   
@@ -151,16 +135,6 @@ async function loadSessionMessages(sessionName: string) {
 }
 
 export async function loadSessions() {
-  if (isWails) {
-    try {
-      const sessList = await (window as any).go.desktop.App.ListSessions();
-      const available = [...new Set([...(sessList ?? []), "default"])].sort();
-      sessions.set(available);
-    } catch {
-      sessions.set(["default"]);
-    }
-    return;
-  }
   const response = await fetch("/api/sessions");
   if (!response.ok) {
     throw new Error(`failed to list sessions: ${response.statusText}`);
@@ -175,17 +149,6 @@ export async function createSession(name: string) {
   const trimmed = name.trim();
   if (!trimmed) {
     throw new Error("session name cannot be empty");
-  }
-
-  if (isWails) {
-    try {
-      await (window as any).go.desktop.App.CreateSession(trimmed);
-      await loadSessions();
-      await switchSession(trimmed);
-      return;
-    } catch(e) {
-      throw new Error(typeof e === "string" ? e : "failed to create session");
-    }
   }
 
   const response = await fetch("/api/sessions", {
@@ -312,11 +275,6 @@ export async function connectChat(sessionName?: string, forceReconnect = false) 
   const activeSession = sessionName?.trim() || "default";
   currentSession.set(activeSession);
 
-  if (isWails) {
-    connectWailsChat(activeSession);
-    return;
-  }
-
   if (forceReconnect && ws) {
     ws.onclose = null;
     ws.close();
@@ -362,37 +320,6 @@ export async function connectChat(sessionName?: string, forceReconnect = false) 
   };
 }
 
-function connectWailsChat(session: string) {
-  connectionState.set("connecting");
-  
-  loadSessions().then(() => loadSessionMessages(session)).catch(() => {
-    // ignore initial session load error
-  });
-
-  connectionState.set("connected");
-
-  EventsOn("chat:message", (ev: any) => {
-    handleAgentEvent(ev);
-  });
-
-  EventsOn("chat:error", (err: string) => {
-    messages.update(m => [...m, {
-      id: crypto.randomUUID(),
-      role: "system" as const,
-      content: `Error: ${err}`,
-      bashOutput: "",
-      statuses: [],
-      logs: [],
-      toolCalls: [],
-    }]);
-    isGenerating.set(false);
-  });
-
-  EventsOn("chat:done", () => {
-    isGenerating.set(false);
-  });
-}
-
 export function sendMessage(content: string) {
   messages.update(msgs => [
     ...msgs, 
@@ -407,11 +334,7 @@ export function sendMessage(content: string) {
   
   isGenerating.set(true);
 
-  if (isWails) {
-    let session = "default";
-    currentSession.subscribe(v => session = v)();
-    window.go?.desktop?.App?.SendMessage(session, content);
-  } else if (ws && ws.readyState === WebSocket.OPEN) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(content);
   } else {
     isGenerating.set(false);

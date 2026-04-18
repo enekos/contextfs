@@ -66,19 +66,5 @@ describe("runMairuCmd", () => {
     );
   });
 
-  it("should not append -o json if output format is already specified", async () => {
-    vi.mocked(raycastApi.getPreferenceValues).mockReturnValue({});
-    vi.mocked(child_process.exec).mockResolvedValue({ stdout: "plain text", stderr: "" } as never);
 
-    await runMairuCmd("vibe-query 'hello' -o plain");
-    
-    expect(child_process.exec).toHaveBeenCalledWith(
-      expect.stringContaining('mairu vibe-query \'hello\' -o plain -P "default"'),
-      expect.any(Object)
-    );
-    expect(child_process.exec).not.toHaveBeenCalledWith(
-      expect.stringContaining('-o json'),
-      expect.any(Object)
-    );
-  });
 });

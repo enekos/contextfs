@@ -53,4 +53,4 @@ All LLM-powered logic resides in `mairu/internal/llm/`. When adding new AI-drive
 
 - **Go Unit Tests**: Place tests alongside your code (e.g., `mairu/internal/agent/agent_test.go`).
 - **Integration Tests**: Tests requiring Meilisearch/LLMs must be marked and handle setup properly.
-- **Evaluation**: Use the `llmeval` package to test LLM-driven features (e.g., retrieval precision, vibe query quality).
+- **Evaluation**: Use the `llmeval` package to test LLM-driven features (e.g., retrieval precision, mutation plan quality).

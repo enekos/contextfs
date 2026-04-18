@@ -5,9 +5,9 @@ Neovim plugin for the Mairu AI Coding Agent. Integrates deep context, memory sea
 ## Features
 
 - **Contextual Search (`<leader>ms`)**: Hit a keybinding on a symbol, and Mairu finds relevant memories and context nodes in a floating popup.
-- **Command Palette (`<leader>mc`)**: Telescope-based command palette to store memories, perform natural language vibe queries, and manage context.
+- **Command Palette (`<leader>mc`)**: Telescope-based command palette to store memories, search context, and manage knowledge.
 - **Ambient Context Sidebar (`<leader>mb`)**: Right-side panel that automatically updates to show relevant project context/memories based on the file you're currently editing.
-- **Chat Interaction (`<leader>ma`)**: Split window layout for continuous chat with Mairu via the `vibe-query` API.
+- **Chat Interaction (`<leader>ma`)**: Split window layout for continuous chat with Mairu via the search API.
 
 ## Requirements
 
@@ -62,4 +62,4 @@ If `set_default_keymaps()` is called:
 
 ## How it works
 
-The plugin operates by starting a background headless `mairu context-server` job when Neovim opens. It uses `plenary.curl` to communicate asynchronously over local HTTP APIs (`/api/search`, `/api/vibe/query`, etc.), ensuring Neovim's UI never blocks.
+The plugin operates by starting a background headless `mairu context-server` job when Neovim opens. It uses `plenary.curl` to communicate asynchronously over local HTTP APIs (`/api/search`, `/api/vibe/mutation`, etc.), ensuring Neovim's UI never blocks.

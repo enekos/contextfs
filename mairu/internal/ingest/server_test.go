@@ -8,12 +8,32 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"mairu/internal/redact"
 )
 
 // nilRepo satisfies BashRepo without doing anything.
 type nilRepo struct{}
 
 func (nilRepo) InsertBashHistory(_ context.Context, _, _ string, _, _ int, _ string) error {
+	return nil
+}
+
+// captureRepo records InsertBashHistory calls for test verification.
+type captureRepo struct {
+	mu    sync.Mutex
+	calls []captureCall
+}
+
+type captureCall struct {
+	project string
+	command string
+}
+
+func (c *captureRepo) InsertBashHistory(_ context.Context, project, command string, _, _ int, _ string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls = append(c.calls, captureCall{project: project, command: command})
 	return nil
 }
 
@@ -47,17 +67,11 @@ func waitListening(t *testing.T, path string) {
 	t.Fatalf("server never started listening at %s", path)
 }
 
-// TestServerRun_ReceivesRecords verifies that encoded records arrive via testHook.
+// TestServerRun_ReceivesRecords verifies that encoded records arrive and are persisted.
 func TestServerRun_ReceivesRecords(t *testing.T) {
-	srv, path := newTestServer(t)
-
-	var mu sync.Mutex
-	var received []Record
-	srv.testHook = func(_ context.Context, rec Record) {
-		mu.Lock()
-		defer mu.Unlock()
-		received = append(received, rec)
-	}
+	path := filepath.Join(t.TempDir(), "s")
+	repo := &captureRepo{}
+	srv := NewServer(path, repo, redact.New())
 
 	cancel, errCh := startServer(context.Background(), srv)
 	defer cancel()
@@ -82,25 +96,25 @@ func TestServerRun_ReceivesRecords(t *testing.T) {
 	// Wait up to 500 ms for both records to arrive.
 	deadline := time.Now().Add(500 * time.Millisecond)
 	for time.Now().Before(deadline) {
-		mu.Lock()
-		n := len(received)
-		mu.Unlock()
+		repo.mu.Lock()
+		n := len(repo.calls)
+		repo.mu.Unlock()
 		if n >= 2 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
-	if len(received) != 2 {
-		t.Fatalf("expected 2 records, got %d", len(received))
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if len(repo.calls) != 2 {
+		t.Fatalf("expected 2 records, got %d", len(repo.calls))
 	}
-	if received[0].Command != r1.Command {
-		t.Errorf("record[0].Command = %q, want %q", received[0].Command, r1.Command)
+	if repo.calls[0].command != r1.Command {
+		t.Errorf("record[0].Command = %q, want %q", repo.calls[0].command, r1.Command)
 	}
-	if received[1].Command != r2.Command {
-		t.Errorf("record[1].Command = %q, want %q", received[1].Command, r2.Command)
+	if repo.calls[1].command != r2.Command {
+		t.Errorf("record[1].Command = %q, want %q", repo.calls[1].command, r2.Command)
 	}
 
 	cancel()
@@ -144,15 +158,9 @@ func TestServerRun_ReturnsCleanlyOnCancel(t *testing.T) {
 // TestServerRun_HandlesMalformedPayload verifies a bad payload doesn't crash the server
 // and subsequent valid records from a new connection are still processed.
 func TestServerRun_HandlesMalformedPayload(t *testing.T) {
-	srv, path := newTestServer(t)
-
-	var mu sync.Mutex
-	var received []Record
-	srv.testHook = func(_ context.Context, rec Record) {
-		mu.Lock()
-		defer mu.Unlock()
-		received = append(received, rec)
-	}
+	path := filepath.Join(t.TempDir(), "s")
+	repo := &captureRepo{}
+	srv := NewServer(path, repo, redact.New())
 
 	cancel, errCh := startServer(context.Background(), srv)
 	defer cancel()
@@ -184,9 +192,9 @@ func TestServerRun_HandlesMalformedPayload(t *testing.T) {
 	// Wait for the good record.
 	deadline := time.Now().Add(500 * time.Millisecond)
 	for time.Now().Before(deadline) {
-		mu.Lock()
-		n := len(received)
-		mu.Unlock()
+		repo.mu.Lock()
+		n := len(repo.calls)
+		repo.mu.Unlock()
 		if n >= 1 {
 			break
 		}
@@ -198,13 +206,13 @@ func TestServerRun_HandlesMalformedPayload(t *testing.T) {
 		t.Errorf("Run returned error: %v", err)
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
-	if len(received) != 1 {
-		t.Fatalf("expected 1 good record, got %d", len(received))
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if len(repo.calls) != 1 {
+		t.Fatalf("expected 1 good record, got %d", len(repo.calls))
 	}
-	if received[0].Command != "good command" {
-		t.Errorf("got command %q, want %q", received[0].Command, "good command")
+	if repo.calls[0].command != "good command" {
+		t.Errorf("got command %q, want %q", repo.calls[0].command, "good command")
 	}
 }
 

@@ -133,38 +133,6 @@ func NewMCPCmd() *cobra.Command {
 				return mcp.NewToolResultText(string(out)), nil
 			})
 
-			// Tool: vibe_query
-			vibeQueryTool := mcp.NewTool("vibe_query",
-				mcp.WithDescription("Run an LLM-powered free-form query against the codebase using vibe query."),
-				mcp.WithString("prompt", mcp.Required(), mcp.Description("The natural language question about the codebase")),
-				mcp.WithString("project", mcp.Description("Project namespace")),
-				mcp.WithNumber("k", mcp.Description("Top K results for the underlying context search (default 5)")),
-			)
-			mcpServer.AddTool(vibeQueryTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				prompt, err := request.RequireString("prompt")
-				if err != nil {
-					return mcp.NewToolResultError("prompt is required"), nil
-				}
-				project := request.GetString("project", "")
-				k := request.GetInt("k", 5)
-
-				out, err := ContextPost("/api/vibe/query", map[string]any{
-					"prompt":  prompt,
-					"project": project,
-					"topK":    k,
-				})
-				if err != nil {
-					return mcp.NewToolResultError(err.Error()), nil
-				}
-				var v any
-				if err := json.Unmarshal(out, &v); err == nil {
-					if formatted, err := json.MarshalIndent(v, "", "  "); err == nil {
-						return mcp.NewToolResultText(string(formatted)), nil
-					}
-				}
-				return mcp.NewToolResultText(string(out)), nil
-			})
-
 			// Tool: vibe_mutation
 			vibeMutationTool := mcp.NewTool("vibe_mutation",
 				mcp.WithDescription("Suggest and automatically perform database updates (memories, nodes) based on recent facts/instructions."),

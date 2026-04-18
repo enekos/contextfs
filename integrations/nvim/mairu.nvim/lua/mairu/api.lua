@@ -64,19 +64,6 @@ function M.search(query, callback)
   })
 end
 
-function M.vibe_query(prompt, callback)
-  make_request({
-    path = "/vibe/query",
-    method = "POST",
-    body = {
-      prompt = prompt,
-      project = config.options.server.project,
-      topK = 5
-    },
-    callback = callback
-  })
-end
-
 function M.store_memory(content, callback)
   make_request({
     path = "/memories",

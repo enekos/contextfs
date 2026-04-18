@@ -16,28 +16,8 @@
   let sysLogs: LogEntry[] = [];
   let sysLogsContainer: HTMLDivElement;
 
-  onMount(() => {
-    if (window.runtime) {
-      window.runtime.EventsOn('sys:log', (log: LogEntry) => {
-        sysLogs = [...sysLogs, log];
-        // Keep only last 1000 logs to prevent memory issues
-        if (sysLogs.length > 1000) {
-          sysLogs = sysLogs.slice(sysLogs.length - 1000);
-        }
-        setTimeout(() => {
-          if (sysLogsContainer) {
-            sysLogsContainer.scrollTop = sysLogsContainer.scrollHeight;
-          }
-        }, 10);
-      });
-    }
-  });
-
-  onDestroy(() => {
-    if (window.runtime) {
-      window.runtime.EventsOff('sys:log');
-    }
-  });
+  // System logs are only available in desktop mode via Wails runtime.
+  // In web mode, this view remains a placeholder.
 </script>
 
 <div class="flex-1 flex flex-col bg-[#09090b] text-gray-300">
