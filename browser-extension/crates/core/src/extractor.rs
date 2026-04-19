@@ -71,7 +71,6 @@ fn extract_metadata(doc: &Html, meta: &mut PageMetadata) -> String {
     title
 }
 
-
 // Nodes we completely ignore
 const SKIP_TAGS: &[&str] = &[
     "script", "style", "noscript", "canvas", "map", "template", "object", "embed", "math",

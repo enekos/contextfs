@@ -66,11 +66,17 @@ pub struct PageSnapshot {
     pub interaction_count: u32,
     #[serde(default)]
     pub iframe_content: Vec<IframeContent>,
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 impl PageSnapshot {
     pub fn full_text(&self) -> String {
-        self.sections.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join(" ")
+        self.sections
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }
 
@@ -186,6 +192,7 @@ mod tests {
             dwell_ms: 0,
             interaction_count: 0,
             iframe_content: vec![],
+            truncated: false,
         };
         let json = serde_json::to_string(&snap).unwrap();
         // content_hash should be a hex string, not a number

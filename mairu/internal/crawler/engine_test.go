@@ -78,9 +78,7 @@ func TestEngineParseJSONBypass(t *testing.T) {
 }
 
 func TestEngineCrawl(t *testing.T) {
-	visited := make(map[string]bool)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		visited[r.URL.Path] = true
 		switch r.URL.Path {
 		case "/":
 			w.Write([]byte(`<html><body><a href="/page1">Page 1</a><a href="/page2">Page 2</a></body></html>`))
