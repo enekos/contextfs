@@ -41,7 +41,11 @@ impl SessionManager {
             .find(|p| p.url == snapshot.url)
         {
             // Skip if content hasn't changed meaningfully
-            if dedup::is_near_duplicate(existing.content_hash, snapshot.content_hash, DEDUP_THRESHOLD) {
+            if dedup::is_near_duplicate(
+                existing.content_hash,
+                snapshot.content_hash,
+                DEDUP_THRESHOLD,
+            ) {
                 return AddPageResult::Duplicate;
             }
             snapshot.revision = existing.revision + 1;
@@ -56,12 +60,9 @@ impl SessionManager {
         }
 
         // Cross-URL near-duplicate check (same content, different URL)
-        if self
-            .session
-            .pages
-            .iter()
-            .any(|p| dedup::is_near_duplicate(p.content_hash, snapshot.content_hash, DEDUP_THRESHOLD))
-        {
+        if self.session.pages.iter().any(|p| {
+            dedup::is_near_duplicate(p.content_hash, snapshot.content_hash, DEDUP_THRESHOLD)
+        }) {
             return AddPageResult::Duplicate;
         }
 
@@ -85,9 +86,7 @@ impl SessionManager {
     }
 
     fn evict_oldest(&mut self) {
-        while self.session.pages.len() > SOFT_MAX_PAGES
-            || self.total_bytes() > MAX_TOTAL_BYTES
-        {
+        while self.session.pages.len() > SOFT_MAX_PAGES || self.total_bytes() > MAX_TOTAL_BYTES {
             let evicted = match self.session.pages.pop_front() {
                 Some(p) => p,
                 None => break,
@@ -101,9 +100,7 @@ impl SessionManager {
             .pages
             .iter()
             .map(|p| {
-                p.sections.iter().map(|s| s.text.len()).sum::<usize>()
-                    + p.url.len()
-                    + p.title.len()
+                p.sections.iter().map(|s| s.text.len()).sum::<usize>() + p.url.len() + p.title.len()
             })
             .sum()
     }
@@ -303,7 +300,9 @@ mod tests {
     fn test_evicts_on_byte_budget() {
         let mut mgr = SessionManager::new("s1".to_string());
         // Each page has ~200 KiB of section text. After ~42 pages we blow past 8 MiB.
-        let big_text: String = (0..200_000).map(|i| ((b'a' + (i % 26) as u8) as char)).collect();
+        let big_text: String = (0..200_000)
+            .map(|i| ((b'a' + (i % 26) as u8) as char))
+            .collect();
         for i in 0..60 {
             let snap = make_snapshot(
                 &format!("https://big{}.com", i),
@@ -313,12 +312,16 @@ mod tests {
             );
             mgr.add_page(snap);
         }
-        assert!(mgr.total_bytes() <= MAX_TOTAL_BYTES,
+        assert!(
+            mgr.total_bytes() <= MAX_TOTAL_BYTES,
             "total bytes {} should be <= MAX_TOTAL_BYTES {}",
             mgr.total_bytes(),
-            MAX_TOTAL_BYTES);
-        assert!(mgr.session.pages.len() < 60,
-            "should have evicted some pages");
+            MAX_TOTAL_BYTES
+        );
+        assert!(
+            mgr.session.pages.len() < 60,
+            "should have evicted some pages"
+        );
     }
 
     #[test]

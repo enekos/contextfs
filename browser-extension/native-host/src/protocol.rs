@@ -42,7 +42,10 @@ pub async fn read_message<R: AsyncReadExt + Unpin>(r: &mut R) -> Result<Value, P
     Ok(serde_json::from_slice(&buf)?)
 }
 
-pub async fn write_message<W: AsyncWriteExt + Unpin>(w: &mut W, v: &Value) -> Result<(), ProtocolError> {
+pub async fn write_message<W: AsyncWriteExt + Unpin>(
+    w: &mut W,
+    v: &Value,
+) -> Result<(), ProtocolError> {
     let body = serde_json::to_vec(v)?;
     let len = (body.len() as u32).to_ne_bytes();
     w.write_all(&len).await?;

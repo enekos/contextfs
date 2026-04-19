@@ -72,7 +72,11 @@ pub struct PageSnapshot {
 
 impl PageSnapshot {
     pub fn full_text(&self) -> String {
-        self.sections.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join(" ")
+        self.sections
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }
 

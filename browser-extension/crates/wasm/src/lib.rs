@@ -20,7 +20,10 @@ thread_local! {
 pub fn init_session(session_id: &str, started_at_secs: u64) {
     console_error_panic_hook::set_once();
     SESSION.with(|s| {
-        *s.borrow_mut() = Some(SessionManager::new_at(session_id.to_string(), started_at_secs));
+        *s.borrow_mut() = Some(SessionManager::new_at(
+            session_id.to_string(),
+            started_at_secs,
+        ));
     });
 }
 
